@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
+import { MemberAppAccess } from '@/components/members/member-app-access'
 import { MemberHistoryTabs } from '@/components/members/member-history-tabs'
 import { MemberStatusActions } from '@/components/members/member-status-actions'
 import { MemberPhoto } from '@/components/members/member-photo'
@@ -9,6 +10,7 @@ import { MemberActionPanel } from '@/components/memberships/member-action-panel'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { requireStaff } from '@/lib/auth'
+import { listAttendanceForMember } from '@/lib/db/attendance'
 import { listBranches } from '@/lib/db/branches'
 import { getMember, getMemberOverview } from '@/lib/db/members'
 import { listInvoicesForMember, listMembershipsForMember } from '@/lib/db/memberships'
@@ -34,14 +36,16 @@ export default async function MemberProfilePage({
   const staff = await requireStaff()
   const { id } = await params
 
-  const [overview, member, memberships, invoices, payments, branches] = await Promise.all([
-    getMemberOverview(id),
-    getMember(id),
-    listMembershipsForMember(id),
-    listInvoicesForMember(id),
-    listPaymentsForMember(id),
-    listBranches(),
-  ])
+  const [overview, member, memberships, invoices, payments, attendance, branches] =
+    await Promise.all([
+      getMemberOverview(id),
+      getMember(id),
+      listMembershipsForMember(id),
+      listInvoicesForMember(id),
+      listPaymentsForMember(id),
+      listAttendanceForMember(id),
+      listBranches(),
+    ])
 
   if (!overview || !member) notFound()
 
@@ -50,6 +54,7 @@ export default async function MemberProfilePage({
   const branchNames = Object.fromEntries(branches.map((branch) => [branch.id, branch.name]))
   const canManage = staff.role !== 'trainer'
   const left = overview.status === 'left'
+  const lastSeen = attendance[0] ?? null
 
   return (
     <div className="flex flex-col gap-6">
@@ -69,6 +74,9 @@ export default async function MemberProfilePage({
             <span className="tabular-nums">{overview.phone}</span>
             <span>{overview.home_branch_name}</span>
             <span>Joined {formatDate(overview.joined_on)}</span>
+            <span>
+              {lastSeen ? `Last seen ${formatDate(lastSeen.attended_on)}` : 'Never checked in'}
+            </span>
             {left && overview.left_on ? <span>Left {formatDate(overview.left_on)}</span> : null}
           </p>
           </div>
@@ -155,10 +163,21 @@ export default async function MemberProfilePage({
             </CardContent>
           </Card>
 
+          {canManage ? (
+            <MemberAppAccess
+              memberId={id}
+              email={member.email}
+              invitedAt={member.invited_at}
+              acceptedAt={member.accepted_at}
+              hasAuthUser={Boolean(member.auth_user_id)}
+            />
+          ) : null}
+
           <MemberHistoryTabs
             memberships={memberships}
             invoices={invoices}
             payments={payments}
+            attendance={attendance}
             branchNames={branchNames}
           />
         </div>

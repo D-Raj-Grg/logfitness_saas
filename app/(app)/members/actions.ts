@@ -8,6 +8,7 @@ import { requireRole } from '@/lib/auth'
 import {
   getMember,
   insertMember,
+  inviteMemberToApp as inviteMemberToAppRpc,
   updateMember as updateMemberRow,
   type MemberInsert,
 } from '@/lib/db/members'
@@ -24,6 +25,7 @@ import {
 } from '@/lib/db/photos'
 import type { CurrentStaff } from '@/lib/roles'
 import {
+  inviteMemberToAppSchema,
   memberIdSchema,
   memberLeaveSchema,
   memberSchema,
@@ -263,6 +265,63 @@ export async function markMemberLeft(
   revalidatePath(`/members/${parsed.data.memberId}`)
 
   return { success: 'Marked as left.' }
+}
+
+/**
+ * invite_member() raises three distinct conditions, all of which arrive here
+ * as a Postgres error rather than a thrown TypeScript one. unique_violation
+ * covers two different situations under the same SQLSTATE (23505): the RPC's
+ * own guard against re-inviting a linked member, and the members_org_email_key
+ * index rejecting an email another member in the org already has. The two are
+ * told apart by the message the RPC (or Postgres itself) attached.
+ */
+function mapInviteError(error: DbError): MemberFormState {
+  const { code, message } = error
+
+  if (code === 'P0002') {
+    return { error: 'That member could not be found.' }
+  }
+
+  if (code === '23505') {
+    if (message?.includes('already has an app account')) {
+      return { error: 'This member already has an app account.' }
+    }
+    return {
+      fieldErrors: {
+        email: ['Another member in this gym already uses that email address.'],
+      },
+    }
+  }
+
+  return { error: message ?? 'Something went wrong. Please try again.' }
+}
+
+export async function inviteMemberToApp(
+  _prevState: MemberFormState,
+  formData: FormData
+): Promise<MemberFormState> {
+  await requireRole('owner', 'manager', 'front_desk')
+
+  const parsed = inviteMemberToAppSchema.safeParse({
+    memberId: formData.get('memberId'),
+    email: formData.get('email'),
+  })
+
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+  }
+
+  try {
+    await inviteMemberToAppRpc(parsed.data.memberId, parsed.data.email)
+  } catch (error) {
+    return mapInviteError(error as DbError)
+  }
+
+  revalidatePath(`/members/${parsed.data.memberId}`)
+
+  return {
+    success: `Invited. They can sign up with ${parsed.data.email} in the app.`,
+  }
 }
 
 export async function reactivateMember(

@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { emailSchema } from '@/lib/validation/auth'
+
 const optionalText = (max: number) =>
   z
     .string()
@@ -52,6 +54,14 @@ export const memberLeaveSchema = z.object({
 })
 
 export const memberIdSchema = z.object({ memberId: z.uuid() })
+
+// Mirrors invite_member(p_member_id, p_email): the RPC re-validates everything,
+// this just turns a malformed submission into a field error before the round
+// trip.
+export const inviteMemberToAppSchema = z.object({
+  memberId: z.uuid(),
+  email: emailSchema,
+})
 
 export const memberListQuerySchema = z.object({
   q: z.string().trim().max(120).optional().default(''),

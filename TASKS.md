@@ -50,14 +50,14 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Phase 2 — Front desk
 
-- [ ] Migration: `attendance` (`method` enum, `checked_out_at` nullable) + RLS + isolation tests
-- [ ] Check-in screen: fast search, ≤3s to complete
-- [ ] Check-in result banner: active / expiring / expired, and dues outstanding
-- [ ] Prevent duplicate same-day check-in; allow explicit override
-- [ ] "In the gym now" live count
-- [ ] Attendance history on the member profile
-- [ ] Absent 14+ days report (churn early warning)
-- [ ] QR token design (mint/verify Edge Function) — build now, use in Phase 6
+- [x] Migration: `attendance` (`method` enum, `checked_out_at` nullable) + RLS + isolation tests (`supabase/tests/front_desk.sql`)
+- [x] Check-in screen: fast search, ≤3s to complete (`/check-in`)
+- [x] Check-in result banner: active / expiring / expired, and dues outstanding (`attendance_banner` in Postgres, so the Flutter app gets the same verdict)
+- [x] Prevent duplicate same-day check-in; allow explicit override (partial unique index + a required reason)
+- [x] "In the gym now" live count (`in_gym_now`, with check-out)
+- [x] Attendance history on the member profile
+- [x] Absent 14+ days report (churn early warning) — `/reports/absent`
+- [x] QR token design (mint/verify) — `mint_qr_token` / `verify_qr_token` RPCs, HMAC-signed with a Vault key created on first use; used in Phase 6
 
 ## Phase 3 — Chain layer
 
@@ -73,11 +73,24 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Phase 4 — Classes
 
-- [ ] Migration: `classes`, `class_sessions`, `class_bookings`, `pt_sessions` + RLS + isolation tests
+- [x] Migration: `classes`, `class_sessions`, `class_bookings` + RLS + isolation tests.
+      `pt_sessions` is not part of this migration -- see the unchecked line below.
+      Gate: `supabase/tests/classes.sql`.
+- [x] Member self-booking RPCs: `book_class_session(p_session_id, p_member_id default null)`
+      and `cancel_class_booking(p_booking_id, p_reason default null)`. Capacity
+      overflow waitlists instead of failing; cancelling a booked seat promotes
+      the oldest waitlisted booking in the same transaction. Both are
+      `security definer` (members hold no direct insert/update policy on
+      `class_bookings`) with every RLS-equivalent check made by hand inside.
+- [ ] `pt_sessions` table (not built -- out of scope for this task; only the
+      class/session/booking schema was in scope)
 - [ ] `pg_cron` job materializing `class_sessions` 60 days ahead from recurrence rules
-- [ ] Class CRUD: trainer, capacity, room, recurrence
+- [ ] Class CRUD: trainer, capacity, room, recurrence (Next.js UI; the underlying
+      owner/manager write policies on `classes` already exist)
 - [ ] Timetable calendar view (dnd-kit for reschedule)
-- [ ] Front-desk booking into a session, with waitlist at capacity
+- [ ] Front-desk booking into a session, with waitlist at capacity (Next.js UI;
+      the backend RPC it will call -- `book_class_session` with the staff
+      `p_member_id` override -- is done)
 - [ ] Trainer marks session attendance
 - [ ] PT sessions decrementing `sessions_remaining` on session-pack memberships
 - [ ] Trainer utilization report
@@ -94,17 +107,122 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Phase 6 — Flutter member app
 
-- [ ] Member invite flow (email) linking to `members.auth_user_id` — mirrors the staff invite flow; phone OTP deferred
+- [x] Member invite flow (email) linking to `members.auth_user_id` — mirrors the
+      staff invite flow; phone OTP deferred. DB side (`invite_member`,
+      `link_member_account`, `current_member`, claim hook) and the staff-facing
+      console UI (`app/(app)/members/actions.ts` `inviteMemberToApp`,
+      `components/members/member-app-access.tsx`) are both done. The
+      accept/link half of the flow is the Flutter app's job, out of scope here.
 - [ ] Member RLS policies (a member reads only their own rows)
 - [ ] QR check-in against the Phase 2 token Edge Function
 - [ ] Plan status, expiry, and dues screen
 - [ ] Payment history
 - [ ] Class browsing and self-booking
-- [ ] Push notifications via Edge Function fanout
+- [ ] Push notifications via Edge Function fanout (substrate done: `device_tokens`
+      + RLS, `register_device_token` / `revoke_device_token` RPCs, `push-fanout`
+      function deployed. FCM send path itself is unverified -- see Discovered.)
 - [ ] iOS App Store and Google Play release pipeline
 
 ## Discovered
 
+- [x] **2026-09-05** Classes/sessions/bookings schema and the member
+      self-booking RPCs shipped
+      (`supabase/migrations/20260905160000_classes_schema.sql`,
+      `..._160100_class_booking_rpcs.sql`; gate `supabase/tests/classes.sql`).
+      Design notes a reviewer will want:
+      - `book_class_session` / `cancel_class_booking` are `security definer`,
+        unlike the member-spine RPCs (`renew_membership` etc.), which are
+        `security invoker`. The member-spine RPCs work invoker-mode because
+        staff hold direct insert/update policies on the tables they write;
+        members hold **no** insert/update policy on `class_bookings` at all
+        (by design, per this task), so an invoker-mode RPC would have nothing
+        to write through. Every RLS-equivalent check (org match, branch match,
+        active-membership, double-booking, capacity) is therefore made by hand
+        inside the function before any write.
+      - "Member's membership is not active" is read from `memberships.status =
+        'active'`, not `members.status`; a member can be `expired` at the
+        member level but still mid-membership, or vice versa briefly around
+        renewal, and the class product cares about the membership.
+      - The cancellation window is per-org, read from
+        `orgs.settings->>'class_cancellation_window_minutes'`, default 120
+        (2 hours) when absent or unparseable. No UI to set it yet -- it is a
+        raw jsonb key until Phase 4's admin UI (out of scope here) exposes it.
+      - `classes` gets owner/manager insert/update/delete policies (branch-
+        scoped, same shape as `membership_plans`) so the schema is not
+        write-dead while the Class CRUD UI (still unbuilt) waits. No such
+        policies exist on `class_sessions` (materializer's job, later) or on
+        `class_bookings` (booking RPCs only, even for staff -- staff pass
+        `p_member_id` to `book_class_session` rather than inserting directly).
+      - `recurrence` on `classes` is validated jsonb (`day_of_week` 0-6,
+        `start_time` < `end_time` per element) via
+        `public.validate_class_recurrence()`, shaped for the pg_cron
+        materializer that is explicitly a separate, later task -- not built
+        here.
+      - `class_sessions.capacity` and `.trainer_id` are snapshots taken at
+        session-creation time; editing the parent `classes` row afterwards
+        does not retroactively change sessions already on the calendar.
+      - `class_bookings.booked_count` on the session is trigger-maintained
+        (recount, not increment/decrement) by
+        `maintain_class_session_booked_count()`; waitlisted rows do not count
+        against capacity.
+      - `get_advisors(security)` flags `book_class_session` and
+        `cancel_class_booking` as "SECURITY DEFINER callable by authenticated"
+        -- expected and intentional, the same warning already accepted for
+        `link_member_account`, `current_member`, `mint_qr_token`, etc. No new
+        advisory category was introduced by this migration.
+      - TypeScript types were **not** regenerated: doing so would write under
+        `lib/`, which is off-limits while another agent works there. Whoever
+        picks up the Class CRUD / timetable UI should run
+        `generate_typescript_types` first.
+- [x] **2026-09-05** Push notification substrate built and RLS-tested:
+      `device_tokens` (one row per device, `member_id` XOR `staff_id`, unique
+      `token`, soft `revoked_at`) and `push_log`, both RLS-enabled
+      (`supabase/migrations/20260905170000_device_tokens_and_push.sql`).
+      `register_device_token` / `revoke_device_token` RPCs (security definer,
+      style-matched to `link_member_account`) let the calling principal
+      register or soft-revoke only their own token; re-registering a token
+      that belonged to someone else re-points it rather than duplicating the
+      row. `supabase/tests/push.sql` run end to end via the MCP execute_sql
+      throwaway-block loop: a member cannot read another member's device
+      token, staff (even an owner) cannot read a member's device token at
+      all, a revoked token drops out of the fanout's live-token predicate,
+      and re-registering/re-pointing/double-revoking all behave as specced.
+      All assertions passed; fixtures torn down afterward.
+- [ ] **2026-09-05** `push-fanout` Edge Function deployed
+      (`supabase/functions/push-fanout/index.ts`, `verify_jwt: true`) but its
+      FCM send path is UNVERIFIED end to end. It authorises the caller with
+      the caller's own JWT against an RLS-scoped client calling
+      `current_staff()` (never trusts the body's `org_id`/`branch_id`), then
+      switches to the service-role key only to resolve device tokens and
+      send. It reads a Google service account from the
+      `FCM_SERVICE_ACCOUNT_JSON` project secret and returns a 503 with a
+      clear message if that secret is unset -- which it currently is, because
+      project secrets can only be set from the Supabase dashboard or a
+      logged-in CLI, neither available in this environment. So: the
+      authorization logic, the request shape, and the DB read/write logic
+      have NOT been exercised against live FCM traffic -- only reasoned
+      through and reviewed. Set `FCM_SERVICE_ACCOUNT_JSON` from the dashboard
+      and re-test with a real device token before relying on this in
+      production. This also effectively settles the FCM-vs-OneSignal
+      question in `PLANNING.md` §10 in favor of FCM, unless revisited.
+- [ ] **2026-09-05** `invite_member`'s own re-invite guard and the
+      `members_org_email_key` unique index both surface as Postgres
+      `unique_violation` (SQLSTATE 23505) with no distinguishing code, only a
+      different message. `inviteMemberToApp` in `app/(app)/members/actions.ts`
+      tells them apart by checking the message text ("already has an app
+      account" vs. everything else). If the RPC's wording ever changes, this
+      mapping has to change with it — consider giving the two failures
+      distinct `errcode`s (e.g. a custom domain) in a future migration so the
+      console does not have to parse messages.
+- [ ] **2026-09-05** The member detail page has no way to show "invited at
+      more than one gym" or "no pending invitation" — those are
+      `link_member_account()` failures that only happen from the Flutter app
+      during sign-in, never from the console. Nothing to build here now, but
+      worth remembering if a future admin screen wants to explain *why* a
+      member's invite never got accepted (right now the console only shows
+      not-invited / invited-on-date / active-since-date, derived from
+      `invited_at` / `accepted_at` / `auth_user_id`; it cannot show whether an
+      invited member ever attempted to sign in).
 - [x] **2026-09-05** Access-token hook enabled in the Supabase dashboard and
       verified end to end: signup, onboarding, invite, invite acceptance, and
       role gating all exercised in a browser against a real session.
@@ -139,6 +257,38 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       them; nothing is sent. Folds into Phase 5 notifications.
 - [ ] **2026-09-05** Next.js 16 renamed Middleware to Proxy (`proxy.ts` at the repo
       root, exporting `proxy`). Remember this for any future request interception.
+
+- [x] **2026-09-05** QR tokens moved out of the Edge Function and into Postgres.
+      The function needed a `QR_TOKEN_SECRET` project secret, which the Supabase
+      MCP server cannot set — it has no secrets tool — so the path was
+      un-provisionable from this project's tooling and sat deployed answering
+      503. `public.qr_signing_key()` now creates a 32-byte key in Vault on first
+      use, and `mint_qr_token` / `verify_qr_token` sign with it. Nothing to set
+      up by hand, on this project or a fresh one.
+- [ ] **2026-09-05** Delete the retired `qr-token` Edge Function from the
+      dashboard and drop `supabase/functions/`. It is redeployed as a 410 stub
+      because the MCP server has no delete-function tool. Nothing calls it.
+- [ ] **2026-09-05** `mint_qr_token` and `verify_qr_token` show up in
+      `get_advisors(security)` as SECURITY DEFINER functions callable by
+      `authenticated`. That is deliberate and unavoidable — they have to read the
+      Vault key — so both check authorisation themselves rather than relying on
+      RLS, and `supabase/tests/front_desk.sql` asserts it (a trainer cannot mint,
+      org B cannot mint or verify against org A, and neither the key nor the
+      vault is readable by `authenticated`). Same standing exception as the three
+      Phase 0 definer RPCs.
+- [ ] **2026-09-05** A session-pack check-in does **not** decrement
+      `sessions_remaining`. Phase 4 assigns that to PT sessions, so the front
+      door only warns (banner `expiring` at ≤3 sessions, `expired` at 0).
+      Revisit if a session pack is ever meant to buy gym-floor entry.
+- [ ] **2026-09-05** An open visit is never auto-closed. `in_gym_now` only counts
+      visits whose `attended_on` is the gym's today, so a forgotten check-out
+      falls off the board overnight instead of inflating it — but the row keeps a
+      null `checked_out_at` forever and the duration column reads "In the gym".
+      A nightly `pg_cron` close-out would tidy this if the duration data is ever
+      wanted for a report.
+- [ ] **2026-09-05** `tsconfig.json` now excludes `supabase/functions`: the Deno
+      edge runtime has its own globals and `jsr:` imports, which the Next.js
+      compiler cannot resolve.
 
 ## Open questions (from the PRD)
 

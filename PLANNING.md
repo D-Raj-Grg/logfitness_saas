@@ -36,8 +36,16 @@ Target customer: chains with 3–50 branches. Cash-heavy market — billing mean
 
 **Tenancy.** Shared schema, isolated by RLS. Every business table carries `org_id`,
 plus `branch_id` where the row is branch-local. RLS policies read custom JWT claims
-`{org_id, role, branch_ids[]}` set by a Supabase auth hook. Never filter tenants only
+`{org_id, branch_ids[]}` plus a principal marker — `staff_role` and `staff_id` for staff,
+`member_id` for members — set by a Supabase auth hook. Never filter tenants only
 in application code — RLS is the boundary.
+
+**Two principal types.** Since the mobile app landed, `org_id` is no longer proof of staff.
+A member's token carries `org_id` too, so a policy that tests only `is_org_member(org_id)`
+hands a member the whole gym's roster. Staff-facing read policies must also require
+`jwt_is_staff()`; member-facing ones require `jwt_is_member()` and scope by `jwt_member_id()`.
+The hook never sets the `role` claim: PostgREST reads that to pick the Postgres role for the
+request, and overwriting it breaks every authenticated call.
 
 **RLS is a release gate.** Every new table ships with RLS enabled and a cross-tenant
 negative test (org A staff must not read org B rows). A migration that adds a table
@@ -154,8 +162,19 @@ Do not build these without an explicit decision to change scope.
   `refund_payment`, freeze/unfreeze/cancel, left/reactivate), reports
   (`daily_collection`, `arrears_report`), nightly `pg_cron` expiry sweep.
   Gate: `supabase/tests/member_spine.sql`.
-- Phase 1 migrations are mirrored in `supabase/migrations/`; Phase 0 ones are still remote-only.
 - `lib/db/{members,plans,memberships,payments}.ts` and `lib/validation/{members,plans,payments}.ts`
   are the typed boundary the UI goes through.
+- Phase 2 shipped: `attendance` (one row per visit, with a snapshot of the status
+  and dues the desk saw), RPCs `check_in_member` / `check_out_member`, the
+  `attendance_banner` verdict function, the `attendance_detail` view, reports
+  (`in_gym_now`, `absent_members`, `attendance_day_summary`), the `/check-in`
+  console, the attendance tab on the member profile, and `/reports/absent`.
+  Gate: `supabase/tests/front_desk.sql`.
+- QR check-in tokens are minted and verified in Postgres (`mint_qr_token`,
+  `verify_qr_token`), HMAC-signed with a key held in `supabase_vault` and created
+  on first use, so nothing has to be provisioned by hand. Unused until Phase 6.
+  The old `qr-token` Edge Function is a retired 410 stub.
+- Phase 1 and Phase 2 migrations are mirrored in `supabase/migrations/`; Phase 0
+  ones are still remote-only.
 - DNS resolved directly to Vercel (Cloudflare proxy disabled); single DMARC record in place.
-- Next task: finish the Phase 1 screens, then Phase 2. See `TASKS.md`.
+- Next task: Phase 3, the chain layer. See `TASKS.md`.

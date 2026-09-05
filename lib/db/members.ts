@@ -92,6 +92,30 @@ export async function listMembers(query: MemberListQuery): Promise<MemberListRes
   }
 }
 
+/**
+ * The check-in box. Deliberately not listMembers(): the desk types a phone
+ * number and wants a handful of hits back in one round trip, not a paginated
+ * page with a count query attached to it.
+ */
+export async function searchMembersForCheckIn(term: string, limit = 8) {
+  const cleaned = term.trim().replace(/[%_,()]/g, ' ').trim()
+  if (!cleaned) return [] as MemberOverviewRow[]
+
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from('member_overview')
+    .select('*')
+    .or(
+      `phone.ilike.${cleaned}%,member_code.ilike.${cleaned}%,full_name.ilike.%${cleaned}%`
+    )
+    .order('full_name')
+    .limit(limit)
+
+  if (error) throw error
+  return (data ?? []) as MemberOverviewRow[]
+}
+
 export async function getMember(memberId: string) {
   const supabase = await createClient()
 
@@ -135,6 +159,23 @@ export async function updateMember(memberId: string, values: MemberUpdate) {
   const supabase = await createClient()
 
   const { error } = await supabase.from('members').update(values).eq('id', memberId)
+
+  if (error) throw error
+}
+
+/**
+ * Invites a member to the mobile app. This is a single RPC, not a column
+ * update, because invite_member() also decides -- under the caller's own RLS
+ * -- whether this member may still be invited and who gets credited as the
+ * inviter.
+ */
+export async function inviteMemberToApp(memberId: string, email: string) {
+  const supabase = await createClient()
+
+  const { error } = await supabase.rpc('invite_member', {
+    p_member_id: memberId,
+    p_email: email,
+  })
 
   if (error) throw error
 }
