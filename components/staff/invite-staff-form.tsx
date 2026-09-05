@@ -22,16 +22,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ROLE_LABELS, type StaffRole } from '@/lib/roles'
+import { ROLE_LABELS, assignableRoles, type StaffRole } from '@/lib/roles'
 
 type Branch = { id: string; name: string }
-
-/** Owners may appoint other owners; managers may not. */
-function assignableRoles(actorRole: StaffRole): StaffRole[] {
-  return actorRole === 'owner'
-    ? ['owner', 'manager', 'front_desk', 'trainer']
-    : ['front_desk', 'trainer']
-}
 
 function branchHint(role: StaffRole) {
   if (role === 'owner') return 'Owners see every branch, so there is nothing to assign.'

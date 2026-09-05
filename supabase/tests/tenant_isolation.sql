@@ -18,6 +18,7 @@ declare
   br_b1 uuid := 'bbbbbbb1-0000-0000-0000-000000000001';
   st_a_owner uuid := 'a0000000-0000-0000-0000-00000000000f';
   st_a_desk  uuid := 'a0000000-0000-0000-0000-00000000000d';
+  st_a_mgr   uuid := 'a0000000-0000-0000-0000-00000000000c';
   st_b_owner uuid := 'b0000000-0000-0000-0000-00000000000f';
   n integer;
   failed boolean;
@@ -35,6 +36,7 @@ begin
   insert into public.staff (id, org_id, full_name, email, role, branch_ids, status) values
     (st_a_owner, org_a, 'Alpha Owner', 'owner@alpha.test', 'owner', '{}', 'active'),
     (st_a_desk,  org_a, 'Alpha Desk',  'desk@alpha.test',  'front_desk', array[br_a1], 'active'),
+    (st_a_mgr,   org_a, 'Alpha Manager', 'mgr@alpha.test',  'manager', array[br_a1], 'active'),
     (st_b_owner, org_b, 'Beta Owner',  'owner@beta.test',  'owner', '{}', 'active');
 
   -- persona: org A front desk ----------------------------------------------
@@ -58,7 +60,7 @@ begin
   assert n = 0, 'front_desk leaked org B branches';
 
   select count(*) into n from public.staff;
-  assert n = 2, format('front_desk should see 2 colleagues, saw %s', n);
+  assert n = 3, format('front_desk should see 3 colleagues, saw %s', n);
 
   select count(*) into n from public.staff where org_id = org_b;
   assert n = 0, 'front_desk leaked org B staff';
@@ -102,6 +104,57 @@ begin
   end;
   select count(*) into n from public.orgs where id = org_a and name = 'Hijacked';
   assert n = 0, 'org B owner modified org A';
+
+  -- persona: org A manager --------------------------------------------------
+  execute 'reset role';
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', org_a::text, 'staff_id', st_a_mgr::text,
+    'staff_role', 'manager', 'branch_ids', json_build_array(br_a1::text)
+  )::text, true);
+  execute 'set local role authenticated';
+
+  -- a manager staffs their own floor, and nothing above it
+  failed := false;
+  begin
+    insert into public.staff (org_id, full_name, email, role, branch_ids, status)
+    values (org_a, 'Rogue Owner', 'rogue-owner@alpha.test', 'owner', '{}', 'invited');
+  exception when others then failed := true;
+  end;
+  assert failed, 'manager invited an owner';
+
+  failed := false;
+  begin
+    insert into public.staff (org_id, full_name, email, role, branch_ids, status)
+    values (org_a, 'Rogue Manager', 'rogue-mgr@alpha.test', 'manager', array[br_a1], 'invited');
+  exception when others then failed := true;
+  end;
+  assert failed, 'manager invited a peer manager';
+
+  -- ...and only into branches they actually run
+  failed := false;
+  begin
+    insert into public.staff (org_id, full_name, email, role, branch_ids, status)
+    values (org_a, 'Wrong Branch', 'wrong-branch@alpha.test', 'trainer', array[br_a2], 'invited');
+  exception when others then failed := true;
+  end;
+  assert failed, 'manager invited into a branch they do not run';
+
+  insert into public.staff (org_id, full_name, email, role, branch_ids, status)
+  values (org_a, 'Good Hire', 'hire@alpha.test', 'front_desk', array[br_a1], 'invited');
+
+  select count(*) into n from public.staff where email = 'hire@alpha.test';
+  assert n = 1, 'manager could not invite front desk into their own branch';
+
+  failed := false;
+  begin
+    update public.staff set status = 'inactive' where id = st_a_owner;
+  exception when others then failed := true;
+  end;
+  select count(*) into n
+  from public.staff
+  where id = st_a_owner and status = 'active'::public.staff_status;
+  assert n = 1, 'manager deactivated an owner';
 
   -- persona: authenticated but with no tenant claims ------------------------
   execute 'reset role';

@@ -28,3 +28,18 @@ export const canManageBranches = (staff: CurrentStaff) => staff.role === 'owner'
 
 export const canViewReports = (staff: CurrentStaff) =>
   staff.role === 'owner' || staff.role === 'manager'
+
+/**
+ * Roles a staff member may hand out. Owners appoint anyone; managers staff
+ * their own floor but cannot create peers or superiors. The RLS insert policy
+ * enforces the owner half of this; the manager-to-manager case is policy we
+ * apply above the database, so both the form and the Server Action read it
+ * from here rather than restating it.
+ */
+export function assignableRoles(actorRole: StaffRole): StaffRole[] {
+  return actorRole === 'owner'
+    ? ['owner', 'manager', 'front_desk', 'trainer']
+    : actorRole === 'manager'
+      ? ['front_desk', 'trainer']
+      : []
+}
