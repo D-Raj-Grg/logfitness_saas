@@ -42,3 +42,6 @@ next-env.d.ts
 
 # claude local settings
 .claude/settings.local.json
+
+# Agent skills are symlinked from the workspace root, not part of the app
+.agents/
