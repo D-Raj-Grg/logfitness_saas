@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { requireRole } from '@/lib/auth'
 import { listBranches } from '@/lib/db/branches'
 import { listMembers } from '@/lib/db/members'
+import { memberPhotoUrls } from '@/lib/db/photos'
 import { memberListQuerySchema } from '@/lib/validation/members'
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>
@@ -34,6 +35,9 @@ export default async function MembersPage({
   const query = parsed.success ? parsed.data : memberListQuerySchema.parse({})
 
   const [result, allBranches] = await Promise.all([listMembers(query), listBranches()])
+
+  // One signing round trip for the page, not one per row.
+  const photoUrls = await memberPhotoUrls(result.rows.map((row) => row.photo_path))
 
   // Non-owners only see their own branches in the filter; RLS already scopes
   // the rows themselves.
@@ -63,7 +67,7 @@ export default async function MembersPage({
         branches={branches}
       />
 
-      <MembersTable rows={result.rows} filtered={filtered} />
+      <MembersTable rows={result.rows} filtered={filtered} photoUrls={photoUrls} />
 
       <Pagination
         page={result.page}

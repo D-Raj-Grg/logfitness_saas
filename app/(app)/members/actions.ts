@@ -15,6 +15,13 @@ import {
   reactivateMember as reactivateMemberRpc,
   setMemberLeft,
 } from '@/lib/db/memberships'
+import {
+  ALLOWED_PHOTO_TYPES,
+  MAX_PHOTO_BYTES,
+  memberPhotoPath,
+  removeMemberPhoto,
+  uploadMemberPhoto,
+} from '@/lib/db/photos'
 import type { CurrentStaff } from '@/lib/roles'
 import {
   memberIdSchema,
@@ -78,6 +85,27 @@ function toMemberColumns(input: MemberInput): Omit<MemberInsert, 'org_id'> {
   }
 }
 
+/**
+ * Photos are optional, so an empty file input is not an error. Anything that is
+ * present has to pass the same limits the bucket enforces, checked here so the
+ * failure is a field message rather than a storage exception.
+ */
+type PhotoPick = { ok: true; file: File } | { ok: false; error: string }
+
+function readPhoto(formData: FormData): PhotoPick | null {
+  const file = formData.get('photo')
+  if (!(file instanceof File) || file.size === 0) return null
+
+  if (!ALLOWED_PHOTO_TYPES.includes(file.type)) {
+    return { ok: false, error: 'Photos must be a JPEG, PNG, or WebP image.' }
+  }
+  if (file.size > MAX_PHOTO_BYTES) {
+    return { ok: false, error: 'Photos must be 5 MB or smaller.' }
+  }
+
+  return { ok: true, file }
+}
+
 function mapDbError(error: unknown): MemberFormState {
   const { code, message } = (error ?? {}) as DbError
   if (code === '23505') {
@@ -106,6 +134,11 @@ export async function createMember(
     }
   }
 
+  const photo = readPhoto(formData)
+  if (photo && !photo.ok) {
+    return { fieldErrors: { photo: [photo.error] } }
+  }
+
   let memberId: string
   try {
     // org_id and created_by come from the caller's own staff record, never
@@ -118,6 +151,18 @@ export async function createMember(
     memberId = created.id
   } catch (error) {
     return mapDbError(error)
+  }
+
+  // The member exists either way: a photo that fails to upload is reported on
+  // the profile, not by throwing away a completed registration.
+  if (photo) {
+    try {
+      const path = memberPhotoPath(staff.orgId, memberId, photo.file.type)
+      await uploadMemberPhoto(path, photo.file)
+      await updateMemberRow(memberId, { photo_path: path })
+    } catch {
+      // Swallowed on purpose -- see above. The edit screen can retry.
+    }
   }
 
   revalidatePath('/members')
@@ -156,8 +201,32 @@ export async function updateMember(
     }
   }
 
+  const photo = readPhoto(formData)
+  if (photo && !photo.ok) {
+    return { fieldErrors: { photo: [photo.error] } }
+  }
+
+  const removePhoto = formData.get('removePhoto') === 'true'
+
   try {
-    await updateMemberRow(parsed.data.memberId, toMemberColumns(parsed.data))
+    let photoPath = existing.photo_path
+
+    if (photo) {
+      photoPath = memberPhotoPath(staff.orgId, parsed.data.memberId, photo.file.type)
+      await uploadMemberPhoto(photoPath, photo.file)
+    } else if (removePhoto) {
+      photoPath = null
+    }
+
+    await updateMemberRow(parsed.data.memberId, {
+      ...toMemberColumns(parsed.data),
+      photo_path: photoPath,
+    })
+
+    // Only after the row points somewhere else is the old object safe to drop.
+    if (existing.photo_path && existing.photo_path !== photoPath) {
+      await removeMemberPhoto(existing.photo_path).catch(() => {})
+    }
   } catch (error) {
     return mapDbError(error)
   }

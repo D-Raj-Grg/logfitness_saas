@@ -160,5 +160,51 @@ begin
   perform public.sweep_membership_expiry();
 end $$;
 
+-- A sign-in for the demo owner, so `npm run smoke` has a session to work with.
+-- Development only: nothing in the application creates auth users directly, and
+-- the password below is public by definition. Never run this seed anywhere real.
+create extension if not exists pgcrypto with schema extensions;
+
+insert into auth.users (
+  instance_id, id, aud, role, email, encrypted_password,
+  email_confirmed_at, created_at, updated_at,
+  raw_app_meta_data, raw_user_meta_data, is_sso_user, is_anonymous,
+  -- GoTrue scans these as non-null text; leaving them null makes every sign-in
+  -- fail with "Database error querying schema".
+  confirmation_token, recovery_token, email_change, email_change_token_new,
+  email_change_token_current, phone_change, phone_change_token, reauthentication_token
+)
+values (
+  '00000000-0000-0000-0000-000000000000',
+  '00000000-0000-4000-8000-000000000901',
+  'authenticated', 'authenticated',
+  'owner@everest.test',
+  extensions.crypt('DevSmokeTest!2026', extensions.gen_salt('bf')),
+  now(), now(), now(),
+  '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, false, false,
+  '', '', '', '', '', '', '', ''
+)
+on conflict (id) do nothing;
+
+insert into auth.identities (
+  provider_id, user_id, identity_data, provider,
+  last_sign_in_at, created_at, updated_at
+)
+values (
+  '00000000-0000-4000-8000-000000000901',
+  '00000000-0000-4000-8000-000000000901',
+  '{"sub":"00000000-0000-4000-8000-000000000901","email":"owner@everest.test","email_verified":true,"phone_verified":false}'::jsonb,
+  'email', now(), now(), now()
+)
+on conflict (provider, provider_id) do nothing;
+
+update public.staff
+   set auth_user_id = '00000000-0000-4000-8000-000000000901',
+       status = 'active',
+       accepted_at = coalesce(accepted_at, now())
+ where id = '00000000-0000-4000-8000-000000000201'
+   and auth_user_id is null;
+
 -- Teardown:
 -- delete from public.orgs where id = '00000000-0000-4000-8000-000000000001';
+-- delete from auth.users where id = '00000000-0000-4000-8000-000000000901';

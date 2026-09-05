@@ -1,5 +1,6 @@
 import Link from 'next/link'
 
+import { MemberPhoto } from '@/components/members/member-photo'
 import { MemberStatusBadge } from '@/components/members/member-status-badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -17,10 +18,13 @@ import { cn } from '@/lib/utils'
 export function MembersTable({
   rows,
   filtered,
+  photoUrls,
 }: {
   rows: MemberOverviewRow[]
   /** True when a search term or filter is applied, so the empty copy fits. */
   filtered: boolean
+  /** Signed URLs keyed by storage path, minted once for the whole page. */
+  photoUrls: Record<string, string>
 }) {
   if (rows.length === 0) {
     return (
@@ -68,12 +72,19 @@ export function MembersTable({
                 {row.member_code}
               </TableCell>
               <TableCell>
-                <Link
-                  href={`/members/${row.id}`}
-                  className="font-medium underline-offset-4 hover:underline"
-                >
-                  {row.full_name}
-                </Link>
+                <div className="flex items-center gap-2">
+                  <MemberPhoto
+                    url={row.photo_path ? (photoUrls[row.photo_path] ?? null) : null}
+                    name={row.full_name}
+                    className="size-8 text-[10px]"
+                  />
+                  <Link
+                    href={`/members/${row.id}`}
+                    className="font-medium underline-offset-4 hover:underline"
+                  >
+                    {row.full_name}
+                  </Link>
+                </div>
               </TableCell>
               <TableCell className="tabular-nums">{row.phone}</TableCell>
               <TableCell className="text-muted-foreground">{row.home_branch_name}</TableCell>

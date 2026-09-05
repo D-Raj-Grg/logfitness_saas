@@ -35,18 +35,18 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 - [x] Trigger: recompute `members.status` from memberships
 - [x] RPC: `renew_membership` — membership + payment + invoice + audit in one transaction (+ `record_payment`, `refund_payment`, `freeze_membership`, `unfreeze_membership`, `cancel_membership`, `set_member_left`, `reactivate_member`)
 - [x] RLS + isolation tests for all Phase 1 tables (`supabase/tests/member_spine.sql`)
-- [ ] Member list: server-side search by phone/name/ID, pagination, filters, empty state
-- [ ] Member registration form (zod-validated Server Action, photo upload)
-- [ ] Member profile: memberships, payments, attendance, outstanding dues on one screen
-- [ ] Plan catalogue CRUD (owner/manager only)
-- [ ] Assign plan / renew / upgrade flow using the RPC
+- [x] Member list: server-side search by phone/name/ID, pagination, filters, empty state
+- [x] Member registration form (zod-validated Server Action, photo upload)
+- [x] Member profile: memberships, payments, attendance, outstanding dues on one screen (attendance is a Phase 2 placeholder tab)
+- [x] Plan catalogue CRUD (owner/manager only)
+- [x] Assign plan / renew / upgrade flow using the RPC
 - [x] Freeze and unfreeze with automatic expiry extension (RPC; UI in member action panel)
-- [ ] Record payment — full and partial, all methods
+- [x] Record payment — full and partial, all methods
 - [x] Refund as a negative payment row with reason (RPC `refund_payment`; UI in member action panel)
-- [ ] Daily collection sheet per branch per staff member
-- [ ] Arrears report with age buckets
+- [x] Daily collection sheet per branch per staff member
+- [x] Arrears report with age buckets
 - [x] `pg_cron` nightly expiry sweep (`sweep_membership_expiry`, 02:00 Asia/Kathmandu)
-- [ ] Dashboards: expiring in 7 days, expired, frozen
+- [x] Dashboards: expiring in 7 days, expired, frozen (plus dues and today's collection)
 
 ## Phase 2 — Front desk
 
@@ -116,9 +116,17 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       `db:test` cannot run from this machine yet. Both SQL files were executed
       through the Supabase MCP instead. Install `libpq` (`brew install libpq`)
       and set `SUPABASE_DB_URL`.
-- [ ] **2026-09-05** Member photo upload (Supabase Storage bucket + `photo_path`)
-      is stubbed in the registration form. Needs a private bucket, an RLS
-      policy on `storage.objects` keyed by `org_id`, and a signed-URL reader.
+- [x] **2026-09-05** Member photo upload: private `member-photos` bucket, RLS on
+      `storage.objects` keyed by the `<org_id>/` path prefix, signed-URL reads
+      batched per page. Verified: cross-tenant upload and non-image types are
+      both refused, and the bucket is not publicly readable.
+- [ ] **2026-09-05** Enable leaked-password protection (HaveIBeenPwned) in the
+      Supabase Auth dashboard. Flagged by `get_advisors(security)`; it is a
+      project setting, not something a migration can turn on.
+- [ ] **2026-09-05** `npm run smoke` renders every route as the seeded demo
+      owner and asserts the data reaches the page. It needs the dev server
+      running and `SMOKE_PASSWORD`. Worth wiring into CI once a hosted preview
+      database exists.
 - [ ] **2026-09-05** `payments.collected_by` is nullable with `on delete set null`
       so a staff row can be removed without touching cash history; the
       `payments_require_collector` trigger still makes it mandatory on insert.

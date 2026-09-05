@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 
 import { MemberHistoryTabs } from '@/components/members/member-history-tabs'
 import { MemberStatusActions } from '@/components/members/member-status-actions'
+import { MemberPhoto } from '@/components/members/member-photo'
 import { MemberStatusBadge } from '@/components/members/member-status-badge'
 import { MemberActionPanel } from '@/components/memberships/member-action-panel'
 import { Button } from '@/components/ui/button'
@@ -12,6 +13,7 @@ import { listBranches } from '@/lib/db/branches'
 import { getMember, getMemberOverview } from '@/lib/db/members'
 import { listInvoicesForMember, listMembershipsForMember } from '@/lib/db/memberships'
 import { listPaymentsForMember } from '@/lib/db/payments'
+import { memberPhotoUrl } from '@/lib/db/photos'
 import { formatDate, formatMoney } from '@/lib/format'
 import { GENDER_LABELS } from '@/lib/members'
 
@@ -43,6 +45,8 @@ export default async function MemberProfilePage({
 
   if (!overview || !member) notFound()
 
+  const photoUrl = await memberPhotoUrl(member.photo_path)
+
   const branchNames = Object.fromEntries(branches.map((branch) => [branch.id, branch.name]))
   const canManage = staff.role !== 'trainer'
   const left = overview.status === 'left'
@@ -50,7 +54,9 @@ export default async function MemberProfilePage({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-col gap-2">
+        <div className="flex items-start gap-4">
+          <MemberPhoto url={photoUrl} name={overview.full_name} className="size-14 text-sm" />
+          <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-semibold">{overview.full_name}</h1>
             <MemberStatusBadge
@@ -65,6 +71,7 @@ export default async function MemberProfilePage({
             <span>Joined {formatDate(overview.joined_on)}</span>
             {left && overview.left_on ? <span>Left {formatDate(overview.left_on)}</span> : null}
           </p>
+          </div>
         </div>
 
         {canManage ? (

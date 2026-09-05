@@ -37,11 +37,14 @@ const NO_GENDER = 'unspecified'
 export function MemberForm({
   member,
   branches,
+  photoUrl,
 }: {
   /** When present the form edits this member instead of registering one. */
   member?: MemberRow
   /** Branches the caller may register into -- already narrowed by role. */
   branches: Branch[]
+  /** Signed URL for the member's existing photo, if they have one. */
+  photoUrl?: string | null
 }) {
   const editing = Boolean(member)
   const [state, formAction, pending] = useActionState<MemberFormState, FormData>(
@@ -52,6 +55,12 @@ export function MemberForm({
     member?.home_branch_id ?? (branches.length === 1 ? branches[0].id : '')
   )
   const [gender, setGender] = useState<string>(member?.gender ?? NO_GENDER)
+  const [pickedUrl, setPickedUrl] = useState<string | null>(null)
+  const [removePhoto, setRemovePhoto] = useState(false)
+
+  // A freshly picked file wins; otherwise show what is already stored, unless
+  // the user has asked for it to go.
+  const preview = pickedUrl ?? (removePhoto ? null : (photoUrl ?? null))
 
   const branchName = branches.find((branch) => branch.id === branchId)?.name
 
@@ -203,10 +212,58 @@ export function MemberForm({
             </div>
 
             <div className="flex flex-col gap-2 sm:col-span-2">
-              <Label htmlFor="photo" className="text-muted-foreground">
-                Photo (coming soon)
-              </Label>
-              <Input id="photo" type="file" disabled />
+              <Label htmlFor="photo">Photo (optional)</Label>
+              <div className="flex items-center gap-4">
+                {preview ? (
+                  /* A blob preview and a signed storage URL are both outside the
+                     configured image domains, so next/image cannot serve either. */
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={preview}
+                    alt=""
+                    className="size-16 shrink-0 rounded-full border object-cover"
+                  />
+                ) : (
+                  <span className="flex size-16 shrink-0 items-center justify-center rounded-full border border-dashed text-xs text-muted-foreground">
+                    None
+                  </span>
+                )}
+                <div className="flex flex-col gap-2">
+                  <Input
+                    id="photo"
+                    name="photo"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(event) => {
+                      const file = event.currentTarget.files?.[0]
+                      setPickedUrl(file ? URL.createObjectURL(file) : null)
+                      setRemovePhoto(false)
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    JPEG, PNG, or WebP, up to 5&nbsp;MB.
+                  </p>
+                </div>
+                {editing && preview ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setPickedUrl(null)
+                      setRemovePhoto(true)
+                    }}
+                  >
+                    Remove
+                  </Button>
+                ) : null}
+              </div>
+              <input
+                type="hidden"
+                name="removePhoto"
+                value={removePhoto ? 'true' : 'false'}
+              />
+              <FieldError messages={state.fieldErrors?.photo} />
             </div>
           </div>
 

@@ -5,6 +5,7 @@ import { MemberForm } from '@/components/members/member-form'
 import { requireRole } from '@/lib/auth'
 import { listBranches } from '@/lib/db/branches'
 import { getMember } from '@/lib/db/members'
+import { memberPhotoUrl } from '@/lib/db/photos'
 
 export default async function EditMemberPage({
   params,
@@ -17,6 +18,8 @@ export default async function EditMemberPage({
   const [member, allBranches] = await Promise.all([getMember(id), listBranches()])
 
   if (!member) notFound()
+
+  const photoUrl = await memberPhotoUrl(member.photo_path)
 
   // The member's current branch stays selectable even if the editor cannot
   // register into it, so an unrelated edit does not force a branch move.
@@ -41,7 +44,7 @@ export default async function EditMemberPage({
         </p>
       </div>
 
-      <MemberForm member={member} branches={branches} />
+      <MemberForm member={member} branches={branches} photoUrl={photoUrl} />
     </div>
   )
 }
