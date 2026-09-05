@@ -33,29 +33,47 @@ export function PlanForm({
   actorRole,
   actorBranchIds,
   onSaved,
+  fixedBranchIds,
 }: {
   plan?: PlanRow
   branches: PlanBranch[]
   actorRole: StaffRole
   actorBranchIds: string[]
-  onSaved?: () => void
+  onSaved?: (planId?: string) => void
+  /**
+   * When set, the plan is scoped to exactly these branches and the picker is
+   * replaced by a read-only line. The inline dialog on /members/new uses it so
+   * the plan it creates is guaranteed to be on sale at the branch the member is
+   * being registered into -- otherwise it would be created and then not appear
+   * in the dropdown that opened it.
+   */
+  fixedBranchIds?: string[]
 }) {
   const [state, formAction, pending] = useActionState<PlanFormState, FormData>(
     plan ? updatePlan : createPlan,
     {}
   )
   const [planType, setPlanType] = useState<PlanType>(plan?.plan_type ?? 'time')
-  const [selected, setSelected] = useState<string[]>(plan?.branch_ids ?? [])
+  const [selected, setSelected] = useState<string[]>(
+    fixedBranchIds ?? plan?.branch_ids ?? []
+  )
   const [isActive, setIsActive] = useState(plan?.is_active ?? true)
 
-  const isManager = actorRole === 'manager'
-  // A manager only ever sees the branches they run; an owner sees them all.
-  const visibleBranches = isManager
+  // Only an owner may sell a plan everywhere; everyone else picks from the
+  // branches they actually work at.
+  const isScoped = actorRole !== 'owner'
+  const visibleBranches = isScoped
     ? branches.filter((branch) => actorBranchIds.includes(branch.id))
     : branches
+  const fixedNames = fixedBranchIds
+    ? branches
+        .filter((branch) => fixedBranchIds.includes(branch.id))
+        .map((branch) => branch.name)
+        .join(', ')
+    : null
 
   useEffect(() => {
-    if (state.success) onSaved?.()
+    if (state.success) onSaved?.(state.planId)
   }, [state, onSaved])
 
   function toggleBranch(branchId: string, checked: boolean) {
@@ -169,22 +187,31 @@ export function PlanForm({
 
       <fieldset className="flex flex-col gap-2">
         <legend className="text-sm font-medium">Branches</legend>
-        <p className="text-sm text-muted-foreground">
-          {isManager
-            ? 'Pick at least one of your branches.'
-            : 'Leave empty to sell at every branch.'}
-        </p>
-        <div className="flex flex-col gap-2">
-          {visibleBranches.map((branch) => (
-            <label key={branch.id} className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={selected.includes(branch.id)}
-                onCheckedChange={(checked) => toggleBranch(branch.id, checked)}
-              />
-              {branch.name}
-            </label>
-          ))}
-        </div>
+        {fixedBranchIds ? (
+          <p className="text-sm text-muted-foreground">
+            Sold at {fixedNames || 'the selected branch'}. Change where it is sold
+            from the plan catalogue.
+          </p>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground">
+              {isScoped
+                ? 'Pick at least one of your branches.'
+                : 'Leave empty to sell at every branch.'}
+            </p>
+            <div className="flex flex-col gap-2">
+              {visibleBranches.map((branch) => (
+                <label key={branch.id} className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={selected.includes(branch.id)}
+                    onCheckedChange={(checked) => toggleBranch(branch.id, checked)}
+                  />
+                  {branch.name}
+                </label>
+              ))}
+            </div>
+          </>
+        )}
         {selected.map((id) => (
           <input key={id} type="hidden" name="branchIds" value={id} />
         ))}

@@ -53,15 +53,30 @@ export const GENDER_LABELS: Record<MemberGender, string> = {
 /** Digital rails are push payments; the reference is what reconciles them. */
 export const methodNeedsReference = (method: PaymentMethod) => method !== 'cash'
 
+export type BadgeTone = 'default' | 'secondary' | 'destructive' | 'outline'
+
+/** Tone for a membership row's own status. */
+export function membershipStatusTone(status: MembershipStatus): BadgeTone {
+  if (status === 'active') return 'default'
+  if (status === 'upcoming') return 'outline'
+  if (status === 'frozen') return 'secondary'
+  return 'destructive'
+}
+
 /**
- * Badge tone for a member's status. "Expiring" is not a status the database
- * stores -- it is an active membership within seven days of its end -- so it is
- * derived here from the overview row.
+ * Badge tone for a member's status. Two of the tones are not statuses the
+ * database stores. "Expiring" is an active membership within seven days of its
+ * end. "Starts later" is a member whose only membership has not begun yet:
+ * members.status has no 'upcoming' value, so a plan sold for tomorrow reads as
+ * 'expired' until the nightly sweep promotes it. Neither is an alarm, so
+ * neither is red.
  */
 export function memberStatusTone(
   status: MemberStatus,
-  daysToExpiry: number | null
-): 'default' | 'secondary' | 'destructive' | 'outline' {
+  daysToExpiry: number | null,
+  membershipStatus?: MembershipStatus | null
+): BadgeTone {
+  if (status === 'expired' && membershipStatus === 'upcoming') return 'outline'
   if (status === 'active' && daysToExpiry !== null && daysToExpiry <= 7) {
     return 'outline'
   }

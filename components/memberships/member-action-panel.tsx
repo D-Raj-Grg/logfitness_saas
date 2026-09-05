@@ -48,7 +48,7 @@ import { daysUntil, formatDate, formatDateTime, formatMoney } from '@/lib/format
 import {
   MEMBERSHIP_STATUS_LABELS,
   PAYMENT_METHOD_LABELS,
-  memberStatusTone,
+  membershipStatusTone,
 } from '@/lib/members'
 
 type OpenDialog =
@@ -142,7 +142,7 @@ export function MemberActionPanel({
             <>
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium">{current.plan_name}</span>
-                <Badge variant={memberStatusTone(member.status, member.days_to_expiry)}>
+                <Badge variant={membershipStatusTone(current.status)}>
                   {MEMBERSHIP_STATUS_LABELS[current.status]}
                 </Badge>
               </div>

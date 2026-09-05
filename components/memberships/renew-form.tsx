@@ -20,32 +20,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { formatDate, formatMoney, toPaisa } from '@/lib/format'
+import { formatDate, formatMoney } from '@/lib/format'
+import { paisaOrZero, planTerm, rupees } from '@/lib/plan-pricing'
 import type { PaymentMethod } from '@/lib/members'
 
 type Branch = { id: string; name: string }
 type PlanOption = Awaited<ReturnType<typeof loadPlansForBranch>>['plans'][number]
-
-/** Rupees typed so far, as paisa; garbage counts as nothing until it is fixed. */
-function paisaOrZero(rupees: string) {
-  if (!rupees.trim()) return 0
-  try {
-    const value = toPaisa(rupees)
-    return value < 0 ? 0 : value
-  } catch {
-    return 0
-  }
-}
-
-function rupees(paisa: number) {
-  return String(paisa / 100)
-}
-
-function planTerm(plan: PlanOption) {
-  return plan.plan_type === 'session_pack'
-    ? `${plan.session_count ?? 0} sessions`
-    : `${plan.duration_days ?? 0} days`
-}
 
 export function RenewForm({
   memberId,

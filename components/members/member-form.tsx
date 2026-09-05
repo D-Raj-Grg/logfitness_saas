@@ -9,6 +9,8 @@ import {
   type MemberFormState,
 } from '@/app/(app)/members/actions'
 import { AuthFormMessage, FieldError } from '@/components/auth/auth-form-message'
+import { MemberSaleFields } from '@/components/members/member-sale-fields'
+import type { PlanFormContext } from '@/components/plans/plan-dialog'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -38,6 +40,7 @@ export function MemberForm({
   member,
   branches,
   photoUrl,
+  planContext,
 }: {
   /** When present the form edits this member instead of registering one. */
   member?: MemberRow
@@ -45,6 +48,12 @@ export function MemberForm({
   branches: Branch[]
   /** Signed URL for the member's existing photo, if they have one. */
   photoUrl?: string | null
+  /**
+   * Present only on the registration screen. Carries what the inline "add a
+   * plan" dialog needs, and its absence is what keeps the sale section off the
+   * edit screen -- where the profile's own sell dialog is the right tool.
+   */
+  planContext?: PlanFormContext
 }) {
   const editing = Boolean(member)
   const [state, formAction, pending] = useActionState<MemberFormState, FormData>(
@@ -266,6 +275,15 @@ export function MemberForm({
               <FieldError messages={state.fieldErrors?.photo} />
             </div>
           </div>
+
+          {!editing && planContext ? (
+            <MemberSaleFields
+              branchId={branchId}
+              branchName={branchName}
+              planContext={planContext}
+              fieldErrors={state.fieldErrors}
+            />
+          ) : null}
 
           <div className="flex items-center gap-2">
             <Button type="submit" disabled={pending}>

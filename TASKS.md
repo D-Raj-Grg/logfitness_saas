@@ -136,6 +136,29 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
+- [x] **2026-09-05** Adversarial audit of the member-principal work found four
+      real defects, all fixed, applied, and covered by regression cases in
+      `supabase/tests/`. (1) The `member-photos` storage read policy still
+      tested `is_org_member()` alone, so any member could download every other
+      member's photo in their gym — the same shape as the table policies fixed
+      earlier the same day, missed because it lives in the `storage` schema.
+      (2) `link_member_account()` never checked `auth.users.email_confirmed_at`,
+      so signing up with a member's email address was enough to adopt their
+      record, history and check-ins; a trust decision inside a security-definer
+      function must not rest on a dashboard toggle. (3) `push-fanout` enforced
+      branch scoping only for the `branch_id` target, so a single-branch front
+      desk could push arbitrary content to every member in the chain via
+      `member_ids`. (4) `book_class_session` skipped `has_branch_access()` on
+      the staff-override path, and read "has an active membership" more loosely
+      than the trigger-derived `members.status`, admitting members who had left
+      and session packs with nothing left on them.
+- [ ] **2026-09-05** Delete the retired `qr-token` Edge Function. It answers a
+      static 410 and holds no secret or data path, so it is litter rather than
+      risk, but the MCP has no delete-function tool — do it from the dashboard.
+- [ ] **2026-09-05** `push-fanout` caps one call at 500 member ids but has no
+      per-org rate limit. Worth adding before the send path is provisioned.
+
+
 - [x] **2026-09-05** Classes/sessions/bookings schema and the member
       self-booking RPCs shipped
       (`supabase/migrations/20260905160000_classes_schema.sql`,

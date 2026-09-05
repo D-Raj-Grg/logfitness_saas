@@ -201,6 +201,9 @@ async function sendOne(
   }
 }
 
+/** One request cannot fan out to an unbounded slice of the chain. */
+const MAX_MEMBER_IDS = 500
+
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') {
     return jsonResponse({ error: 'POST only' }, 405)
@@ -299,7 +302,15 @@ Deno.serve(async (req: Request) => {
   if (body.member_id) {
     memberIds = [body.member_id]
   } else if (body.member_ids) {
-    memberIds = body.member_ids
+    if (body.member_ids.length > MAX_MEMBER_IDS) {
+      return jsonResponse(
+        { error: `Name at most ${MAX_MEMBER_IDS} members in one call` },
+        400
+      )
+    }
+    // Deduplicated so a repeated id cannot look like a missing one to the
+    // reachability check below.
+    memberIds = [...new Set(body.member_ids)]
   } else {
     const { data: members, error: membersError } = await adminClient
       .from('members')
@@ -315,6 +326,33 @@ Deno.serve(async (req: Request) => {
 
   if (memberIds.length === 0) {
     return jsonResponse({ sent: 0, failed: 0, unregistered: 0, revoked: 0 })
+  }
+
+  // Branch scoping applies to every target shape, not just `branch_id`.
+  // Checking it only there left the member targets scoped by org alone, which
+  // let a front desk at one branch push arbitrary content to the whole chain.
+  // A member's branch is their home branch, so resolve it and compare against
+  // what the caller can actually reach. An owner's current_staff() already
+  // expands branch_ids to every branch in the org, so this covers them too.
+  const { data: targetBranches, error: targetBranchesError } = await adminClient
+    .from('members')
+    .select('id, home_branch_id')
+    .eq('org_id', body.org_id)
+    .in('id', memberIds)
+
+  if (targetBranchesError) {
+    return jsonResponse({ error: 'Could not resolve member branches' }, 500)
+  }
+
+  const reachable = new Set(staff.branch_ids ?? [])
+  const outOfReach = (targetBranches ?? []).filter(
+    (m: { home_branch_id: string }) => !reachable.has(m.home_branch_id)
+  )
+
+  // A member id the caller cannot reach and one that does not exist get the
+  // same answer, so this cannot be used to enumerate the chain's membership.
+  if (outOfReach.length > 0 || (targetBranches ?? []).length !== memberIds.length) {
+    return jsonResponse({ error: 'Caller cannot reach one of those members' }, 403)
   }
 
   const { data: tokenRows, error: tokensError } = await adminClient

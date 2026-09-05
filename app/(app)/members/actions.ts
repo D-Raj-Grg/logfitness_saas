@@ -7,10 +7,11 @@ import { z } from 'zod'
 import { requireRole } from '@/lib/auth'
 import {
   getMember,
-  insertMember,
   inviteMemberToApp as inviteMemberToAppRpc,
+  registerMember,
   updateMember as updateMemberRow,
   type MemberInsert,
+  type RegisterMemberResult,
 } from '@/lib/db/members'
 import {
   reactivateMember as reactivateMemberRpc,
@@ -28,6 +29,7 @@ import {
   inviteMemberToAppSchema,
   memberIdSchema,
   memberLeaveSchema,
+  memberSaleSchema,
   memberSchema,
   updateMemberSchema,
   type MemberInput,
@@ -39,7 +41,7 @@ export type MemberFormState = {
   fieldErrors?: Record<string, string[]>
 }
 
-type DbError = { code?: string; message?: string }
+type DbError = { code?: string; message?: string; hint?: string }
 
 function readMemberFields(formData: FormData) {
   const text = (key: string) => {
@@ -116,6 +118,56 @@ function mapDbError(error: unknown): MemberFormState {
   return { error: message ?? 'Something went wrong. Please try again.' }
 }
 
+/** The optional sale half of the registration form. */
+function readSaleFields(formData: FormData) {
+  const text = (key: string) => {
+    const value = formData.get(key)
+    return typeof value === 'string' ? value : undefined
+  }
+
+  return {
+    sell: text('sellPlan') === 'true' ? 'true' : 'false',
+    planId: text('salePlanId'),
+    discountPaisa: text('saleDiscountPaisa'),
+    amountPaidPaisa: text('saleAmountPaidPaisa'),
+    method: text('saleMethod') ?? undefined,
+    referenceNo: text('saleReferenceNo'),
+  }
+}
+
+/**
+ * register_member() tags every refusal with a hint naming the half that raised
+ * it, so a plan that is not sold here does not read as a problem with the
+ * member's phone number. Within the sale half the sentence picks the field --
+ * those messages live in the RPC and are the only copy of the rule.
+ */
+function mapRegisterError(error: unknown): MemberFormState {
+  const { code, message, hint } = (error ?? {}) as DbError
+  const text = (message ?? 'Something went wrong. Please try again.').replace(
+    /^[A-Z0-9]{5}:\s*/,
+    ''
+  )
+
+  if (hint === 'member') {
+    if (code === '23505') {
+      return {
+        fieldErrors: { phone: ['A member with that phone number already exists.'] },
+      }
+    }
+    if (code === '42501') return { fieldErrors: { homeBranchId: [text] } }
+    return { error: text }
+  }
+
+  if (hint === 'sale') {
+    if (/discount/i.test(text)) return { fieldErrors: { discountPaisa: [text] } }
+    if (/payment/i.test(text)) return { fieldErrors: { amountPaidPaisa: [text] } }
+    if (/plan/i.test(text)) return { fieldErrors: { planId: [text] } }
+    return { error: text }
+  }
+
+  return mapDbError(error)
+}
+
 export async function createMember(
   _prevState: MemberFormState,
   formData: FormData
@@ -123,9 +175,17 @@ export async function createMember(
   const staff = await requireRole('owner', 'manager', 'front_desk')
 
   const parsed = memberSchema.safeParse(readMemberFields(formData))
+  const sale = memberSaleSchema.safeParse(readSaleFields(formData))
 
-  if (!parsed.success) {
-    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+  // Both halves report at once. Fixing one field per round trip is exactly the
+  // back-and-forth this form exists to remove.
+  if (!parsed.success || !sale.success) {
+    return {
+      fieldErrors: {
+        ...(parsed.success ? {} : z.flattenError(parsed.error).fieldErrors),
+        ...(sale.success ? {} : z.flattenError(sale.error).fieldErrors),
+      },
+    }
   }
 
   if (!branchAllowed(staff, parsed.data.homeBranchId)) {
@@ -141,34 +201,59 @@ export async function createMember(
     return { fieldErrors: { photo: [photo.error] } }
   }
 
-  let memberId: string
+  const selling = sale.data.sell
+
+  let result: RegisterMemberResult
   try {
-    // org_id and created_by come from the caller's own staff record, never
-    // from the form. The RLS insert policy independently rejects any other org.
-    const created = await insertMember({
-      ...toMemberColumns(parsed.data),
-      org_id: staff.orgId,
-      created_by: staff.staffId,
+    // One transaction: org_id and created_by are read from the caller's own
+    // claims inside the RPC, and a sale that is refused registers nobody -- so
+    // the desk can correct one field and submit the same form again.
+    result = await registerMember({
+      fullName: parsed.data.fullName,
+      phone: parsed.data.phone,
+      homeBranchId: parsed.data.homeBranchId,
+      email: parsed.data.email,
+      dateOfBirth: parsed.data.dateOfBirth,
+      gender: parsed.data.gender ?? null,
+      address: parsed.data.address,
+      emergencyContactName: parsed.data.emergencyContactName,
+      emergencyContactPhone: parsed.data.emergencyContactPhone,
+      notes: parsed.data.notes,
+      planId: selling ? sale.data.planId : null,
+      discountPaisa: selling ? sale.data.discountPaisa : 0,
+      amountPaidPaisa: selling ? sale.data.amountPaidPaisa : 0,
+      method: selling ? sale.data.method : 'cash',
+      referenceNo: selling ? sale.data.referenceNo : null,
     })
-    memberId = created.id
   } catch (error) {
-    return mapDbError(error)
+    return mapRegisterError(error)
   }
 
   // The member exists either way: a photo that fails to upload is reported on
   // the profile, not by throwing away a completed registration.
   if (photo) {
     try {
-      const path = memberPhotoPath(staff.orgId, memberId, photo.file.type)
+      const path = memberPhotoPath(staff.orgId, result.member_id, photo.file.type)
       await uploadMemberPhoto(path, photo.file)
-      await updateMemberRow(memberId, { photo_path: path })
+      await updateMemberRow(result.member_id, { photo_path: path })
     } catch {
       // Swallowed on purpose -- see above. The edit screen can retry.
     }
   }
 
   revalidatePath('/members')
-  redirect(`/members/${memberId}`)
+  if (result.sold) {
+    revalidatePath('/payments')
+    revalidatePath('/')
+  }
+
+  // The invoice id, not a sentence: the profile renders the receipt from the
+  // row itself, so a hand-edited URL cannot put words on the page.
+  redirect(
+    result.invoice_id
+      ? `/members/${result.member_id}?invoice=${result.invoice_id}`
+      : `/members/${result.member_id}`
+  )
 }
 
 export async function updateMember(

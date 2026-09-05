@@ -12,11 +12,13 @@ import { planIdSchema, planSchema, updatePlanSchema } from '@/lib/validation/pla
 export type PlanFormState = {
   error?: string
   success?: string
+  /** Set on success so a caller that opened this form can select the plan. */
+  planId?: string
   fieldErrors?: Record<string, string[]>
 }
 
 const OUT_OF_SCOPE =
-  'Managers can only sell a plan at their own branches. Pick at least one.'
+  'A plan must be sold at your own branches. Pick at least one.'
 
 function planFormValues(formData: FormData) {
   return {
@@ -65,7 +67,9 @@ export async function createPlan(
   _prevState: PlanFormState,
   formData: FormData
 ): Promise<PlanFormState> {
-  const staff = await requireRole('owner', 'manager')
+  // The front desk may add a plan it needs in order to sell one; editing and
+  // deactivating stay with owners and managers. See PLANNING.md section 4.
+  const staff = await requireRole('owner', 'manager', 'front_desk')
 
   const parsed = planSchema.safeParse(planFormValues(formData))
 
@@ -77,10 +81,11 @@ export async function createPlan(
     return { fieldErrors: { branchIds: [OUT_OF_SCOPE] } }
   }
 
+  let created: { id: string }
   try {
     // org_id comes from the caller's staff record, never the form; the RLS
     // insert policy independently rejects any other org.
-    await insertPlan({
+    created = await insertPlan({
       org_id: staff.orgId,
       name: parsed.data.name,
       description: parsed.data.description,
@@ -97,7 +102,10 @@ export async function createPlan(
   }
 
   revalidatePlans()
-  return { success: `${parsed.data.name} was added to the catalogue.` }
+  return {
+    success: `${parsed.data.name} was added to the catalogue.`,
+    planId: created.id,
+  }
 }
 
 export async function updatePlan(

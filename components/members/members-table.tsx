@@ -105,7 +105,11 @@ export function MembersTable({
                 )}
               </TableCell>
               <TableCell>
-                <MemberStatusBadge status={row.status} daysToExpiry={row.days_to_expiry} />
+                <MemberStatusBadge
+                  status={row.status}
+                  daysToExpiry={row.days_to_expiry}
+                  membershipStatus={row.membership_status}
+                />
               </TableCell>
               <TableCell
                 className={cn(

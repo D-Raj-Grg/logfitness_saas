@@ -21,7 +21,8 @@ export const rupeesSchema = z
     }
   })
 
-const optionalRupees = z
+/** Rupees, or blank meaning nothing was charged. */
+export const optionalRupeesSchema = z
   .string()
   .trim()
   .optional()
@@ -53,7 +54,7 @@ export const planSchema = z
     durationDays: z.coerce.number().int().positive().optional().nullable(),
     sessionCount: z.coerce.number().int().positive().optional().nullable(),
     pricePaisa: rupeesSchema,
-    signupFeePaisa: optionalRupees,
+    signupFeePaisa: optionalRupeesSchema,
     branchIds: z.array(z.uuid()).default([]),
     isActive: z.boolean().default(true),
   })

@@ -142,6 +142,70 @@ export async function getMemberOverview(memberId: string) {
   return data as MemberOverviewRow | null
 }
 
+export type RegisterMemberResult = {
+  member_id: string
+  member_code: string
+  sold: boolean
+  /** Present only when a plan was sold. Mirrors renew_membership's own shape. */
+  membership_id?: string
+  invoice_id?: string
+  invoice_no?: string
+  payment_id?: string | null
+  start_date?: string
+  end_date?: string | null
+  total_paisa?: number
+  due_paisa?: number
+}
+
+/**
+ * Registration and the optional first sale, in one transaction. A sale that is
+ * refused registers nobody -- see the register_member migration for why that
+ * matters at the desk.
+ *
+ * The error carries a `hint` of 'member' or 'sale' saying which half refused,
+ * which is how the Server Action lands the message on the right field.
+ */
+export async function registerMember(args: {
+  fullName: string
+  phone: string
+  homeBranchId: string
+  email?: string | null
+  dateOfBirth?: string | null
+  gender?: Database['public']['Enums']['member_gender'] | null
+  address?: string | null
+  emergencyContactName?: string | null
+  emergencyContactPhone?: string | null
+  notes?: string | null
+  planId?: string | null
+  discountPaisa?: number
+  amountPaidPaisa?: number
+  method?: Database['public']['Enums']['payment_method']
+  referenceNo?: string | null
+}): Promise<RegisterMemberResult> {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase.rpc('register_member', {
+    p_full_name: args.fullName,
+    p_phone: args.phone,
+    p_home_branch_id: args.homeBranchId,
+    p_email: args.email ?? undefined,
+    p_date_of_birth: args.dateOfBirth ?? undefined,
+    p_gender: args.gender ?? undefined,
+    p_address: args.address ?? undefined,
+    p_emergency_contact_name: args.emergencyContactName ?? undefined,
+    p_emergency_contact_phone: args.emergencyContactPhone ?? undefined,
+    p_notes: args.notes ?? undefined,
+    p_plan_id: args.planId ?? undefined,
+    p_discount_paisa: args.discountPaisa ?? 0,
+    p_amount_paid_paisa: args.amountPaidPaisa ?? 0,
+    p_method: args.method ?? 'cash',
+    p_reference_no: args.referenceNo ?? undefined,
+  })
+
+  if (error) throw error
+  return data as unknown as RegisterMemberResult
+}
+
 export async function insertMember(values: MemberInsert) {
   const supabase = await createClient()
 

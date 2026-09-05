@@ -1,6 +1,8 @@
 import { z } from 'zod'
 
 import { emailSchema } from '@/lib/validation/auth'
+import { paymentMethodSchema } from '@/lib/validation/payments'
+import { optionalRupeesSchema } from '@/lib/validation/plans'
 
 const optionalText = (max: number) =>
   z
@@ -73,3 +75,54 @@ export const memberListQuerySchema = z.object({
 
 export type MemberInput = z.infer<typeof memberSchema>
 export type MemberListQuery = z.infer<typeof memberListQuerySchema>
+
+/**
+ * The optional sale on the registration form. The fields ride along in the same
+ * submission as the member's details but are only checked when `sell` is on, so
+ * a plain registration cannot be blocked by a half-filled sale the desk thought
+ * better of.
+ *
+ * Parsed separately from memberSchema rather than extending it: the cross-field
+ * reference rule would turn the member schema into a ZodEffects and stop it
+ * being extendable elsewhere. The field paths are deliberately unprefixed --
+ * they are what the form reads back out of fieldErrors, not the FormData keys.
+ */
+export const memberSaleSchema = z
+  .object({
+    sell: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    planId: z
+      .string()
+      .trim()
+      .optional()
+      .transform((value) => (value ? value : null)),
+    discountPaisa: optionalRupeesSchema,
+    amountPaidPaisa: optionalRupeesSchema,
+    method: paymentMethodSchema.default('cash'),
+    referenceNo: z
+      .string()
+      .trim()
+      .max(120)
+      .optional()
+      .transform((value) => (value ? value : null)),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.sell) return
+
+    if (!value.planId || !z.uuid().safeParse(value.planId).success) {
+      ctx.addIssue({ code: 'custom', message: 'Pick a plan', path: ['planId'] })
+    }
+
+    // Cash needs nothing; every digital rail needs the transaction reference.
+    if (value.amountPaidPaisa > 0 && value.method !== 'cash' && !value.referenceNo) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Enter the transaction reference',
+        path: ['referenceNo'],
+      })
+    }
+  })
+
+export type MemberSaleInput = z.infer<typeof memberSaleSchema>

@@ -107,7 +107,7 @@ begin
 
   -- persona: member A1 -- books the only seat -------------------------------
   perform set_config('request.jwt.claims', json_build_object(
-    'sub', gen_random_uuid()::text, 'role', 'member',
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
     'org_id', org_a::text, 'member_id', member_a1::text,
     'branch_ids', json_build_array(br_a1::text)
   )::text, true);
@@ -145,7 +145,7 @@ begin
 
   -- persona: member A2 -- capacity is spent, so this books the waitlist -----
   perform set_config('request.jwt.claims', json_build_object(
-    'sub', gen_random_uuid()::text, 'role', 'member',
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
     'org_id', org_a::text, 'member_id', member_a2::text,
     'branch_ids', json_build_array(br_a1::text)
   )::text, true);
@@ -167,7 +167,7 @@ begin
 
   -- persona: member A1 again -- cancels, freeing the seat for the waitlist --
   perform set_config('request.jwt.claims', json_build_object(
-    'sub', gen_random_uuid()::text, 'role', 'member',
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
     'org_id', org_a::text, 'member_id', member_a1::text,
     'branch_ids', json_build_array(br_a1::text)
   )::text, true);
@@ -189,7 +189,7 @@ begin
 
   -- persona: member A3 -- books the imminent session, then hits the window --
   perform set_config('request.jwt.claims', json_build_object(
-    'sub', gen_random_uuid()::text, 'role', 'member',
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
     'org_id', org_a::text, 'member_id', member_a3::text,
     'branch_ids', json_build_array(br_a1::text)
   )::text, true);
@@ -239,6 +239,49 @@ begin
     format('org A owner should see all 3 class bookings, saw %s', n);
 
   execute 'reset role';
+
+
+  -- Review regressions ---------------------------------------------------------
+  --
+  -- Three defects the first cut of these RPCs had, each now a case here.
+
+  -- 1. A front desk serves its own branches, not the whole chain. Booking on
+  --    behalf of a member at a branch it does not serve must be refused.
+  execute 'reset role';
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', org_a::text, 'staff_id', st_a_desk::text,
+    'staff_role', 'front_desk', 'branch_ids', json_build_array(br_a1::text)
+  )::text, true);
+  execute 'set local role authenticated';
+
+  -- no_data_found is the branch-access refusal specifically: the home-branch
+  -- mismatch further down raises check_violation, so catching the narrow code
+  -- proves which check actually fired.
+  failed := false;
+  begin
+    perform public.book_class_session(sess_wrong_branch, member_a3);
+  exception when no_data_found then
+    failed := true;
+  end;
+  assert failed,
+    'a front desk booked a class at a branch outside its branch_ids';
+
+  execute 'reset role';
+
+  -- 2. A malformed or negative cancellation window falls back to the documented
+  --    default rather than raising out of every cancellation for that org.
+  update public.orgs set settings = '{"class_cancellation_window_minutes": "not-a-number"}'::jsonb
+  where id = org_a;
+  assert public.class_cancellation_window_minutes(org_a) = 120,
+    'a malformed cancellation window did not fall back to 120';
+
+  update public.orgs set settings = '{"class_cancellation_window_minutes": "-30"}'::jsonb
+  where id = org_a;
+  assert public.class_cancellation_window_minutes(org_a) = 120,
+    'a negative cancellation window was accepted';
+
+  update public.orgs set settings = '{}'::jsonb where id = org_a;
 
   raise notice 'classes.sql: all assertions passed';
 

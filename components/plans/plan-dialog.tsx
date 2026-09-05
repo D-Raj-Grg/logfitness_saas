@@ -25,11 +25,17 @@ export function PlanDialog({
   onOpenChange,
   plan,
   context,
+  fixedBranchIds,
+  onCreated,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   plan?: PlanRow
   context: PlanFormContext
+  /** Pins the new plan to these branches and hides the branch picker. */
+  fixedBranchIds?: string[]
+  /** Fired with the id of a plan this dialog just created, never on an edit. */
+  onCreated?: (planId: string) => void
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -48,7 +54,11 @@ export function PlanDialog({
             key={plan?.id ?? 'new'}
             plan={plan}
             {...context}
-            onSaved={() => onOpenChange(false)}
+            fixedBranchIds={fixedBranchIds}
+            onSaved={(planId) => {
+              if (!plan && planId) onCreated?.(planId)
+              onOpenChange(false)
+            }}
           />
         ) : null}
       </DialogContent>

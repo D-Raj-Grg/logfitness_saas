@@ -30,11 +30,14 @@ function Detail({ label, value }: { label: string; value: React.ReactNode }) {
 
 export default async function MemberProfilePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ invoice?: string }>
 }) {
   const staff = await requireStaff()
   const { id } = await params
+  const { invoice: soldInvoiceId } = await searchParams
 
   const [overview, member, memberships, invoices, payments, attendance, branches] =
     await Promise.all([
@@ -48,6 +51,13 @@ export default async function MemberProfilePage({
     ])
 
   if (!overview || !member) notFound()
+
+  // Rendered from the row, never from the URL: ?invoice= only picks which of
+  // this member's own invoices to acknowledge after a register-and-sell, so a
+  // hand-edited link cannot put words on the page.
+  const soldInvoice = soldInvoiceId
+    ? (invoices.find((row) => row.id === soldInvoiceId) ?? null)
+    : null
 
   const photoUrl = await memberPhotoUrl(member.photo_path)
 
@@ -67,6 +77,7 @@ export default async function MemberProfilePage({
             <MemberStatusBadge
               status={overview.status}
               daysToExpiry={overview.days_to_expiry}
+              membershipStatus={overview.membership_status}
             />
           </div>
           <p className="flex flex-wrap gap-x-3 text-sm text-muted-foreground">
@@ -91,6 +102,19 @@ export default async function MemberProfilePage({
           </div>
         ) : null}
       </div>
+
+      {soldInvoice ? (
+        <div role="status" className="rounded-lg border bg-muted/40 px-4 py-3 text-sm">
+          {'Registered. Invoice '}
+          <span className="font-mono">{soldInvoice.invoice_no}</span>
+          {' raised for '}
+          <span className="tabular-nums">{formatMoney(soldInvoice.total_paisa)}</span>
+          {'. '}
+          {(soldInvoice.due_paisa ?? 0) > 0
+            ? `${formatMoney(soldInvoice.due_paisa ?? 0)} still due.`
+            : 'Paid in full.'}
+        </div>
+      ) : null}
 
       {overview.due_paisa > 0 ? (
         <div

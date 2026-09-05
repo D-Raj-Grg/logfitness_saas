@@ -1363,6 +1363,26 @@ export type Database = {
         Args: { p_app_version?: string; p_platform: string; p_token: string }
         Returns: string
       }
+      register_member: {
+        Args: {
+          p_address?: string
+          p_amount_paid_paisa?: number
+          p_date_of_birth?: string
+          p_discount_paisa?: number
+          p_email?: string
+          p_emergency_contact_name?: string
+          p_emergency_contact_phone?: string
+          p_full_name: string
+          p_gender?: Database["public"]["Enums"]["member_gender"]
+          p_home_branch_id: string
+          p_method?: Database["public"]["Enums"]["payment_method"]
+          p_notes?: string
+          p_phone: string
+          p_plan_id?: string
+          p_reference_no?: string
+        }
+        Returns: Json
+      }
       renew_membership: {
         Args: {
           p_amount_paid_paisa?: number

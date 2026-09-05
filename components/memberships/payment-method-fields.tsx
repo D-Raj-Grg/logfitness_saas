@@ -29,13 +29,25 @@ export function PaymentMethodFields({
   idPrefix,
   referenceRequired = true,
   fieldErrors,
+  names,
 }: {
   method: PaymentMethod
   onMethodChange: (method: PaymentMethod) => void
   idPrefix: string
   referenceRequired?: boolean
   fieldErrors?: Record<string, string[]>
+  /**
+   * FormData names for the two inputs, for a form that already uses `method`
+   * or `referenceNo` for something else. Defaulted, so the forms that had this
+   * component to themselves are unchanged.
+   *
+   * The fieldErrors keys deliberately do not follow: those come from the zod
+   * schema, whose paths stay unprefixed.
+   */
+  names?: { method: string; reference: string }
 }) {
+  const methodName = names?.method ?? 'method'
+  const referenceName = names?.reference ?? 'referenceNo'
   const needsReference = methodNeedsReference(method)
 
   return (
@@ -43,7 +55,7 @@ export function PaymentMethodFields({
       <div className="flex flex-col gap-2">
         <Label htmlFor={`${idPrefix}-method`}>Method</Label>
         <Select
-          name="method"
+          name={methodName}
           value={method}
           onValueChange={(value) => onMethodChange(value as PaymentMethod)}
         >
@@ -66,7 +78,7 @@ export function PaymentMethodFields({
           <Label htmlFor={`${idPrefix}-reference`}>Reference no.</Label>
           <Input
             id={`${idPrefix}-reference`}
-            name="referenceNo"
+            name={referenceName}
             required={referenceRequired}
             placeholder="Transaction ID from the app or slip"
             maxLength={120}

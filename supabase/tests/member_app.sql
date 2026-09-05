@@ -19,6 +19,7 @@ declare
   user_alice uuid := 'a1000000-0000-0000-0000-0000000000a1';
   user_bob uuid := 'b1000000-0000-0000-0000-0000000000b1';
   user_nobody uuid := 'c1000000-0000-0000-0000-0000000000c1';
+  user_impostor uuid := 'd1000000-0000-0000-0000-0000000000d1';
 
   mem_alice uuid;
   mem_carol uuid;
@@ -39,7 +40,7 @@ begin
   -- fixtures, as the owning role so RLS is out of the way. The deletes let the
   -- file be re-run after a failed assertion aborted a previous attempt.
   delete from public.orgs where id in (org_a, org_b);
-  delete from auth.users where id in (user_alice, user_bob, user_nobody);
+  delete from auth.users where id in (user_alice, user_bob, user_nobody, user_impostor);
 
   insert into public.orgs (id, name, slug) values
     (org_a, 'Epsilon Fitness', 'epsilon-fitness-test'),
@@ -55,11 +56,13 @@ begin
 
   -- Auth accounts for the two members who get app access, and one account that
   -- signs in with no invitation waiting at all.
-  insert into auth.users (id, instance_id, aud, role, email, created_at, updated_at)
+  -- email_confirmed_at is set deliberately: link_member_account() refuses an
+  -- unconfirmed address, and section 13 below is the test for that.
+  insert into auth.users (id, instance_id, aud, role, email, email_confirmed_at, created_at, updated_at)
   values
-    (user_alice,  '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'alice@epsilon.test', now(), now()),
-    (user_bob,    '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'bob@zeta.test',      now(), now()),
-    (user_nobody, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'nobody@nowhere.test',now(), now());
+    (user_alice,  '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'alice@epsilon.test', now(), now(), now()),
+    (user_bob,    '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'bob@zeta.test',      now(), now(), now()),
+    (user_nobody, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'nobody@nowhere.test',now(), now(), now());
 
   insert into public.members (org_id, home_branch_id, member_code, full_name, phone, joined_on)
   values (org_a, br_a1, 'M90001', 'Alice Rai', '9800000001', public.org_today(org_a))
@@ -400,10 +403,65 @@ begin
 
   execute 'reset role';
 
+  -- 13. an unconfirmed email cannot claim a membership -----------------------
+  --
+  -- The email address is the only thing tying an account to a member record,
+  -- so signing up as someone else's address must not be enough to take it.
+
+  insert into auth.users (id, instance_id, aud, role, email, email_confirmed_at, created_at, updated_at)
+  values (user_impostor, '00000000-0000-0000-0000-000000000000', 'authenticated',
+          'authenticated', 'carol@epsilon.test', null, now(), now());
+
+  update public.members set email = 'carol@epsilon.test', invited_at = now(), auth_user_id = null
+  where id = mem_carol;
+
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', user_impostor::text, 'role', 'authenticated'
+  )::text, true);
+  execute 'set local role authenticated';
+
+  failed := false;
+  begin
+    perform public.link_member_account();
+  exception when others then
+    failed := true;
+  end;
+  if not failed then
+    raise exception 'an account with an unconfirmed email claimed a membership';
+  end if;
+
+  execute 'reset role';
+
+  -- 14. member photos are per-member, not per-org ----------------------------
+  --
+  -- The storage policy predicate, evaluated directly: storage.objects cannot be
+  -- seeded from here (storage.protect_delete() blocks the teardown), and the
+  -- predicate is the whole of the access decision.
+
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', user_alice::text, 'role', 'authenticated',
+    'org_id', org_a::text, 'member_id', mem_alice::text,
+    'branch_ids', json_build_array(br_a1::text)
+  )::text, true);
+  execute 'set local role authenticated';
+
+  if not (
+    public.is_org_member(public.storage_object_org(org_a || '/' || mem_alice || '/face.jpg'))
+    and public.storage_object_member(org_a || '/' || mem_alice || '/face.jpg') = public.jwt_member_id()
+  ) then
+    raise exception 'a member cannot read their own photo';
+  end if;
+
+  if public.storage_object_member(org_a || '/' || mem_carol || '/face.jpg') = public.jwt_member_id() then
+    raise exception 'a member can read another member''s photo';
+  end if;
+
+  execute 'reset role';
+
   -- cleanup -----------------------------------------------------------------
 
   delete from public.orgs where id in (org_a, org_b);
-  delete from auth.users where id in (user_alice, user_bob, user_nobody);
+  delete from auth.users where id in (user_alice, user_bob, user_nobody, user_impostor);
 
   raise notice 'member app: all assertions passed';
 end $$;
