@@ -29,3 +29,9 @@ Product context lives in `docs/PRD.md`. Read it when scope or priority is in que
 v1 excludes: card-on-file/Stripe recurring billing, member web self-service, POS and
 inventory, payroll/HR, biometric hardware, workout program builder, marketing/CRM,
 accounting integrations. Do not build these without an explicit scope decision.
+
+
+1. Always read the PLANNING.md at the start of every new conversation 
+2. Check TASKS.md before starting your work
+3. Mark completed tasks immediately
+4. Add newly discovered tasks

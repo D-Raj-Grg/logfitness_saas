@@ -18,13 +18,13 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 - [x] `lib/supabase/{server,client,proxy}.ts` with `@supabase/ssr`
 - [x] Proxy (`proxy.ts`): session refresh + redirect unauthenticated users to `/login`
 - [x] Wire `app/login` to real Supabase email/password auth
-- [ ] Staff invite flow: owner invites by email → accept → `staff` row created
+- [x] Staff invite flow: owner invites by email → accept → `staff` row created
 - [x] Replace `app/signup` with org onboarding (create org + owner + first branch)
 - [x] `app/(app)` shell: sidebar, role-aware nav, user menu
 - [ ] Branch switcher in the app shell header (needs Phase 3 branch scoping)
 - [x] Generate TypeScript DB types via Supabase MCP; wire into `lib/db`
 - [x] Currency (NPR paisa) and date/time (Asia/Kathmandu) formatting helpers
-- [ ] Seed script: demo org, 3 branches, staff across all four roles
+- [x] Seed script: demo org, 3 branches, staff across all four roles (`supabase/seed.sql`, `npm run db:seed`)
 
 ## Phase 1 — Member spine
 
@@ -112,9 +112,9 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 - [ ] **2026-09-05** Install the Supabase CLI, `supabase link`, and `supabase db pull`
       so the applied migrations are mirrored into `supabase/migrations/` under git.
       They currently live only in the remote project's migration history.
-- [ ] **2026-09-05** Staff invite UI. `link_staff_account()` and the RLS insert
-      policy exist; the owner/manager-facing invite screen does not.
-- [ ] **2026-09-05** Seed script (demo org, 3 branches, one staff member per role).
+- [ ] **2026-09-05** Email delivery for staff invitations. An invited person is
+      currently told to sign up with their email address by whoever invited
+      them; nothing is sent. Folds into Phase 5 notifications.
 - [ ] **2026-09-05** Next.js 16 renamed Middleware to Proxy (`proxy.ts` at the repo
       root, exporting `proxy`). Remember this for any future request interception.
 
