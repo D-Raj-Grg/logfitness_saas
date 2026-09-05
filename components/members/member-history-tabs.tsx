@@ -8,9 +8,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ATTENDANCE_METHOD_LABELS, formatMinutesIn } from '@/lib/attendance'
+import type { AttendanceDetailRow } from '@/lib/db/attendance'
 import type { listInvoicesForMember, listMembershipsForMember } from '@/lib/db/memberships'
 import type { listPaymentsForMember } from '@/lib/db/payments'
-import { formatDate, formatDateTime, formatMoney } from '@/lib/format'
+import { formatDate, formatDateTime, formatMoney, formatTime } from '@/lib/format'
 import {
   INVOICE_STATUS_LABELS,
   MEMBERSHIP_STATUS_LABELS,
@@ -39,6 +41,16 @@ const INVOICE_TONE: Record<InvoiceStatus, 'default' | 'secondary' | 'destructive
   void: 'secondary',
 }
 
+/** Minutes between check-in and check-out; null while the visit is still open. */
+function minutesIn(row: AttendanceDetailRow) {
+  if (!row.checked_out_at) return null
+
+  const ms = new Date(row.checked_out_at).getTime() - new Date(row.checked_in_at).getTime()
+  if (!Number.isFinite(ms)) return null
+
+  return ms / 60_000
+}
+
 function EmptyTab({ children }: { children: React.ReactNode }) {
   return (
     <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
@@ -51,11 +63,13 @@ export function MemberHistoryTabs({
   memberships,
   invoices,
   payments,
+  attendance,
   branchNames,
 }: {
   memberships: Memberships
   invoices: Invoices
   payments: Payments
+  attendance: AttendanceDetailRow[]
   branchNames: Record<string, string>
 }) {
   return (
@@ -64,7 +78,7 @@ export function MemberHistoryTabs({
         <TabsTrigger value="memberships">Memberships ({memberships.length})</TabsTrigger>
         <TabsTrigger value="payments">Payments ({payments.length})</TabsTrigger>
         <TabsTrigger value="invoices">Invoices ({invoices.length})</TabsTrigger>
-        <TabsTrigger value="attendance">Attendance</TabsTrigger>
+        <TabsTrigger value="attendance">Attendance ({attendance.length})</TabsTrigger>
       </TabsList>
 
       <TabsContent value="memberships">
@@ -228,7 +242,65 @@ export function MemberHistoryTabs({
       </TabsContent>
 
       <TabsContent value="attendance">
-        <EmptyTab>Attendance arrives in Phase 2.</EmptyTab>
+        {attendance.length === 0 ? (
+          <EmptyTab>No check-ins recorded yet.</EmptyTab>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>In</TableHead>
+                  <TableHead>Out</TableHead>
+                  <TableHead>Duration</TableHead>
+                  <TableHead>Branch</TableHead>
+                  <TableHead>Method</TableHead>
+                  <TableHead>Checked in by</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {attendance.map((row) => {
+                  const minutes = minutesIn(row)
+                  return (
+                    <TableRow key={row.id}>
+                      <TableCell className="whitespace-nowrap">
+                        {formatDate(row.attended_on)}
+                        {row.is_override ? (
+                          <span className="mt-1 block">
+                            <Badge variant="secondary">Override</Badge>
+                            {row.override_reason ? (
+                              <span className="block text-xs text-muted-foreground">
+                                {row.override_reason}
+                              </span>
+                            ) : null}
+                          </span>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums">
+                        {formatTime(row.checked_in_at)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
+                        {row.checked_out_at ? formatTime(row.checked_out_at) : '--'}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums">
+                        {minutes === null ? (
+                          <span className="text-muted-foreground">In the gym</span>
+                        ) : (
+                          formatMinutesIn(minutes)
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{row.branch_name}</TableCell>
+                      <TableCell>{ATTENDANCE_METHOD_LABELS[row.method]}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {row.checked_in_by_name ?? '--'}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </TabsContent>
     </Tabs>
   )

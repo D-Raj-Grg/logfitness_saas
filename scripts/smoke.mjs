@@ -102,6 +102,11 @@ const routes = [
   ['/payments', ['Demo Owner']],
   ['/payments?view=arrears', ['Sita Gurung', '0-30']],
   ['/staff', ['Demo Owner', 'Demo Trainer']],
+  ['/check-in', ['Check-in', 'In the gym now']],
+  ['/reports', ['Absent members']],
+  // The seed has no attendance, so everyone active is absent by definition.
+  ['/reports/absent', ['Raj Bahadur Thapa', 'Never']],
+  ['/reports/absent?minDays=90', ['Absent']],
 ]
 
 let failures = 0
