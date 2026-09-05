@@ -6,6 +6,28 @@ import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { signInSchema, signUpSchema } from '@/lib/validation/auth'
 
+/**
+ * Constrains the post-login destination to a path on this site. A bare
+ * X
+ * both begin with a slash and are read by browsers as protocol-relative URLs,
+ * which turns the login form into an open redirect.
+ */
+function safeNext(value: FormDataEntryValue | null): string {
+  const next = typeof value === 'string' ? value : ''
+
+  if (!next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) {
+    return '/'
+  }
+
+  try {
+    const placeholder = 'http://localhost'
+    const resolved = new URL(next, placeholder)
+    return resolved.origin === placeholder ? `${resolved.pathname}${resolved.search}` : '/'
+  } catch {
+    return '/'
+  }
+}
+
 export type AuthFormState = {
   error?: string
   notice?: string
@@ -34,8 +56,7 @@ export async function signIn(
     return { error: 'Incorrect email or password.' }
   }
 
-  const next = String(formData.get('next') ?? '') || '/'
-  redirect(next.startsWith('/') ? next : '/')
+  redirect(safeNext(formData.get('next')))
 }
 
 export async function signUp(
