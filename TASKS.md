@@ -152,6 +152,9 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       the staff-override path, and read "has an active membership" more loosely
       than the trigger-derived `members.status`, admitting members who had left
       and session packs with nothing left on them.
+- [ ] **2026-09-05** Turn on leaked-password protection (Auth → Passwords in the
+      dashboard). Flagged by `get_advisors(security)`; it matters more now that
+      gym members, not just staff, hold accounts.
 - [ ] **2026-09-05** Delete the retired `qr-token` Edge Function. It answers a
       static 410 and holds no secret or data path, so it is litter rather than
       risk, but the MCP has no delete-function tool — do it from the dashboard.
