@@ -78,10 +78,28 @@ locked inside Next.js Server Actions, whenever the app will need it too.
 |---|---|---|
 | `owner` | Whole org | Everything: staff, branches, plans, pricing, all reports, settings |
 | `manager` | Assigned branches | Members, memberships, payments, classes, non-owner staff, branch reports |
-| `front_desk` | One branch | Check-in, member CRUD, record payment, renew, book class |
+| `front_desk` | One branch | Check-in, member CRUD, record payment, renew, book class, add a plan for their own branch |
 | `trainer` | One branch | Own class sessions, own PT clients, mark attendance |
 
 Roles are fixed. No custom permission builder in v1.
+
+**Scope decision (2026-09-05): the front desk may create plans.** Registering a
+member and selling them a plan is one act at the desk, and a plan that does not
+exist yet is discovered at the counter with the member standing there. Waiting
+for an owner to key it in is the paper register again.
+
+The widening is deliberately narrow. A plan created by anyone who is not an
+owner must name at least one branch, and every branch must be one they work at
+-- never org-wide, never someone else's. RLS enforces it (`branch_ids <@
+jwt_branch_ids()` plus a non-empty test); `canScopePlan` restates it so the form
+can refuse readably; `supabase/tests/register_member.sql` is the gate. Editing,
+deactivating and deleting plans stay with owners and managers, and `/plans` is
+still an owner/manager screen -- the desk reaches plan creation only through the
+inline dialog on the registration form. `membership_plans_audit` records who
+added what.
+
+Known gap: because the desk cannot open `/plans`, a duplicate plan name is
+refused without them being able to see the plan they collided with.
 
 ## 5. Data model
 
@@ -176,5 +194,10 @@ Do not build these without an explicit decision to change scope.
   The old `qr-token` Edge Function is a retired 410 stub.
 - Phase 1 and Phase 2 migrations are mirrored in `supabase/migrations/`; Phase 0
   ones are still remote-only.
+- Registration sells a plan in the same submit: `register_member()` inserts the
+  member and delegates to `renew_membership()` in one transaction, so a refused
+  sale registers nobody. Failures are attributed with a `hint` of `member` or
+  `sale` so the Server Action lands the message on the right field.
+  Gate: `supabase/tests/register_member.sql`.
 - DNS resolved directly to Vercel (Cloudflare proxy disabled); single DMARC record in place.
 - Next task: Phase 3, the chain layer. See `TASKS.md`.

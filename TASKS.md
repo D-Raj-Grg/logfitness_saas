@@ -327,6 +327,33 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       edge runtime has its own globals and `jsr:` imports, which the Next.js
       compiler cannot resolve.
 
+- [x] **2026-09-05** Registration sells a plan in the same submit. New
+      `register_member()` RPC: inserts the member, delegates the sale to
+      `renew_membership()`, one transaction -- a refused sale registers nobody,
+      so the desk corrects one field and submits the same form again. Optional
+      collapsed section on `/members/new`, with an inline "+ Add a new plan..."
+      dialog. Gate: `supabase/tests/register_member.sql`.
+- [x] **2026-09-05** **Scope decision:** the front desk may create plans, scoped
+      to a non-empty subset of its own branches (never org-wide). Widened in the
+      `membership_plans` insert/update policies, `createPlan`'s `requireRole`,
+      and `canScopePlan`. `/plans` and its nav item stay owner/manager, so the
+      desk reaches it only through the inline dialog. See PLANNING.md section 4.
+- [ ] **2026-09-05** The front desk cannot open `/plans`, so a duplicate plan
+      name is refused (23505) without them being able to see the plan they
+      collided with. Worth a read-only plan list for the desk, or a friendlier
+      message that names the existing plan.
+- [ ] **2026-09-05** `members_home_branch_fkey` is `deferrable initially
+      deferred`, so registering into a branch from another org is refused at
+      COMMIT rather than at the insert. Harmless in the app (each Server Action
+      is its own transaction and nothing persists), but a test has to
+      `set constraints all immediate` to observe it. Making the composite branch
+      FKs immediate would tighten this, if the deferral is no longer needed for
+      the reason it was added.
+- [ ] **2026-09-05** `register_member` reports which half failed through the
+      Postgres `HINT` field, read back as `error.hint` in `mapRegisterError`.
+      If another RPC ever needs the same trick, lift it into a shared helper
+      rather than re-deriving the convention.
+
 ## Open questions (from the PRD)
 
 - [ ] Which SMS/Viber gateway for Nepal, and cost per message at chain volume?
