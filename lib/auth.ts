@@ -1,9 +1,12 @@
+import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 
 import type { CurrentStaff, StaffRole } from '@/lib/roles'
 import { createClient } from '@/lib/supabase/server'
 
 export type { CurrentStaff, StaffRole }
+
+export const CLAIMS_REFRESH_COOKIE = 'lg_claims_refreshed'
 
 /**
  * Resolves the signed-in user's staff record. Returns null when the account has
@@ -36,34 +39,48 @@ export async function getCurrentStaff(): Promise<CurrentStaff | null> {
 }
 
 /**
- * Same as getCurrentStaff, but first tries to claim a pending invitation. A
- * staff member invited by email signs up normally; this links that new auth
- * account to the staff row waiting for it, then refreshes the session so the
- * access token picks up the tenant claims RLS reads.
+ * For pages that require a staff context.
+ *
+ * An account with no staff row is sent to /auth/link, which claims a pending
+ * invitation if one exists and otherwise forwards to onboarding. That step is a
+ * Route Handler on purpose: linking only takes effect once the session is
+ * refreshed, and a Server Component cannot persist the refreshed cookies.
  */
-export async function resolveStaffOrLinkInvite(): Promise<CurrentStaff | null> {
-  const existing = await getCurrentStaff()
-  if (existing) return existing
-
-  const supabase = await createClient()
-  const { error } = await supabase.rpc('link_staff_account')
-
-  if (error) return null
-
-  await supabase.auth.refreshSession()
-  return getCurrentStaff()
-}
-
-/** For pages that require a staff context. Redirects when there is none. */
 export async function requireStaff(): Promise<CurrentStaff> {
-  const staff = await resolveStaffOrLinkInvite()
+  const staff = await getCurrentStaff()
 
   if (!staff) {
-    redirect('/onboarding')
+    redirect('/auth/link')
+  }
+
+  // The staff row exists but the access token predates it, so it carries no
+  // tenant claims and every RLS read would come back empty. Send the request
+  // through /auth/link, which can refresh the session and persist the cookies.
+  if (!(await hasTenantClaims()) && !(await claimsRefreshWasAttempted())) {
+    redirect('/auth/link')
   }
 
   return staff
 }
+
+async function hasTenantClaims(): Promise<boolean> {
+  const supabase = await createClient()
+  const { data } = await supabase.auth.getClaims()
+  return Boolean(data?.claims?.org_id)
+}
+
+/**
+ * Breaks the redirect loop that would otherwise form if a refreshed token still
+ * arrives without claims -- most likely because the access token hook is not
+ * enabled on the project. The page then renders in its empty state instead of
+ * bouncing forever.
+ */
+async function claimsRefreshWasAttempted(): Promise<boolean> {
+  const cookieStore = await cookies()
+  return cookieStore.get(CLAIMS_REFRESH_COOKIE)?.value === '1'
+}
+
+
 
 export async function requireRole(...roles: StaffRole[]): Promise<CurrentStaff> {
   const staff = await requireStaff()

@@ -105,10 +105,9 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
-- [ ] **2026-09-05** Enable the access-token hook in the Supabase dashboard:
-      Authentication -> Hooks -> "Customize Access Token (JWT) Claims" ->
-      `public.custom_access_token_hook`. Until this is switched on, tokens carry
-      no tenant claims and every RLS policy denies.
+- [x] **2026-09-05** Access-token hook enabled in the Supabase dashboard and
+      verified end to end: signup, onboarding, invite, invite acceptance, and
+      role gating all exercised in a browser against a real session.
 - [ ] **2026-09-05** Install the Supabase CLI, `supabase link`, and `supabase db pull`
       so the applied migrations are mirrored into `supabase/migrations/` under git.
       They currently live only in the remote project's migration history.

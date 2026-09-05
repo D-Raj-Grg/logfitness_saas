@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -47,14 +48,16 @@ export function UserMenu({ staff }: { staff: CurrentStaff }) {
               <ChevronsUpDown className="ml-auto size-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="start" className="w-56">
-            <DropdownMenuLabel className="font-normal">
-              <span className="block truncate text-sm font-medium">
-                {staff.fullName}
-              </span>
-              <span className="block truncate text-xs text-muted-foreground">
-                {staff.email}
-              </span>
-            </DropdownMenuLabel>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="font-normal">
+                <span className="block truncate text-sm font-medium">
+                  {staff.fullName}
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {staff.email}
+                </span>
+              </DropdownMenuLabel>
+            </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               render={

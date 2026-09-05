@@ -105,7 +105,8 @@ export function InviteStaffForm({
                 onValueChange={(value) => changeRole(value as StaffRole)}
               >
                 <SelectTrigger id="role" className="w-full">
-                  <SelectValue />
+                  {/* Without children the trigger shows the raw enum value. */}
+                  <SelectValue>{ROLE_LABELS[role]}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {roles.map((value) => (
