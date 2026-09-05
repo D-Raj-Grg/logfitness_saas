@@ -28,24 +28,24 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Phase 1 — Member spine
 
-- [ ] Migration: `members` (`phone` unique per org, `auth_user_id` nullable, status enum)
-- [ ] Migration: `membership_plans` (`time` | `session_pack`, price in paisa, branch scope)
-- [ ] Migration: `memberships` (append-only history, `sessions_remaining`)
-- [ ] Migration: `payments` (method enum, `reference_no`, `collected_by`) + `invoices`
-- [ ] Trigger: recompute `members.status` from memberships
-- [ ] RPC: `renew_membership` — membership + payment + invoice + audit in one transaction
-- [ ] RLS + isolation tests for all Phase 1 tables
+- [x] Migration: `members` (`phone` unique per org, `auth_user_id` nullable, status enum)
+- [x] Migration: `membership_plans` (`time` | `session_pack`, price in paisa, branch scope)
+- [x] Migration: `memberships` (append-only history, `sessions_remaining`)
+- [x] Migration: `payments` (method enum, `reference_no`, `collected_by`) + `invoices`
+- [x] Trigger: recompute `members.status` from memberships
+- [x] RPC: `renew_membership` — membership + payment + invoice + audit in one transaction (+ `record_payment`, `refund_payment`, `freeze_membership`, `unfreeze_membership`, `cancel_membership`, `set_member_left`, `reactivate_member`)
+- [x] RLS + isolation tests for all Phase 1 tables (`supabase/tests/member_spine.sql`)
 - [ ] Member list: server-side search by phone/name/ID, pagination, filters, empty state
 - [ ] Member registration form (zod-validated Server Action, photo upload)
 - [ ] Member profile: memberships, payments, attendance, outstanding dues on one screen
 - [ ] Plan catalogue CRUD (owner/manager only)
 - [ ] Assign plan / renew / upgrade flow using the RPC
-- [ ] Freeze and unfreeze with automatic expiry extension
+- [x] Freeze and unfreeze with automatic expiry extension (RPC; UI in member action panel)
 - [ ] Record payment — full and partial, all methods
-- [ ] Refund as a negative payment row with reason
+- [x] Refund as a negative payment row with reason (RPC `refund_payment`; UI in member action panel)
 - [ ] Daily collection sheet per branch per staff member
 - [ ] Arrears report with age buckets
-- [ ] `pg_cron` nightly expiry sweep
+- [x] `pg_cron` nightly expiry sweep (`sweep_membership_expiry`, 02:00 Asia/Kathmandu)
 - [ ] Dashboards: expiring in 7 days, expired, frozen
 
 ## Phase 2 — Front desk
@@ -94,7 +94,7 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Phase 6 — Flutter member app
 
-- [ ] Phone OTP member auth linking to `members.auth_user_id`
+- [ ] Member invite flow (email) linking to `members.auth_user_id` — mirrors the staff invite flow; phone OTP deferred
 - [ ] Member RLS policies (a member reads only their own rows)
 - [ ] QR check-in against the Phase 2 token Edge Function
 - [ ] Plan status, expiry, and dues screen
@@ -108,9 +108,24 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 - [x] **2026-09-05** Access-token hook enabled in the Supabase dashboard and
       verified end to end: signup, onboarding, invite, invite acceptance, and
       role gating all exercised in a browser against a real session.
-- [ ] **2026-09-05** Install the Supabase CLI, `supabase link`, and `supabase db pull`
-      so the applied migrations are mirrored into `supabase/migrations/` under git.
-      They currently live only in the remote project's migration history.
+- [ ] **2026-09-05** Mirror the Phase 0 migrations into `supabase/migrations/`.
+      The CLI is installed (2.111.0) but not logged in; run `supabase login`,
+      `supabase link`, then `supabase db pull`. Phase 1 migrations are already
+      committed there by hand (same SQL that was applied through MCP).
+- [ ] **2026-09-05** `psql` is not installed locally, so `npm run db:seed` /
+      `db:test` cannot run from this machine yet. Both SQL files were executed
+      through the Supabase MCP instead. Install `libpq` (`brew install libpq`)
+      and set `SUPABASE_DB_URL`.
+- [ ] **2026-09-05** Member photo upload (Supabase Storage bucket + `photo_path`)
+      is stubbed in the registration form. Needs a private bucket, an RLS
+      policy on `storage.objects` keyed by `org_id`, and a signed-URL reader.
+- [ ] **2026-09-05** `payments.collected_by` is nullable with `on delete set null`
+      so a staff row can be removed without touching cash history; the
+      `payments_require_collector` trigger still makes it mandatory on insert.
+      Revisit if hard-deleting staff is ever exposed in the UI.
+- [ ] **2026-09-05** Branch-specific pricing for the same plan is modelled as
+      separate plans scoped by `branch_ids`. If the PRD open question resolves
+      to "same plan, different price per branch", add a `plan_prices` table.
 - [ ] **2026-09-05** Email delivery for staff invitations. An invited person is
       currently told to sign up with their email address by whoever invited
       them; nothing is sent. Folds into Phase 5 notifications.
@@ -123,4 +138,5 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 - [ ] Do chains need branch-specific pricing for the same plan?
 - [ ] Is the home branch binding for billing, or can any branch collect a renewal?
 - [ ] What existing Excel formats must be migrated at onboarding?
+- [ ] Phone OTP member login — deferred; invite/email is the v1 path
 - [ ] Nepali-language UI at launch, or English-only for staff?

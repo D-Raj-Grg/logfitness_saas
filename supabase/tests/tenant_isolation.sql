@@ -7,7 +7,8 @@
 --
 --   psql "$SUPABASE_DB_URL" -f supabase/tests/tenant_isolation.sql
 --
--- Every new table added to the schema must gain assertions here.
+-- Every new table added to the schema must gain assertions here, or in a
+-- sibling file: supabase/tests/member_spine.sql covers the Phase 1 tables.
 
 do $$
 declare

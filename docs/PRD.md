@@ -203,7 +203,7 @@ Timetable, bookings, waitlists, trainers, PT session packs.
 SMS/Viber reminders and templates.
 
 **Phase 6 — Flutter member app**
-Phone-OTP member auth linking to the existing `members.auth_user_id`, QR check-in, plan and dues visibility, class booking, push notifications.
+Invite-based email auth linking to the existing `members.auth_user_id` (phone OTP deferred), QR check-in, plan and dues visibility, class booking, push notifications.
 
 ## 11. Success metrics
 
@@ -240,3 +240,4 @@ Phone-OTP member auth linking to the existing `members.auth_user_id`, QR check-i
 - Is a member's home branch binding for billing, or can any branch collect a renewal?
 - What existing data formats must be migrated at onboarding (Excel layouts vary per chain)?
 - Nepali-language UI — required at launch, or English-only for staff?
+- Phone OTP member login — deferred in favour of invite/email; revisit once an SMS gateway is chosen.

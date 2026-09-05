@@ -136,7 +136,7 @@ Ordered and strictly sequential. Detail in `TASKS.md`.
 3. **Chain layer** — HQ dashboard, per-branch drill-down, reports, CSV export
 4. **Classes** — timetable, bookings, waitlists, trainers, PT session packs
 5. **Notifications** — SMS/Viber renewal and dues reminders
-6. **Flutter member app** — phone OTP, QR check-in, booking, push
+6. **Flutter member app** — email invite auth, QR check-in, booking, push
 
 ## 8. Out of scope for v1
 
@@ -148,7 +148,14 @@ Do not build these without an explicit decision to change scope.
 
 ## 9. Current state (2026-09-05)
 
-- Next 16 app scaffolded; dashboard shell at `app/page.tsx`, plus `app/login` and `app/signup`.
-- Supabase project provisioned but **database is empty** — no tables, no RLS, no migrations yet.
+- Phase 0 shipped: tenant schema, JWT claims hook, RLS, staff auth, invite flow, app shell.
+- Phase 1 schema shipped: `members`, `membership_plans`, `memberships`, `invoices`,
+  `payments`, `member_overview` view, RPCs (`renew_membership`, `record_payment`,
+  `refund_payment`, freeze/unfreeze/cancel, left/reactivate), reports
+  (`daily_collection`, `arrears_report`), nightly `pg_cron` expiry sweep.
+  Gate: `supabase/tests/member_spine.sql`.
+- Phase 1 migrations are mirrored in `supabase/migrations/`; Phase 0 ones are still remote-only.
+- `lib/db/{members,plans,memberships,payments}.ts` and `lib/validation/{members,plans,payments}.ts`
+  are the typed boundary the UI goes through.
 - DNS resolved directly to Vercel (Cloudflare proxy disabled); single DMARC record in place.
-- Next task: Phase 0. See `TASKS.md`.
+- Next task: finish the Phase 1 screens, then Phase 2. See `TASKS.md`.
