@@ -9,20 +9,21 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Phase 0 — Foundation
 
-- [ ] Migration: `orgs`, `branches` tables with `created_at` / `updated_at` triggers
-- [ ] Migration: `staff` table (`org_id`, `auth_user_id`, `role`, `branch_ids[]`, `status`)
-- [ ] Migration: `audit_log` table + generic audit trigger function
-- [ ] Supabase auth hook injecting `{org_id, role, branch_ids[]}` as custom JWT claims
-- [ ] RLS policies for `orgs`, `branches`, `staff` reading JWT claims
-- [ ] Cross-tenant isolation test suite (org A staff must not read org B rows) — release gate
-- [ ] `lib/supabase/{server,client,middleware}.ts` with `@supabase/ssr`
-- [ ] Middleware: session refresh + redirect unauthenticated users to `/login`
-- [ ] Wire `app/login` to real Supabase email/password auth
+- [x] Migration: `orgs`, `branches` tables with `created_at` / `updated_at` triggers
+- [x] Migration: `staff` table (`org_id`, `auth_user_id`, `role`, `branch_ids[]`, `status`)
+- [x] Migration: `audit_log` table + generic audit trigger function
+- [x] Supabase auth hook injecting `{org_id, role, branch_ids[]}` as custom JWT claims
+- [x] RLS policies for `orgs`, `branches`, `staff` reading JWT claims
+- [x] Cross-tenant isolation test suite (org A staff must not read org B rows) — release gate
+- [x] `lib/supabase/{server,client,proxy}.ts` with `@supabase/ssr`
+- [x] Proxy (`proxy.ts`): session refresh + redirect unauthenticated users to `/login`
+- [x] Wire `app/login` to real Supabase email/password auth
 - [ ] Staff invite flow: owner invites by email → accept → `staff` row created
-- [ ] Replace `app/signup` with org onboarding (create org + owner + first branch)
-- [ ] `app/(app)` shell: sidebar, role-aware nav, branch switcher, user menu
-- [ ] Generate TypeScript DB types via Supabase MCP; wire into `lib/db`
-- [ ] Currency (NPR paisa) and date/time (Asia/Kathmandu) formatting helpers
+- [x] Replace `app/signup` with org onboarding (create org + owner + first branch)
+- [x] `app/(app)` shell: sidebar, role-aware nav, user menu
+- [ ] Branch switcher in the app shell header (needs Phase 3 branch scoping)
+- [x] Generate TypeScript DB types via Supabase MCP; wire into `lib/db`
+- [x] Currency (NPR paisa) and date/time (Asia/Kathmandu) formatting helpers
 - [ ] Seed script: demo org, 3 branches, staff across all four roles
 
 ## Phase 1 — Member spine
@@ -104,7 +105,18 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
-_Add tasks found mid-work here, dated._
+- [ ] **2026-09-05** Enable the access-token hook in the Supabase dashboard:
+      Authentication -> Hooks -> "Customize Access Token (JWT) Claims" ->
+      `public.custom_access_token_hook`. Until this is switched on, tokens carry
+      no tenant claims and every RLS policy denies.
+- [ ] **2026-09-05** Install the Supabase CLI, `supabase link`, and `supabase db pull`
+      so the applied migrations are mirrored into `supabase/migrations/` under git.
+      They currently live only in the remote project's migration history.
+- [ ] **2026-09-05** Staff invite UI. `link_staff_account()` and the RLS insert
+      policy exist; the owner/manager-facing invite screen does not.
+- [ ] **2026-09-05** Seed script (demo org, 3 branches, one staff member per role).
+- [ ] **2026-09-05** Next.js 16 renamed Middleware to Proxy (`proxy.ts` at the repo
+      root, exporting `proxy`). Remember this for any future request interception.
 
 ## Open questions (from the PRD)
 
