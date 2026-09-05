@@ -113,11 +113,22 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       console UI (`app/(app)/members/actions.ts` `inviteMemberToApp`,
       `components/members/member-app-access.tsx`) are both done. The
       accept/link half of the flow is the Flutter app's job, out of scope here.
-- [ ] Member RLS policies (a member reads only their own rows)
-- [ ] QR check-in against the Phase 2 token Edge Function
+- [x] Member RLS policies (a member reads only their own rows) — `20260905150200_member_scope_rls.sql`.
+      Also closed the hole the member principal opened: every "staff read X in
+      their org" policy tested `is_org_member(org_id)` alone, which stopped
+      being staff-only once members carried `org_id`. They now require
+      `jwt_is_staff()`. Negative tests in `supabase/tests/member_app.sql`.
+- [x] QR check-in — mint/verify live in Postgres (`mint_qr_token`,
+      `verify_qr_token`), not an Edge Function, because the project secret one
+      would need cannot be set from this tooling. `verify_qr_token` is
+      staff-only (`20260905150400`). The Flutter screens that use it are Phase 3
+      of the app repo.
 - [ ] Plan status, expiry, and dues screen
 - [ ] Payment history
-- [ ] Class browsing and self-booking
+- [x] Class browsing and self-booking — backend only: `classes`,
+      `class_sessions`, `class_bookings` with RLS, plus `book_class_session`
+      (capacity → waitlist) and `cancel_class_booking` (window + waitlist
+      promotion). The app screens are Phase 3 of the app repo.
 - [ ] Push notifications via Edge Function fanout (substrate done: `device_tokens`
       + RLS, `register_device_token` / `revoke_device_token` RPCs, `push-fanout`
       function deployed. FCM send path itself is unverified -- see Discovered.)
