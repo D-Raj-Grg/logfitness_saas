@@ -1,4 +1,8 @@
+import Link from 'next/link'
+import { Printer } from 'lucide-react'
+
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -148,6 +152,7 @@ export function MemberHistoryTabs({
                   <TableHead>Method</TableHead>
                   <TableHead>Reference</TableHead>
                   <TableHead>Collected by</TableHead>
+                  <TableHead className="w-0" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -179,6 +184,12 @@ export function MemberHistoryTabs({
                       <TableCell className="text-muted-foreground">
                         {row.collector?.full_name ?? '--'}
                       </TableCell>
+                      <TableCell className="text-right">
+                        <PrintLink
+                          href={`/receipts/${row.id}/print`}
+                          label={refund ? 'Print refund receipt' : 'Print receipt'}
+                        />
+                      </TableCell>
                     </TableRow>
                   )
                 })}
@@ -202,6 +213,7 @@ export function MemberHistoryTabs({
                   <TableHead className="text-right">Paid</TableHead>
                   <TableHead className="text-right">Due</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="w-0" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -231,6 +243,14 @@ export function MemberHistoryTabs({
                         <Badge variant={INVOICE_TONE[row.status]}>
                           {INVOICE_STATUS_LABELS[row.status]}
                         </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {row.status === 'void' ? null : (
+                          <PrintLink
+                            href={`/invoices/${row.id}/print`}
+                            label="Print invoice"
+                          />
+                        )}
                       </TableCell>
                     </TableRow>
                   )
@@ -303,5 +323,22 @@ export function MemberHistoryTabs({
         )}
       </TabsContent>
     </Tabs>
+  )
+}
+
+/**
+ * Opens in a new tab so the profile stays where it was behind the print view.
+ */
+function PrintLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label={label}
+      title={label}
+      render={<Link href={href} target="_blank" />}
+    >
+      <Printer />
+    </Button>
   )
 }

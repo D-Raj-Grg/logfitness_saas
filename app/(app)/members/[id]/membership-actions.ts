@@ -29,6 +29,11 @@ export type MembershipActionState = {
   error?: string
   success?: string
   fieldErrors?: Record<string, string[]>
+  /**
+   * Set when the action produced something worth handing over on paper, so the
+   * panel can offer the print view while the desk still has the member there.
+   */
+  document?: { href: string; label: string }
 }
 
 const CASHIER_ROLES = ['owner', 'manager', 'front_desk'] as const
@@ -138,6 +143,7 @@ export async function renewMembership(
 
   return {
     success: `Invoice ${result.invoice_no} raised for ${formatMoney(result.total_paisa)}. ${due}`,
+    document: { href: `/invoices/${result.invoice_id}/print`, label: 'Print invoice' },
   }
 }
 
@@ -175,6 +181,7 @@ export async function recordPayment(
       result.due_paisa > 0
         ? `${formatMoney(parsed.data.amountPaisa)} recorded. ${formatMoney(result.due_paisa)} still due.`
         : `${formatMoney(parsed.data.amountPaisa)} recorded. Invoice settled.`,
+    document: { href: `/receipts/${result.payment_id}/print`, label: 'Print receipt' },
   }
 }
 
@@ -198,15 +205,22 @@ export async function refundPayment(
     return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
   }
 
+  let refund: Awaited<ReturnType<typeof refundPaymentRow>>
   try {
-    await refundPaymentRow(parsed.data)
+    refund = await refundPaymentRow(parsed.data)
   } catch (error) {
     return { error: rpcErrorMessage(error, 'The refund could not be recorded.') }
   }
 
   if (memberId.success) revalidateMember(memberId.data)
 
-  return { success: `${formatMoney(parsed.data.amountPaisa)} refunded.` }
+  return {
+    success: `${formatMoney(parsed.data.amountPaisa)} refunded.`,
+    document: {
+      href: `/receipts/${refund.refund_id}/print`,
+      label: 'Print refund receipt',
+    },
+  }
 }
 
 export async function freezeMembership(

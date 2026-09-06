@@ -40,7 +40,7 @@ export function RenewForm({
   defaultBranchId: string
   isFirstMembership: boolean
   currentEndDate: string | null
-  onSuccess: (message: string) => void
+  onSuccess: (message: string, document?: { href: string; label: string }) => void
 }) {
   const [state, formAction, pending] = useActionState<MembershipActionState, FormData>(
     renewMembership,
@@ -66,8 +66,8 @@ export function RenewForm({
   }, [branchId])
 
   useEffect(() => {
-    if (state.success) onSuccess(state.success)
-  }, [state.success, onSuccess])
+    if (state.success) onSuccess(state.success, state.document)
+  }, [state.success, state.document, onSuccess])
 
   const plan = plans.find((item) => item.id === planId) ?? null
   const signupFee = plan && isFirstMembership ? plan.signup_fee_paisa : 0

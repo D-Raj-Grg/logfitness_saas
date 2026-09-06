@@ -16,13 +16,13 @@ import { Textarea } from '@/components/ui/textarea'
 type Props = {
   memberId: string
   membershipId: string
-  onSuccess: (message: string) => void
+  onSuccess: (message: string, document?: { href: string; label: string }) => void
 }
 
 function useCloseOnSuccess(state: MembershipActionState, onSuccess: Props['onSuccess']) {
   useEffect(() => {
-    if (state.success) onSuccess(state.success)
-  }, [state.success, onSuccess])
+    if (state.success) onSuccess(state.success, state.document)
+  }, [state.success, state.document, onSuccess])
 }
 
 export function FreezeForm({ memberId, membershipId, onSuccess }: Props) {

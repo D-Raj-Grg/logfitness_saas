@@ -1,6 +1,8 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useState } from 'react'
+import { Printer } from 'lucide-react'
 
 import { AuthFormMessage } from '@/components/auth/auth-form-message'
 import {
@@ -76,12 +78,17 @@ export function MemberActionPanel({
   branches: Awaited<ReturnType<typeof listBranches>>
 }) {
   const [open, setOpen] = useState<OpenDialog>(null)
-  const [message, setMessage] = useState<string | null>(null)
+  const [message, setMessage] = useState<
+    { text: string; document?: { href: string; label: string } } | null
+  >(null)
 
-  const closeWith = useCallback((text: string) => {
-    setMessage(text)
-    setOpen(null)
-  }, [])
+  const closeWith = useCallback(
+    (text: string, document?: { href: string; label: string }) => {
+      setMessage({ text, document })
+      setOpen(null)
+    },
+    []
+  )
 
   const canAct = staff.role !== 'trainer'
   const hasLeft = member.status === 'left'
@@ -124,7 +131,22 @@ export function MemberActionPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      {message ? <AuthFormMessage notice={message} /> : null}
+      {message ? (
+        <div className="flex flex-col gap-2">
+          <AuthFormMessage notice={message.text} />
+          {message.document ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="self-start"
+              render={<Link href={message.document.href} target="_blank" />}
+            >
+              <Printer />
+              {message.document.label}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       <Card>
         <CardHeader>

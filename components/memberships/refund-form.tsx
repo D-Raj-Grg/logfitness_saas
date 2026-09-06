@@ -29,7 +29,7 @@ export function RefundForm({
 }: {
   memberId: string
   payment: RefundablePayment
-  onSuccess: (message: string) => void
+  onSuccess: (message: string, document?: { href: string; label: string }) => void
 }) {
   const [state, formAction, pending] = useActionState<MembershipActionState, FormData>(
     refundPayment,
@@ -38,8 +38,8 @@ export function RefundForm({
   const [method, setMethod] = useState<PaymentMethod>(payment.method)
 
   useEffect(() => {
-    if (state.success) onSuccess(state.success)
-  }, [state.success, onSuccess])
+    if (state.success) onSuccess(state.success, state.document)
+  }, [state.success, state.document, onSuccess])
 
   return (
     <form action={formAction} className="flex flex-col gap-4">

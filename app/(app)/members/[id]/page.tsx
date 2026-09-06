@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { Printer } from 'lucide-react'
 
 import { MemberAppAccess } from '@/components/members/member-app-access'
 import { MemberHistoryTabs } from '@/components/members/member-history-tabs'
@@ -105,15 +106,28 @@ export default async function MemberProfilePage({
       </div>
 
       {soldInvoice ? (
-        <div role="status" className="rounded-lg border bg-muted/40 px-4 py-3 text-sm">
-          {'Registered. Invoice '}
-          <span className="font-mono">{soldInvoice.invoice_no}</span>
-          {' raised for '}
-          <span className="tabular-nums">{formatMoney(soldInvoice.total_paisa)}</span>
-          {'. '}
-          {(soldInvoice.due_paisa ?? 0) > 0
-            ? `${formatMoney(soldInvoice.due_paisa ?? 0)} still due.`
-            : 'Paid in full.'}
+        <div
+          role="status"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 px-4 py-3 text-sm"
+        >
+          <span>
+            {'Registered. Invoice '}
+            <span className="font-mono">{soldInvoice.invoice_no}</span>
+            {' raised for '}
+            <span className="tabular-nums">{formatMoney(soldInvoice.total_paisa)}</span>
+            {'. '}
+            {(soldInvoice.due_paisa ?? 0) > 0
+              ? `${formatMoney(soldInvoice.due_paisa ?? 0)} still due.`
+              : 'Paid in full.'}
+          </span>
+
+          <Button
+            size="sm"
+            render={<Link href={`/invoices/${soldInvoice.id}/print`} target="_blank" />}
+          >
+            <Printer />
+            Print invoice
+          </Button>
         </div>
       ) : null}
 
