@@ -131,3 +131,80 @@
     @apply font-sans;
   }
 }
+/* ---------------------------------------------------------------------------
+   Printed documents (invoices, receipts).
+
+   A document sheet is deliberately outside the theme. Nothing in here uses a
+   theme token: an invoice is ink on paper, and it must look identical whatever
+   the console's theme is set to -- including in a future dark mode, which does
+   not exist yet and so would break this silently.
+   --------------------------------------------------------------------------- */
+
+.doc-a4 {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 12mm 14mm;
+  margin-inline: auto;
+  background: #fff;
+  color: #111827;
+  color-scheme: light;
+  font-size: 10.5pt;
+  line-height: 1.45;
+}
+
+/* Belt and braces: a theme provider must never repaint a document. */
+.dark .doc-a4 {
+  background: #fff;
+  color: #111827;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm 14mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  /* The screen padding above duplicates the @page margin. Leaving it in place
+     is how you end up with 24mm margins on paper. */
+  .doc-a4 {
+    width: auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    border: 0;
+  }
+
+  /* The toaster is mounted by the root layout, above every route group. */
+  [data-sonner-toaster] {
+    display: none !important;
+  }
+
+  /* Totals live in a tfoot so they repeat if a document runs to two pages. */
+  .doc-a4 thead {
+    display: table-header-group;
+  }
+  .doc-a4 tfoot {
+    display: table-footer-group;
+  }
+  .doc-a4 tr {
+    break-inside: avoid;
+  }
+
+  .avoid-break {
+    break-inside: avoid;
+  }
+
+  /* Browsers drop backgrounds by default, so documents are drawn with rules
+     rather than fills. This is the opt-in for the few places a fill carries
+     meaning -- a PAID stamp, say -- and nothing else should use it. */
+  .print-exact {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

@@ -41,19 +41,6 @@ export async function listInvoicesForMember(memberId: string) {
   return data
 }
 
-export async function getInvoice(invoiceId: string) {
-  const supabase = await createClient()
-
-  const { data, error } = await supabase
-    .from('invoices')
-    .select('*')
-    .eq('id', invoiceId)
-    .maybeSingle()
-
-  if (error) throw error
-  return data
-}
-
 // Every write below is a single Postgres RPC, so the membership, its invoice,
 // and any payment either all land or none do. See supabase/migrations for the
 // function bodies; these are thin, typed wrappers.
