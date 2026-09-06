@@ -74,8 +74,13 @@ export function membershipStatusTone(status: MembershipStatus): BadgeTone {
 export function memberStatusTone(
   status: MemberStatus,
   daysToExpiry: number | null,
-  membershipStatus?: MembershipStatus | null
+  membershipStatus?: MembershipStatus | null,
+  hasMembershipHistory = true
 ): BadgeTone {
+  // Never sold anything yet. The status underneath is 'expired' and every
+  // report is right to count it that way, but on screen this is a registration
+  // waiting for a plan, not a lapsed member -- so it reads neutral, not red.
+  if (status === 'expired' && !hasMembershipHistory) return 'secondary'
   if (status === 'expired' && membershipStatus === 'upcoming') return 'outline'
   if (status === 'active' && daysToExpiry !== null && daysToExpiry <= 7) {
     return 'outline'

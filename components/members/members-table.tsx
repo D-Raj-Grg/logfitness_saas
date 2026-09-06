@@ -109,6 +109,7 @@ export function MembersTable({
                   status={row.status}
                   daysToExpiry={row.days_to_expiry}
                   membershipStatus={row.membership_status}
+                  hasMembershipHistory={row.has_membership_history ?? true}
                 />
               </TableCell>
               <TableCell

@@ -78,6 +78,7 @@ export default async function MemberProfilePage({
               status={overview.status}
               daysToExpiry={overview.days_to_expiry}
               membershipStatus={overview.membership_status}
+              hasMembershipHistory={overview.has_membership_history ?? true}
             />
           </div>
           <p className="flex flex-wrap gap-x-3 text-sm text-muted-foreground">

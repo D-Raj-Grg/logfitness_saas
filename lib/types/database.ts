@@ -1108,6 +1108,7 @@ export type Database = {
       }
       member_overview: {
         Row: {
+          has_membership_history: boolean | null
           current_membership_id: string | null
           current_plan_id: string | null
           current_plan_name: string | null
