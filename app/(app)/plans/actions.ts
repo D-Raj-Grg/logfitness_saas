@@ -46,8 +46,12 @@ function dbErrorMessage(error: unknown) {
 }
 
 function revalidatePlans() {
+  // Only /plans reads the catalogue from the page cache. Every member screen
+  // gets its plans from the loadPlansForBranch Server Action, which revalidation
+  // cannot reach anyway -- and revalidating /members while the registration form
+  // is open remounts it, wiping whatever the desk had half-typed. That is the
+  // exact loss the inline "add a plan" dialog exists to avoid.
   revalidatePath('/plans')
-  revalidatePath('/members')
 }
 
 /**
