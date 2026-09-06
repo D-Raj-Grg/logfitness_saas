@@ -5,6 +5,7 @@ import {
   CreditCard,
   LayoutDashboard,
   ScanLine,
+  Settings,
   Tags,
   Users,
   UsersRound,
@@ -61,6 +62,7 @@ export const NAV_ITEMS: NavItem[] = [
     icon: BarChart3,
     roles: ['owner', 'manager'],
   },
+  { title: 'Settings', href: '/settings', icon: Settings, roles: ['owner'] },
 ]
 
 export function navItemsForRole(role: StaffRole) {
