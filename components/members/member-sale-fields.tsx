@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 
 import { loadPlansForBranch } from '@/app/(app)/members/[id]/membership-actions'
 import { FieldError } from '@/components/auth/auth-form-message'
@@ -57,7 +57,9 @@ export function MemberSaleFields({
   const [method, setMethod] = useState<PaymentMethod>('cash')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [plansVersion, setPlansVersion] = useState(0)
-  const [pendingPlanId, setPendingPlanId] = useState<string | null>(null)
+  // A ref, not state: a newly created plan must not retrigger the effect that
+  // is about to consume it. See the effect below for why that mattered.
+  const pendingPlanId = useRef<string | null>(null)
   const [loadingPlans, startLoadingPlans] = useTransition()
 
   useEffect(() => {
@@ -65,16 +67,35 @@ export function MemberSaleFields({
 
     startLoadingPlans(async () => {
       const result = await loadPlansForBranch(branchId)
+
+      // Read and clear before the updater runs. Clearing it here rather than
+      // through state is what keeps this to one pass: when the pending id lived
+      // in state and in the dependency array, clearing it queued a second fetch
+      // whose setPlanId ran in a fresh transition -- rebased on the last
+      // committed state, which still had no plan selected -- and promptly
+      // overwrote the plan the dialog had just chosen.
+      const justCreated = pendingPlanId.current
+      pendingPlanId.current = null
+
       setPlans(result.plans)
       setPlanId((current) => {
         // A plan just created in the dialog wins; otherwise keep the current
         // one, unless the branch changed and it is not sold here any more.
-        const target = pendingPlanId ?? current
+        const target = justCreated ?? current
         return result.plans.some((plan) => plan.id === target) ? target : ''
       })
-      setPendingPlanId(null)
+
+      // Picking a plan from the list prefills the amount to the full price, so
+      // a plan created in the dialog has to do the same -- otherwise the one
+      // route into the form leaves the cashier retyping what the other fills in.
+      const created = justCreated
+        ? (result.plans.find((plan) => plan.id === justCreated) ?? null)
+        : null
+      if (created) {
+        setPaid(rupees(Math.max(created.price_paisa + created.signup_fee_paisa, 0)))
+      }
     })
-  }, [branchId, selling, plansVersion, pendingPlanId])
+  }, [branchId, selling, plansVersion])
 
   const plan = plans.find((item) => item.id === planId) ?? null
 
@@ -270,7 +291,12 @@ export function MemberSaleFields({
         onCreated={(created) => {
           // createPlan revalidates /plans, but this list comes from a Server
           // Action rather than the page cache, so it has to be re-fetched.
-          setPendingPlanId(created)
+          // Select it now rather than waiting for the refetch to hand it back.
+          // The round trip through the effect is asynchronous and runs inside a
+          // transition, so relying on it alone left the trigger empty; this is
+          // the value the desk expects to see the instant the dialog closes.
+          pendingPlanId.current = created
+          setPlanId(created)
           setPlansVersion((version) => version + 1)
         }}
       />
