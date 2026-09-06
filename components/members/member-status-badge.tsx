@@ -10,8 +10,13 @@ import {
 export function memberStatusLabel(
   status: MemberStatus,
   daysToExpiry: number | null,
-  membershipStatus?: MembershipStatus | null
+  membershipStatus?: MembershipStatus | null,
+  hasMembershipHistory = true
 ) {
+  // A member registered without a plan computes to 'expired', which is what the
+  // dashboards and the arrears report need, and the wrong word to put in front
+  // of the desk two minutes after they typed the name in.
+  if (status === 'expired' && !hasMembershipHistory) return 'New'
   // A plan sold for a future date leaves members.status at 'expired' until the
   // nightly sweep starts it, so the membership row is the honest label here.
   if (status === 'expired' && membershipStatus === 'upcoming') {
@@ -28,20 +33,28 @@ export function MemberStatusBadge({
   status,
   daysToExpiry,
   membershipStatus,
+  hasMembershipHistory = true,
   className,
 }: {
   status: MemberStatus
   daysToExpiry: number | null
   /** Status of the member's current membership row, when the caller has it. */
   membershipStatus?: MembershipStatus | null
+  /** False when nothing has ever been sold to this member. */
+  hasMembershipHistory?: boolean
   className?: string
 }) {
   return (
     <Badge
-      variant={memberStatusTone(status, daysToExpiry, membershipStatus)}
+      variant={memberStatusTone(
+        status,
+        daysToExpiry,
+        membershipStatus,
+        hasMembershipHistory
+      )}
       className={className}
     >
-      {memberStatusLabel(status, daysToExpiry, membershipStatus)}
+      {memberStatusLabel(status, daysToExpiry, membershipStatus, hasMembershipHistory)}
     </Badge>
   )
 }
