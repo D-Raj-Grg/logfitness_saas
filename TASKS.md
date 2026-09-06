@@ -160,6 +160,49 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       risk, but the MCP has no delete-function tool — do it from the dashboard.
 - [ ] **2026-09-05** `push-fanout` caps one call at 500 member ids but has no
       per-org rate limit. Worth adding before the send path is provisioned.
+- [x] **2026-09-06** Printed documents and the Settings screen, added outside
+      the phase plan at the user's request. A4 invoice and payment receipt on
+      the org letterhead, printed through the browser (`@page`/`@media print`)
+      rather than a PDF dependency, plus an owner-only `/settings` page that
+      supplies the letterhead.
+      - Migrations: `20260906120000_org_letterhead.sql` (eight nullable columns
+        on `orgs`: `legal_name`, `address`, `phone`, `email`, `pan_no`,
+        `tax_note`, `invoice_terms`, `logo_path`; no RLS work needed, "owners
+        update their own org" is a table policy),
+        `20260906120100_membership_signup_fee.sql`,
+        `20260906120200_org_logos_bucket.sql`.
+      - **The joining fee had no column.** `renew_membership()` computed
+        `subtotal := plan.price_paisa + signup_fee` and wrote that into both
+        `memberships.price_paisa` and `invoices.subtotal_paisa`, so the split
+        existed nowhere and an invoice could not name it as a line. The RPC now
+        also writes `memberships.signup_fee_paisa`. No amount changed. Rows
+        written before the migration carry 0, meaning "not separated", not "no
+        fee charged" -- they print as one line, and the split must never be
+        guessed back from `membership_plans.signup_fee_paisa`, which may have
+        been repriced. Gates `member_spine.sql` and `register_member.sql` were
+        extended and both re-run green.
+      - The `org-logos` bucket is **public**, unlike `member-photos`, with
+        owner-only writes. A signed URL expiring inside an open print tab is a
+        logo-less invoice, and a gym logo is on the shopfront anyway. SVG is
+        excluded (storage serves from its own origin; an SVG can carry script).
+      - Print routes live in `app/(print)/`, a sibling of `(app)`, so the
+        console shell never renders -- on paper *or* in the on-screen preview,
+        which is what lets someone check the sheet before printing. That layout
+        calls `requireStaff()` itself; the middleware only proves a session.
+      - **`payments` SELECT is branch-scoped**, unlike everything else it joins
+        (`is_org_member(org_id) and (jwt_is_owner() or has_branch_access(...))`).
+        A manager printing an invoice raised at a branch they do not cover gets
+        an empty payments list on a genuinely paid invoice; `invoice.paid_paisa`
+        is trigger-maintained and stays right, and the document says so in
+        words. Never infer "unpaid" from an empty list.
+      - Nothing inside `.doc-a4` uses a theme token or a Base UI component:
+        tokens would repaint the sheet if a theme provider is ever added (none
+        exists today, so it would ship silently), and portal-backed components
+        mount outside the sheet and print as stray content or a blank page.
+      - `lib/db/memberships.ts`'s unused `getInvoice` was removed in favour of
+        `getInvoiceForPrint` / `getPaymentForPrint` in `lib/db/documents.ts`.
+      - Not done: printing the daily collection sheet, and a Branches screen --
+        `/branches` and `/classes` are still dead links in `nav-items.ts`.
 
 
 - [x] **2026-09-05** Classes/sessions/bookings schema and the member

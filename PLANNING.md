@@ -199,5 +199,15 @@ Do not build these without an explicit decision to change scope.
   sale registers nobody. Failures are attributed with a `hint` of `member` or
   `sale` so the Server Action lands the message on the right field.
   Gate: `supabase/tests/register_member.sql`.
+- Printed documents ship outside the phase plan (2026-09-06): an A4 invoice and
+  payment receipt on the org letterhead, rendered by the browser's own print
+  engine from `app/(print)/` -- a sibling route group, so the console shell is
+  absent from the paper *and* from the on-screen preview. No PDF dependency; the
+  user prints or saves as PDF. `orgs` gained the letterhead columns, the
+  `org-logos` bucket is public with owner-only writes, and `/settings` (owner
+  only) is where a gym fills all of it in. `renew_membership` now records
+  `memberships.signup_fee_paisa` so the joining fee can print as its own line;
+  rows written earlier carry 0 and print as one line, which is correct -- the
+  split does not exist for them.
 - DNS resolved directly to Vercel (Cloudflare proxy disabled); single DMARC record in place.
 - Next task: Phase 3, the chain layer. See `TASKS.md`.
