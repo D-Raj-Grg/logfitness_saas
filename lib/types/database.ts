@@ -226,6 +226,225 @@ export type Database = {
           },
         ]
       }
+      class_bookings: {
+        Row: {
+          booked_at: string
+          branch_id: string
+          cancel_reason: string | null
+          cancelled_at: string | null
+          created_at: string
+          id: string
+          member_id: string
+          org_id: string
+          session_id: string
+          status: Database["public"]["Enums"]["class_booking_status"]
+          updated_at: string
+        }
+        Insert: {
+          booked_at?: string
+          branch_id: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          id?: string
+          member_id: string
+          org_id: string
+          session_id: string
+          status?: Database["public"]["Enums"]["class_booking_status"]
+          updated_at?: string
+        }
+        Update: {
+          booked_at?: string
+          branch_id?: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          id?: string
+          member_id?: string
+          org_id?: string
+          session_id?: string
+          status?: Database["public"]["Enums"]["class_booking_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "class_bookings_branch_fkey"
+            columns: ["branch_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "class_bookings_member_fkey"
+            columns: ["member_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "member_overview"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "class_bookings_member_fkey"
+            columns: ["member_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "class_bookings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "class_bookings_session_fkey"
+            columns: ["session_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "class_sessions"
+            referencedColumns: ["id", "org_id"]
+          },
+        ]
+      }
+      class_sessions: {
+        Row: {
+          booked_count: number
+          branch_id: string
+          capacity: number
+          class_id: string
+          created_at: string
+          ends_at: string
+          id: string
+          org_id: string
+          starts_at: string
+          status: Database["public"]["Enums"]["class_session_status"]
+          trainer_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          booked_count?: number
+          branch_id: string
+          capacity: number
+          class_id: string
+          created_at?: string
+          ends_at: string
+          id?: string
+          org_id: string
+          starts_at: string
+          status?: Database["public"]["Enums"]["class_session_status"]
+          trainer_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          booked_count?: number
+          branch_id?: string
+          capacity?: number
+          class_id?: string
+          created_at?: string
+          ends_at?: string
+          id?: string
+          org_id?: string
+          starts_at?: string
+          status?: Database["public"]["Enums"]["class_session_status"]
+          trainer_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "class_sessions_branch_fkey"
+            columns: ["branch_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "class_sessions_class_fkey"
+            columns: ["class_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "class_sessions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "class_sessions_trainer_fkey"
+            columns: ["trainer_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id", "org_id"]
+          },
+        ]
+      }
+      classes: {
+        Row: {
+          branch_id: string
+          capacity: number
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          org_id: string
+          recurrence: Json
+          room: string | null
+          trainer_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          branch_id: string
+          capacity: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          org_id: string
+          recurrence?: Json
+          room?: string | null
+          trainer_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          branch_id?: string
+          capacity?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          org_id?: string
+          recurrence?: Json
+          room?: string | null
+          trainer_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "classes_branch_fkey"
+            columns: ["branch_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "classes_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "classes_trainer_fkey"
+            columns: ["trainer_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id", "org_id"]
+          },
+        ]
+      }
       device_tokens: {
         Row: {
           app_version: string | null
@@ -604,6 +823,7 @@ export type Database = {
           price_paisa: number
           sessions_remaining: number | null
           sessions_total: number | null
+          signup_fee_paisa: number
           sold_by: string | null
           start_date: string
           status: Database["public"]["Enums"]["membership_status"]
@@ -629,6 +849,7 @@ export type Database = {
           price_paisa: number
           sessions_remaining?: number | null
           sessions_total?: number | null
+          signup_fee_paisa?: number
           sold_by?: string | null
           start_date: string
           status?: Database["public"]["Enums"]["membership_status"]
@@ -654,6 +875,7 @@ export type Database = {
           price_paisa?: number
           sessions_remaining?: number | null
           sessions_total?: number | null
+          signup_fee_paisa?: number
           sold_by?: string | null
           start_date?: string
           status?: Database["public"]["Enums"]["membership_status"]
@@ -746,41 +968,65 @@ export type Database = {
       }
       orgs: {
         Row: {
+          address: string | null
           created_at: string
           currency: string
+          email: string | null
           id: string
+          invoice_terms: string | null
+          legal_name: string | null
+          logo_path: string | null
           max_branches: number
           name: string
+          pan_no: string | null
+          phone: string | null
           settings: Json
           slug: string
           status: Database["public"]["Enums"]["org_status"]
           subscription_tier: string
+          tax_note: string | null
           timezone: string
           updated_at: string
         }
         Insert: {
+          address?: string | null
           created_at?: string
           currency?: string
+          email?: string | null
           id?: string
+          invoice_terms?: string | null
+          legal_name?: string | null
+          logo_path?: string | null
           max_branches?: number
           name: string
+          pan_no?: string | null
+          phone?: string | null
           settings?: Json
           slug: string
           status?: Database["public"]["Enums"]["org_status"]
           subscription_tier?: string
+          tax_note?: string | null
           timezone?: string
           updated_at?: string
         }
         Update: {
+          address?: string | null
           created_at?: string
           currency?: string
+          email?: string | null
           id?: string
+          invoice_terms?: string | null
+          legal_name?: string | null
+          logo_path?: string | null
           max_branches?: number
           name?: string
+          pan_no?: string | null
+          phone?: string | null
           settings?: Json
           slug?: string
           status?: Database["public"]["Enums"]["org_status"]
           subscription_tier?: string
+          tax_note?: string | null
           timezone?: string
           updated_at?: string
         }
@@ -1108,7 +1354,6 @@ export type Database = {
       }
       member_overview: {
         Row: {
-          has_membership_history: boolean | null
           current_membership_id: string | null
           current_plan_id: string | null
           current_plan_name: string | null
@@ -1117,6 +1362,7 @@ export type Database = {
           due_paisa: number | null
           email: string | null
           full_name: string | null
+          has_membership_history: boolean | null
           home_branch_id: string | null
           home_branch_name: string | null
           id: string | null
@@ -1207,6 +1453,14 @@ export type Database = {
           in_gym_now: number
         }[]
       }
+      book_class_session: {
+        Args: { p_member_id?: string; p_session_id: string }
+        Returns: Json
+      }
+      cancel_class_booking: {
+        Args: { p_booking_id: string; p_reason?: string }
+        Returns: Json
+      }
       cancel_membership: {
         Args: { p_membership_id: string; p_reason: string }
         Returns: Json
@@ -1223,6 +1477,10 @@ export type Database = {
         Returns: Json
       }
       check_out_member: { Args: { p_attendance_id: string }; Returns: Json }
+      class_cancellation_window_minutes: {
+        Args: { p_org_id: string }
+        Returns: number
+      }
       create_org_with_owner: {
         Args: {
           p_branch_name: string
@@ -1403,6 +1661,7 @@ export type Database = {
         Args: { p_left_on?: string; p_member_id: string; p_reason?: string }
         Returns: Json
       }
+      storage_object_member: { Args: { object_name: string }; Returns: string }
       storage_object_org: { Args: { object_name: string }; Returns: string }
       sweep_membership_expiry: {
         Args: never
@@ -1413,11 +1672,22 @@ export type Database = {
         }[]
       }
       unfreeze_membership: { Args: { p_membership_id: string }; Returns: Json }
+      validate_class_recurrence: {
+        Args: { p_recurrence: Json }
+        Returns: boolean
+      }
       verify_qr_token: { Args: { p_token: string }; Returns: Json }
     }
     Enums: {
       attendance_method: "manual" | "qr" | "card" | "biometric"
       branch_status: "active" | "inactive"
+      class_booking_status:
+        | "booked"
+        | "waitlisted"
+        | "cancelled"
+        | "attended"
+        | "no_show"
+      class_session_status: "scheduled" | "cancelled"
       device_platform: "ios" | "android"
       invoice_status: "unpaid" | "partial" | "paid" | "void"
       member_gender: "male" | "female" | "other"
@@ -1563,6 +1833,14 @@ export const Constants = {
     Enums: {
       attendance_method: ["manual", "qr", "card", "biometric"],
       branch_status: ["active", "inactive"],
+      class_booking_status: [
+        "booked",
+        "waitlisted",
+        "cancelled",
+        "attended",
+        "no_show",
+      ],
+      class_session_status: ["scheduled", "cancelled"],
       device_platform: ["ios", "android"],
       invoice_status: ["unpaid", "partial", "paid", "void"],
       member_gender: ["male", "female", "other"],

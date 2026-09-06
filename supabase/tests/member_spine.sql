@@ -152,6 +152,11 @@ begin
   select i.total_paisa into amount from public.invoices i where i.id = invoice_1;
   assert amount = 300000, format('invoice total was %s paisa, expected 300000', amount);
 
+  -- The fee is also recorded on its own, so a printed invoice can name it.
+  select ms.signup_fee_paisa into amount
+  from public.memberships ms where ms.id = membership_1;
+  assert amount = 50000, format('joining fee was stored as %s, expected 50000', amount);
+
   select i.due_paisa into amount from public.invoices i where i.id = invoice_1;
   assert amount = 100000, format('due was %s paisa, expected 100000', amount);
 
@@ -319,6 +324,10 @@ begin
   select i.total_paisa into amount
   from public.invoices i where i.id = (result ->> 'invoice_id')::uuid;
   assert amount = 250000, format('the renewal re-charged a joining fee: %s', amount);
+
+  select ms.signup_fee_paisa into amount
+  from public.memberships ms where ms.id = (result ->> 'membership_id')::uuid;
+  assert amount = 0, format('the renewal recorded a joining fee of %s', amount);
 
   -- a plan that is not sold at this branch cannot be sold at this branch ------
   failed := false;

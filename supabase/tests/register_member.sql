@@ -113,6 +113,11 @@ begin
   where ms.member_id = (res ->> 'member_id')::uuid;
   assert n = 1, format('expected 1 membership, found %s', n);
 
+  -- The joining fee is recorded separately so an invoice can print it as a line.
+  select ms.signup_fee_paisa into n from public.memberships ms
+  where ms.member_id = (res ->> 'member_id')::uuid;
+  assert n = 50000, format('joining fee was stored as %s, expected 50000', n);
+
   select count(*) into n from public.payments p
   where p.member_id = (res ->> 'member_id')::uuid;
   assert n = 1, format('expected 1 payment, found %s', n);
