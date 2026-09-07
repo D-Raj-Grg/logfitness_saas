@@ -82,6 +82,23 @@ Six migrations: the branch-list report signatures, `org_snapshot`, the branch
 write policies, the staff assignment guard and its manager ceiling, and the four
 report functions. Gate: `supabase/tests/chain_layer.sql`.
 
+### Verified
+
+Statically, and against the live database — there is no seeded login on this
+machine, so nothing here was clicked through in a browser.
+
+`revenue_report` was reconciled against `daily_collection` on every branch-day
+of real data, refund and reversal days included, and `net = gross − refunds −
+reversals` held on every row. `org_snapshot`'s totals equal the sum of its
+branch rows across all five columns. `attendance_trend` agrees with
+`attendance_day_summary`. An empty `uuid[]` means no branches rather than every
+branch — the mistake that would quietly show a manager the whole chain. All
+twelve functions are `security invoker` bar the one trigger, and `anon` can
+execute none of them.
+
+What that leaves untested: the two URL controls composing on screen, the chart,
+and the numbers as a person actually reads them.
+
 `npm run db:test` now names all twelve gate files. It named four of nine before,
 which is worse than a script that cannot run: it looked like it had passed.
 

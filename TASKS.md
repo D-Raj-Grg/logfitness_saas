@@ -579,6 +579,23 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       being recomputed. `scripts/smoke.mjs` renders routes as the seeded owner
       and would be the place for it, once a login is reachable from CI.
 
+- [ ] **2026-09-07** Phase 3 was verified statically, never in a browser — no
+      seeded login is reachable from this machine. What *was* checked, live
+      against the database: `revenue_report` reconciles with `daily_collection`
+      on every branch-day of real data, refund and reversal days included;
+      `org_snapshot` totals equal the sum of its branch rows; `attendance_trend`
+      agrees with `attendance_day_summary`; an empty `uuid[]` means no branches
+      rather than all of them; every CSV column key resolves to a key the row
+      mapper produces; and `resolvePeriod` rejects `2026-02-29` while keeping
+      `2024-02-29`. What was **not** checked: the branch and period controls
+      composing on screen, the chart rendering, and the numbers as a person
+      reads them. Those want `scripts/smoke.mjs` and a login.
+- [ ] **2026-09-07** Two Phase 3 commits never had a task-level review —
+      `73fbd3f` (the invalid-date fix) and `37d0835` (CSV export). The subagents
+      that owned them were killed mid-task by a session rate limit and the work
+      was finished by hand. The static verification above stands in for that
+      review; a whole-branch review has still not run over them.
+
 ## Open questions (from the PRD)
 
 - [ ] Which SMS/Viber gateway for Nepal, and cost per message at chain volume?
