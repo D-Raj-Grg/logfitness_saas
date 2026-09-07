@@ -572,6 +572,138 @@ begin
   raise notice 'chain_layer: staff assignment manager-ceiling assertions OK';
 end $$;
 
+-- Task 6 follow-up (review findings): membership_movement must rank and look
+-- ahead over a member's WHOLE history, not just the branch a report happens
+-- to be scoped to, and must bucket a cancelled membership by when it was
+-- actually cancelled, not by a stale end_date it never reached.
+do $$
+declare
+  v_org_a uuid;
+  v_branch_a uuid;
+  v_branch_b uuid;
+  v_owner uuid;
+  v_plan_id uuid;
+  v_member_id uuid;
+  v_res jsonb;
+  v_today date;
+  v_new_at_b bigint;
+  v_renewals_at_b bigint;
+  v_churned_at_a bigint;
+  v_membership2_id uuid;
+  v_cancel_membership_id uuid;
+  v_cancel_end_date date;
+  v_cancel_period date;
+  v_expiries bigint;
+  v_churned bigint;
+begin
+  insert into public.orgs (name, slug, timezone) values ('Gate6b Org A', 'gate6b-org-a-test', 'Asia/Kathmandu')
+    returning id into v_org_a;
+
+  insert into public.branches (org_id, name) values (v_org_a, 'A') returning id into v_branch_a;
+  insert into public.branches (org_id, name) values (v_org_a, 'B') returning id into v_branch_b;
+
+  insert into public.staff (org_id, full_name, email, role, branch_ids, status)
+  values (v_org_a, 'Gate6b Owner', 'owner@gate6b-org-a-test.example', 'owner', '{}', 'active')
+  returning id into v_owner;
+
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', v_org_a::text, 'staff_id', v_owner::text,
+    'staff_role', 'owner', 'branch_ids', json_build_array()
+  )::text, true);
+  execute 'set local role authenticated';
+
+  insert into public.membership_plans
+    (org_id, name, plan_type, duration_days, price_paisa, branch_ids)
+  values (v_org_a, 'Gate6b Monthly', 'time', 30, 100000, array[v_branch_a, v_branch_b])
+  returning id into v_plan_id;
+
+  v_today := public.org_today(v_org_a);
+
+  -- Finding 1 fixture: a member's first membership is at branch A, their
+  -- renewal is at branch B.
+  v_res := public.register_member(
+    'Gate6b Member', '9800000002', v_branch_a,
+    p_plan_id => v_plan_id, p_amount_paid_paisa => 100000
+  );
+  v_member_id := (v_res ->> 'member_id')::uuid;
+
+  perform public.renew_membership(v_member_id, v_plan_id, v_branch_b, v_today);
+
+  -- A report scoped to [B] alone must count the renewal as a renewal, not a
+  -- new member -- the member's first membership at A must still be visible
+  -- to row_number() even though this report will not emit it.
+  select coalesce(sum(new_members), 0), coalesce(sum(renewals), 0)
+    into v_new_at_b, v_renewals_at_b
+  from public.membership_movement(array[v_branch_b], v_today - 365, v_today, 'month');
+
+  if v_new_at_b <> 0 then
+    raise exception 'gate6b.1a: a cross-branch renewal at B was counted as new_members (%), should be 0',
+      v_new_at_b;
+  end if;
+  if v_renewals_at_b <> 1 then
+    raise exception 'gate6b.1a: a cross-branch renewal at B should count as exactly 1 renewal, got %',
+      v_renewals_at_b;
+  end if;
+
+  -- A report scoped to [A] alone must not call this member churned -- they
+  -- came back, just at a different branch, and the lookahead must see that
+  -- return even though this report will not emit B's row.
+  select coalesce(sum(churned), 0) into v_churned_at_a
+  from public.membership_movement(array[v_branch_a], v_today - 365, v_today, 'month');
+
+  if v_churned_at_a <> 0 then
+    raise exception 'gate6b.1b: a member who renewed at another branch was counted as churned at A (%), should be 0',
+      v_churned_at_a;
+  end if;
+
+  -- Finding 2 fixture: cancel a membership whose end_date is months away and
+  -- confirm it is bucketed by the cancellation date, not by that far-future
+  -- end_date.
+  v_res := public.register_member(
+    'Gate6b Cancel Member', '9800000003', v_branch_a,
+    p_plan_id => v_plan_id, p_amount_paid_paisa => 100000
+  );
+  select id into v_membership2_id
+  from public.memberships
+  where member_id = (v_res ->> 'member_id')::uuid;
+
+  -- Push end_date months into the future so a bug bucketing by end_date
+  -- would land this in a period the assertion below is not looking at.
+  update public.memberships set end_date = v_today + 200 where id = v_membership2_id;
+
+  v_res := public.cancel_membership(v_membership2_id, 'gate6b test cancellation');
+  v_cancel_membership_id := (v_res ->> 'membership_id')::uuid;
+
+  -- Query a real date range that actually contains today (the period a
+  -- month-grouped report would show it under is only its FIRST day, not
+  -- every day in it -- p_from/p_to must span the whole month, not just its
+  -- truncation point).
+  select public.report_period(v_today, 'month') into v_cancel_period;
+
+  select coalesce(sum(expiries), 0), coalesce(sum(churned), 0)
+    into v_expiries, v_churned
+  from public.membership_movement(array[v_branch_a], v_today, v_today, 'month')
+  where period = v_cancel_period;
+
+  if v_expiries < 1 then
+    raise exception 'gate6b.2: a membership cancelled today should count as an expiry in this month''s period, got %',
+      v_expiries;
+  end if;
+  if v_churned < 1 then
+    raise exception 'gate6b.2: a cancelled membership with nothing sold after it should count as churn in this month''s period, got %',
+      v_churned;
+  end if;
+
+  execute 'reset role';
+  perform set_config('request.jwt.claims', null, true);
+
+  delete from public.branches where org_id = v_org_a;
+  delete from public.orgs where id = v_org_a;
+
+  raise notice 'chain_layer: membership_movement branch-scoping and cancellation-date assertions OK';
+end $$;
+
 -- Task 7 (/reports/attendance, /reports/plan-mix): attendance_trend's
 -- check-in counts must agree with attendance_day_summary for the same
 -- branch/day, distinct_members must never exceed check_ins, plan_mix's
@@ -766,3 +898,4 @@ begin
 
   raise notice 'chain_layer: attendance_trend and plan_mix assertions OK';
 end $$;
+
