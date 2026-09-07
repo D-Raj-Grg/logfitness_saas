@@ -5,9 +5,9 @@ import { MembersTable } from '@/components/members/members-table'
 import { Pagination } from '@/components/members/pagination'
 import { Button } from '@/components/ui/button'
 import { requireRole } from '@/lib/auth'
-import { listBranches } from '@/lib/db/branches'
 import { listMembers } from '@/lib/db/members'
 import { memberPhotoUrls } from '@/lib/db/photos'
+import { resolveBranchScope } from '@/lib/scope'
 import { memberListQuerySchema } from '@/lib/validation/members'
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>
@@ -24,27 +24,30 @@ export default async function MembersPage({
   const staff = await requireRole('owner', 'manager', 'front_desk')
 
   const raw = await searchParams
+  const scope = await resolveBranchScope(raw, staff)
+
   const parsed = memberListQuerySchema.safeParse({
     q: first(raw.q),
+    // The page keeps its own `branchId` filter (independent of the header's
+    // `branch` switcher) but defaults to the switcher's pick, so choosing a
+    // branch up top narrows this list too until overridden here.
     status: first(raw.status) || undefined,
-    branchId: first(raw.branchId) || undefined,
+    branchId: first(raw.branchId) || scope.selectedId || undefined,
     page: first(raw.page),
     pageSize: first(raw.pageSize),
   })
   // A hand-edited URL should not 500 the front desk; fall back to defaults.
   const query = parsed.success ? parsed.data : memberListQuerySchema.parse({})
 
-  const [result, allBranches] = await Promise.all([listMembers(query), listBranches()])
+  const result = await listMembers(query)
 
   // One signing round trip for the page, not one per row.
   const photoUrls = await memberPhotoUrls(result.rows.map((row) => row.photo_path))
 
   // Non-owners only see their own branches in the filter; RLS already scopes
-  // the rows themselves.
-  const branches =
-    staff.role === 'owner'
-      ? allBranches
-      : allBranches.filter((branch) => staff.branchIds.includes(branch.id))
+  // the rows themselves. resolveBranchScope is the single source of truth for
+  // this, shared with the header switcher.
+  const branches = scope.options
 
   const filtered = Boolean(query.q || query.status || query.branchId)
 

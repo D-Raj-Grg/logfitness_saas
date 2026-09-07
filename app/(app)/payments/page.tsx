@@ -4,9 +4,9 @@ import { ArrearsTable } from '@/components/payments/arrears-table'
 import { CollectionSheet } from '@/components/payments/collection-sheet'
 import { PaymentsFilters, type PaymentsView } from '@/components/payments/payments-filters'
 import { requireRole } from '@/lib/auth'
-import { listBranches } from '@/lib/db/branches'
 import { arrearsReport, dailyCollection } from '@/lib/db/payments'
 import { DEFAULT_TIMEZONE } from '@/lib/format'
+import { resolveBranchScope } from '@/lib/scope'
 import { arrearsQuerySchema, collectionQuerySchema } from '@/lib/validation/payments'
 
 function first(value: string | string[] | undefined) {
@@ -28,29 +28,17 @@ export default async function PaymentsPage({
 
   const view: PaymentsView = first(params.view) === 'arrears' ? 'arrears' : 'collection'
 
-  const allBranches = await listBranches()
-  const isOwner = staff.role === 'owner'
-  const branches = isOwner
-    ? allBranches
-    : allBranches.filter((branch) => staff.branchIds.includes(branch.id))
-
-  // A branch outside the caller's scope is dropped rather than rejected: RLS
-  // would return nothing for it anyway, and a stale link should still render.
-  const requestedBranch = first(params.branch)
-  const scopedBranch =
-    requestedBranch && branches.some((branch) => branch.id === requestedBranch)
-      ? requestedBranch
-      : undefined
-  const branchId = isOwner ? scopedBranch : (scopedBranch ?? branches[0]?.id)
+  const scope = await resolveBranchScope(params, staff)
+  const branchId = scope.selectedId
 
   if (view === 'arrears') {
     const query = arrearsQuerySchema.safeParse({
-      branchId,
+      branchId: branchId ?? undefined,
       bucket: first(params.bucket),
     })
     const bucket = query.success ? (query.data.bucket ?? null) : null
 
-    const allRows = await arrearsReport(branchId ? [branchId] : null)
+    const allRows = await arrearsReport(scope.branchIds)
     const rows = bucket ? allRows.filter((row) => row.bucket === bucket) : allRows
 
     return (
@@ -63,10 +51,10 @@ export default async function PaymentsPage({
           <PaymentsFilters
             view={view}
             on={todayInKathmandu()}
-            branchId={branchId ?? null}
+            branchId={branchId}
             bucket={bucket}
-            branches={branches}
-            allowAllBranches={isOwner}
+            branches={scope.options}
+            allowAllBranches={scope.canSwitch}
           />
         </Suspense>
         <ArrearsTable rows={rows} allRows={allRows} />
@@ -74,10 +62,13 @@ export default async function PaymentsPage({
     )
   }
 
-  const query = collectionQuerySchema.safeParse({ on: first(params.on), branchId })
+  const query = collectionQuerySchema.safeParse({
+    on: first(params.on),
+    branchId: branchId ?? undefined,
+  })
   const on = (query.success && query.data.on) || todayInKathmandu()
 
-  const rows = await dailyCollection({ on, branchIds: branchId ? [branchId] : null })
+  const rows = await dailyCollection({ on, branchIds: scope.branchIds })
 
   return (
     <div className="flex flex-col gap-6">
@@ -89,10 +80,10 @@ export default async function PaymentsPage({
         <PaymentsFilters
           view={view}
           on={on}
-          branchId={branchId ?? null}
+          branchId={branchId}
           bucket={null}
-          branches={branches}
-          allowAllBranches={isOwner}
+          branches={scope.options}
+          allowAllBranches={scope.canSwitch}
         />
       </Suspense>
       <CollectionSheet rows={rows} on={on} />

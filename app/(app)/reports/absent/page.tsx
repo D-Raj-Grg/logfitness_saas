@@ -4,7 +4,7 @@ import { AbsentFilters } from '@/components/attendance/absent-filters'
 import { AbsentMembersTable } from '@/components/attendance/absent-members-table'
 import { requireRole } from '@/lib/auth'
 import { absentMembers } from '@/lib/db/attendance'
-import { listBranches } from '@/lib/db/branches'
+import { resolveBranchScope } from '@/lib/scope'
 import { absentQuerySchema } from '@/lib/validation/attendance'
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>
@@ -20,24 +20,13 @@ export default async function AbsentMembersPage({
 }) {
   const staff = await requireRole('owner', 'manager')
   const params = await searchParams
+  const scope = await resolveBranchScope(params, staff)
 
-  const allBranches = await listBranches()
-  const isOwner = staff.role === 'owner'
-  const branches = isOwner
-    ? allBranches
-    : allBranches.filter((branch) => staff.branchIds.includes(branch.id))
-
-  // A branch outside the caller's scope is dropped rather than rejected: RLS
-  // would return nothing for it anyway, and a stale link should still render.
-  const requestedBranch = first(params.branch)
-  const scopedBranch =
-    requestedBranch && branches.some((branch) => branch.id === requestedBranch)
-      ? requestedBranch
-      : undefined
-  const branchId = isOwner ? scopedBranch : (scopedBranch ?? branches[0]?.id)
+  const branches = scope.options
+  const branchId = scope.selectedId
 
   const parsed = absentQuerySchema.safeParse({
-    branchId,
+    branchId: branchId ?? undefined,
     minDays: first(params.minDays),
     band: first(params.band) || undefined,
   })
@@ -46,7 +35,7 @@ export default async function AbsentMembersPage({
 
   // Fetched once, unfiltered by band, so the tiles can count the whole set.
   const allRows = await absentMembers({
-    branchIds: branchId ? [branchId] : null,
+    branchIds: scope.branchIds,
     minDays: query.minDays,
   })
   const band = query.band ?? null
@@ -68,7 +57,7 @@ export default async function AbsentMembersPage({
           minDays={query.minDays}
           band={band}
           branches={branches}
-          allowAllBranches={isOwner}
+          allowAllBranches={scope.canSwitch}
         />
       </Suspense>
 

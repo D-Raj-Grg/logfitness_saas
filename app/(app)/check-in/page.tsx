@@ -7,14 +7,10 @@ import { InGymNow } from '@/components/attendance/in-gym-now'
 import { Card, CardContent } from '@/components/ui/card'
 import { requireStaff } from '@/lib/auth'
 import { attendanceDaySummary, inGymNow, listAttendance } from '@/lib/db/attendance'
-import { listBranches } from '@/lib/db/branches'
 import { memberPhotoUrls } from '@/lib/db/photos'
+import { resolveBranchScope } from '@/lib/scope'
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>
-
-function first(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] : value
-}
 
 function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
@@ -39,29 +35,18 @@ export default async function CheckInPage({
   // only the desk roles may write, and the RPC refuses the rest anyway.
   const staff = await requireStaff()
   const params = await searchParams
+  const scope = await resolveBranchScope(params, staff)
 
-  const isOwner = staff.role === 'owner'
   const canCheckIn =
     staff.role === 'owner' || staff.role === 'manager' || staff.role === 'front_desk'
 
-  const allBranches = await listBranches()
-  const branches = isOwner
-    ? allBranches
-    : allBranches.filter((branch) => staff.branchIds.includes(branch.id))
-
-  // A branch outside the caller's scope is dropped rather than rejected: RLS
-  // would return nothing for it anyway, and a stale link should still render.
-  const requested = first(params.branch)
-  const scoped =
-    requested && branches.some((branch) => branch.id === requested) ? requested : undefined
-  const branchId = isOwner ? scoped : (scoped ?? branches[0]?.id)
-
-  const branchIds = branchId ? [branchId] : null
+  const branchId = scope.selectedId
+  const branchIds = scope.branchIds
 
   const [inGym, summary, log] = await Promise.all([
     inGymNow(branchIds),
     attendanceDaySummary({ branchIds }),
-    listAttendance({ branchId, page: 1, pageSize: 25 }),
+    listAttendance({ branchId: branchId ?? undefined, page: 1, pageSize: 25 }),
   ])
 
   // One signing round trip for the whole roster, not one per row.
@@ -69,9 +54,10 @@ export default async function CheckInPage({
 
   const checkIns = summary.reduce((total, row) => total + row.check_ins, 0)
   const distinctMembers = summary.reduce((total, row) => total + row.distinct_members, 0)
-  const branchName = branchId
-    ? (branches.find((branch) => branch.id === branchId)?.name ?? null)
-    : null
+  // The label already covers the single-branch-non-owner case ("their branch
+  // by name") as well as an explicit selection -- only the true aggregate
+  // (canSwitch with nothing picked) should read as "every branch."
+  const branchName = branchId || !scope.canSwitch ? scope.label : null
 
   return (
     <div className="flex flex-col gap-6">
@@ -84,12 +70,12 @@ export default async function CheckInPage({
               : 'The front desk, across every branch.'}
           </p>
         </div>
-        {branches.length > 1 ? (
+        {scope.canSwitch ? (
           <Suspense>
             <BranchPicker
               branchId={branchId ?? null}
-              branches={branches}
-              allowAllBranches={isOwner}
+              branches={scope.options}
+              allowAllBranches={scope.canSwitch}
             />
           </Suspense>
         ) : null}
