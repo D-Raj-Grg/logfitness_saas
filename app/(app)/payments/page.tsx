@@ -3,6 +3,7 @@ import { Suspense } from 'react'
 import { ArrearsTable } from '@/components/payments/arrears-table'
 import { CollectionSheet } from '@/components/payments/collection-sheet'
 import { PaymentsFilters, type PaymentsView } from '@/components/payments/payments-filters'
+import { CsvLink } from '@/components/reports/csv-link'
 import { requireRole } from '@/lib/auth'
 import { arrearsReport, dailyCollection } from '@/lib/db/payments'
 import { todayInTimezone } from '@/lib/format'
@@ -41,6 +42,7 @@ export default async function PaymentsPage({
         <PageHeading
           title="Arrears"
           description="Who owes money, and for how long. Oldest debts first."
+          report="arrears"
         />
         <Suspense>
           <PaymentsFilters
@@ -70,6 +72,7 @@ export default async function PaymentsPage({
       <PageHeading
         title="Daily collection"
         description="The drawer sheet: what each person took, by method, net of refunds."
+        report="collection"
       />
       <Suspense>
         <PaymentsFilters
@@ -86,11 +89,25 @@ export default async function PaymentsPage({
   )
 }
 
-function PageHeading({ title, description }: { title: string; description: string }) {
+function PageHeading({
+  title,
+  description,
+  report,
+}: {
+  title: string
+  description: string
+  /** Which /api/reports/<report>/csv this screen exports as. */
+  report: string
+}) {
   return (
-    <div>
-      <h1 className="text-2xl font-semibold">{title}</h1>
-      <p className="text-sm text-muted-foreground print:hidden">{description}</p>
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h1 className="text-2xl font-semibold">{title}</h1>
+        <p className="text-sm text-muted-foreground print:hidden">{description}</p>
+      </div>
+      <Suspense fallback={null}>
+        <CsvLink report={report} />
+      </Suspense>
     </div>
   )
 }

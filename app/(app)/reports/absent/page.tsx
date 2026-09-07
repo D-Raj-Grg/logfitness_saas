@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 
 import { AbsentFilters } from '@/components/attendance/absent-filters'
 import { AbsentMembersTable } from '@/components/attendance/absent-members-table'
+import { CsvLink } from '@/components/reports/csv-link'
 import { requireRole } from '@/lib/auth'
 import { absentMembers } from '@/lib/db/attendance'
 import { resolveBranchScope } from '@/lib/scope'
@@ -43,12 +44,17 @@ export default async function AbsentMembersPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Absent members</h1>
-        <p className="text-sm text-muted-foreground print:hidden">
-          Active members who have not trained in {query.minDays} days or more. Longest
-          absence first — the top of this list is the churn about to happen. Call them.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Absent members</h1>
+          <p className="text-sm text-muted-foreground print:hidden">
+            Active members who have not trained in {query.minDays} days or more. Longest
+            absence first — the top of this list is the churn about to happen. Call them.
+          </p>
+        </div>
+        <Suspense fallback={null}>
+          <CsvLink report="absent" />
+        </Suspense>
       </div>
 
       <Suspense>

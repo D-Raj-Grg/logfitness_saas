@@ -1,3 +1,6 @@
+import { Suspense } from 'react'
+
+import { CsvLink } from '@/components/reports/csv-link'
 import {
   Table,
   TableBody,
@@ -47,12 +50,17 @@ export default async function PlanMixPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Plan mix</h1>
-        <p className="text-sm text-muted-foreground print:hidden">
-          Active memberships and billed revenue by plan, for {scope.label}. Share is each
-          plan&apos;s slice of its own branch&apos;s active memberships.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Plan mix</h1>
+          <p className="text-sm text-muted-foreground print:hidden">
+            Active memberships and billed revenue by plan, for {scope.label}. Share is each
+            plan&apos;s slice of its own branch&apos;s active memberships.
+          </p>
+        </div>
+        <Suspense fallback={null}>
+          <CsvLink report="plans" />
+        </Suspense>
       </div>
 
       {rows.length === 0 ? (

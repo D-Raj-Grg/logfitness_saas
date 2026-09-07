@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 
 import { AttendanceTrendChart } from '@/components/reports/attendance-trend-chart'
+import { CsvLink } from '@/components/reports/csv-link'
 import { PeriodPicker } from '@/components/reports/period-picker'
 import {
   Table,
@@ -35,12 +36,17 @@ export default async function AttendanceTrendPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Attendance trend</h1>
-        <p className="text-sm text-muted-foreground print:hidden">
-          Check-ins and distinct members by {period.groupBy} and branch, for {scope.label}{' '}
-          between {formatDate(period.from)} and {formatDate(period.to)}.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Attendance trend</h1>
+          <p className="text-sm text-muted-foreground print:hidden">
+            Check-ins and distinct members by {period.groupBy} and branch, for {scope.label}{' '}
+            between {formatDate(period.from)} and {formatDate(period.to)}.
+          </p>
+        </div>
+        <Suspense fallback={null}>
+          <CsvLink report="attendance" />
+        </Suspense>
       </div>
 
       <Suspense>

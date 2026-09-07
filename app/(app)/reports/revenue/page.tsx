@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 
+import { CsvLink } from '@/components/reports/csv-link'
 import { PeriodPicker } from '@/components/reports/period-picker'
 import {
   Table,
@@ -46,12 +47,17 @@ export default async function RevenueReportPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Revenue</h1>
-        <p className="text-sm text-muted-foreground print:hidden">
-          Gross, refunds, reversals and net, by {period.groupBy}, branch and method, for{' '}
-          {scope.label} between {formatDate(period.from)} and {formatDate(period.to)}.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Revenue</h1>
+          <p className="text-sm text-muted-foreground print:hidden">
+            Gross, refunds, reversals and net, by {period.groupBy}, branch and method, for{' '}
+            {scope.label} between {formatDate(period.from)} and {formatDate(period.to)}.
+          </p>
+        </div>
+        <Suspense fallback={null}>
+          <CsvLink report="revenue" />
+        </Suspense>
       </div>
 
       <Suspense>

@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 
+import { CsvLink } from '@/components/reports/csv-link'
 import { PeriodPicker } from '@/components/reports/period-picker'
 import {
   Table,
@@ -34,12 +35,17 @@ export default async function MembershipMovementPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Membership movement</h1>
-        <p className="text-sm text-muted-foreground print:hidden">
-          New, renewed, expired and churned members, by {period.groupBy} and branch, for{' '}
-          {scope.label} between {formatDate(period.from)} and {formatDate(period.to)}.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Membership movement</h1>
+          <p className="text-sm text-muted-foreground print:hidden">
+            New, renewed, expired and churned members, by {period.groupBy} and branch, for{' '}
+            {scope.label} between {formatDate(period.from)} and {formatDate(period.to)}.
+          </p>
+        </div>
+        <Suspense fallback={null}>
+          <CsvLink report="movement" />
+        </Suspense>
       </div>
 
       <Suspense>
