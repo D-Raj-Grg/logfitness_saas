@@ -6,20 +6,32 @@ import { orgFormatters } from '@/lib/format'
 import { INVOICE_STATUS_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/members'
 
 /**
- * A receipt is one payment row, not an invoice. A refund is a negative payment,
- * so the same document prints both -- the heading and the amount label switch,
- * and the figure is shown unsigned with the direction stated in words.
+ * A receipt is one payment row, not an invoice. Refunds and reversals are
+ * negative payments, so the same document prints all three -- the heading and
+ * the amount label switch, and the figure is shown unsigned with the direction
+ * stated in words.
+ *
+ * A reversal is not a receipt for anything: nobody handed anything over. It
+ * prints as a correction note so the member has the same piece of paper the
+ * books do.
  */
 export function ReceiptDocument({ payment }: { payment: PaymentForPrint }) {
   const fmt = orgFormatters(payment.org)
   const isRefund = payment.kind === 'refund'
+  const isReversal = payment.kind === 'reversal'
   const amount = Math.abs(payment.amount_paisa)
 
   return (
     <>
       <Letterhead
         org={payment.org}
-        documentTitle={isRefund ? 'Refund receipt' : 'Payment receipt'}
+        documentTitle={
+          isReversal
+            ? 'Payment correction'
+            : isRefund
+              ? 'Refund receipt'
+              : 'Payment receipt'
+        }
       />
 
       <DocumentMeta
@@ -35,7 +47,11 @@ export function ReceiptDocument({ payment }: { payment: PaymentForPrint }) {
           ...(payment.collector
             ? [
                 {
-                  label: isRefund ? 'Refunded by' : 'Received by',
+                  label: isReversal
+                    ? 'Corrected by'
+                    : isRefund
+                      ? 'Refunded by'
+                      : 'Received by',
                   value: payment.collector.full_name,
                 },
               ]
@@ -45,7 +61,11 @@ export function ReceiptDocument({ payment }: { payment: PaymentForPrint }) {
 
       <section className="avoid-break mt-8 border-y border-[#d4d4d4] py-4">
         <p className="text-[8.5pt] font-medium uppercase tracking-wide text-[#6b7280]">
-          {isRefund ? 'Amount refunded' : 'Amount received'}
+          {isReversal
+            ? 'Amount reversed -- never received'
+            : isRefund
+              ? 'Amount refunded'
+              : 'Amount received'}
         </p>
         <p className="mt-1 text-[20pt] font-semibold leading-none tabular-nums text-[#111827]">
           {fmt.money(amount)}

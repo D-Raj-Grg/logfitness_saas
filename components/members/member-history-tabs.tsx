@@ -20,6 +20,7 @@ import { formatDate, formatDateTime, formatMoney, formatTime } from '@/lib/forma
 import {
   INVOICE_STATUS_LABELS,
   MEMBERSHIP_STATUS_LABELS,
+  PAYMENT_KIND_LABELS,
   PAYMENT_METHOD_LABELS,
   type InvoiceStatus,
   type MembershipStatus,
@@ -157,7 +158,10 @@ export function MemberHistoryTabs({
               </TableHeader>
               <TableBody>
                 {payments.map((row) => {
-                  const refund = row.kind === 'refund'
+                  // Refunds and reversals are both negative; the label says
+                  // which, because "given back" and "never arrived" are not the
+                  // same event to anyone counting the drawer.
+                  const refund = row.kind !== 'payment'
                   return (
                     <TableRow key={row.id}>
                       <TableCell className="whitespace-nowrap">
@@ -173,7 +177,8 @@ export function MemberHistoryTabs({
                         {formatMoney(Math.abs(row.amount_paisa))}
                         {refund ? (
                           <span className="block text-xs font-normal text-muted-foreground">
-                            Refund{row.reason ? `: ${row.reason}` : ''}
+                            {PAYMENT_KIND_LABELS[row.kind]}
+                            {row.reason ? `: ${row.reason}` : ''}
                           </span>
                         ) : null}
                       </TableCell>
@@ -187,7 +192,13 @@ export function MemberHistoryTabs({
                       <TableCell className="text-right">
                         <PrintLink
                           href={`/receipts/${row.id}/print`}
-                          label={refund ? 'Print refund receipt' : 'Print receipt'}
+                          label={
+                            row.kind === 'refund'
+                              ? 'Print refund receipt'
+                              : row.kind === 'reversal'
+                                ? 'Print reversal note'
+                                : 'Print receipt'
+                          }
                         />
                       </TableCell>
                     </TableRow>

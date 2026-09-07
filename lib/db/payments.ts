@@ -69,6 +69,31 @@ export async function refundPayment(args: {
   )
 }
 
+/**
+ * A payment that was recorded but never received. Mechanically a refund -- a
+ * negative row the invoice totals follow straight back into a due -- but its
+ * own kind, so the collection sheet can tell money given back from money that
+ * never arrived. Owner and manager only; the RPC enforces that.
+ */
+export async function reversePayment(args: { paymentId: string; reason: string }) {
+  const supabase = await createClient()
+
+  return unwrap<{
+    reversal_id: string
+    payment_id: string
+    amount_paisa: number
+    invoice_id: string | null
+    invoice_no: string | null
+    due_paisa: number | null
+    status: Database['public']['Enums']['invoice_status'] | null
+  }>(
+    await supabase.rpc('reverse_payment', {
+      p_payment_id: args.paymentId,
+      p_reason: args.reason,
+    })
+  )
+}
+
 /** The drawer sheet: one row per branch, collector, method, and kind. */
 export async function dailyCollection(args: { on?: string; branchId?: string } = {}) {
   const supabase = await createClient()

@@ -1,0 +1,15 @@
+-- Reversing a payment that was recorded but never received.
+--
+-- The desk rings up a sale, the member says "I'll pay tomorrow", and the cash
+-- was never in the drawer. Until now the only correction was a refund, which
+-- says money went back out: the day's sheet then shows 2,500 in and 2,500 out
+-- for a note that never existed, and gross collections count it twice.
+--
+-- So a third kind. Mechanically it is a refund -- a negative row against the
+-- same invoice, which sync_invoice_totals turns straight back into a due -- but
+-- it is labelled for what it is, and every report can tell "given back" from
+-- "never arrived".
+--
+-- Payments stay immutable and nothing is deleted. That is what keeps the drawer
+-- reconcilable, and it is why this is a new row rather than an undo.
+alter type public.payment_kind add value if not exists 'reversal';

@@ -135,8 +135,10 @@ export function CollectionSheet({ rows, on }: { rows: Row[]; on: string }) {
                     </TableCell>
                     <TableCell>
                       {PAYMENT_METHOD_LABELS[row.method]}
-                      {row.kind === 'refund' ? (
-                        <span className="ml-1 text-xs text-destructive">refund</span>
+                      {row.kind !== 'payment' ? (
+                        <span className="ml-1 text-xs text-destructive">
+                          {row.kind === 'refund' ? 'refund' : 'never received'}
+                        </span>
                       ) : null}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{row.txn_count}</TableCell>

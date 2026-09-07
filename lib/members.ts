@@ -5,6 +5,17 @@ export type MembershipStatus = Database['public']['Enums']['membership_status']
 export type PlanType = Database['public']['Enums']['plan_type']
 export type PaymentMethod = Database['public']['Enums']['payment_method']
 export type PaymentKind = Database['public']['Enums']['payment_kind']
+
+/**
+ * A refund is money handed back. A reversal is money that never arrived and
+ * should not have been recorded. Both are negative rows; only the words tell
+ * the drawer which happened, so they live here and nowhere else.
+ */
+export const PAYMENT_KIND_LABELS: Record<PaymentKind, string> = {
+  payment: 'Payment',
+  refund: 'Refund',
+  reversal: 'Never received',
+}
 export type InvoiceStatus = Database['public']['Enums']['invoice_status']
 export type MemberGender = Database['public']['Enums']['member_gender']
 
