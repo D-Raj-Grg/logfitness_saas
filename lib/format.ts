@@ -79,6 +79,25 @@ export function daysUntil(value: string | Date, timeZone: string = DEFAULT_TIMEZ
   return Math.round((startOfDay(new Date(value)) - startOfDay(new Date())) / dayInMs)
 }
 
+/**
+ * Calendar arithmetic on a YYYY-MM-DD string, free of timezone drift: the dates
+ * the database stores are plain days, and putting one through a local Date is
+ * how "07 Sept" becomes "06 Sept" in the evening.
+ */
+export function addDays(isoDate: string, days: number) {
+  const [year, month, day] = isoDate.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)
+}
+
+/** Whole days from one YYYY-MM-DD to another; negative when it runs backwards. */
+export function daysBetween(fromIsoDate: string, toIsoDate: string) {
+  const asUtc = (value: string) => {
+    const [year, month, day] = value.split('-').map(Number)
+    return Date.UTC(year, month - 1, day)
+  }
+  return Math.round((asUtc(toIsoDate) - asUtc(fromIsoDate)) / 86400000)
+}
+
 export function orgFormatters(org: Pick<Org, 'currency' | 'timezone'>) {
   return {
     money: (paisa: number) => formatMoney(paisa, { currency: org.currency }),

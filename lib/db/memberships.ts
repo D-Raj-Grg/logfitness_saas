@@ -99,6 +99,42 @@ export async function unfreezeMembership(membershipId: string) {
   )
 }
 
+/**
+ * The window moves; the sale does not. Plan, price, discount and branch are
+ * still refused by guard_membership_immutability, and the start date only moves
+ * through this RPC, only before anyone has checked in against it.
+ */
+export async function adjustMembershipDates(args: {
+  membershipId: string
+  startDate: string
+  endDate: string | null
+  reason: string
+}) {
+  const supabase = await createClient()
+
+  return unwrap<{
+    membership_id: string
+    member_id: string
+    previous_start_date: string
+    previous_end_date: string | null
+    start_date: string
+    end_date: string | null
+    days_moved: number
+    days_changed: number
+    status: Database['public']['Enums']['membership_status']
+  }>(
+    await supabase.rpc('adjust_membership_dates', {
+      p_membership_id: args.membershipId,
+      p_start_date: args.startDate,
+      // A session pack sold without a validity window genuinely has no end
+      // date, and the RPC takes a null for it. The generated Args type has no
+      // way to say that -- a date argument with no default reads as non-null.
+      p_end_date: args.endDate as string,
+      p_reason: args.reason,
+    })
+  )
+}
+
 export async function cancelMembership(membershipId: string, reason: string) {
   const supabase = await createClient()
   return unwrap<RpcResult>(

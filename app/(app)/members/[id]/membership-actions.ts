@@ -5,6 +5,7 @@ import { z } from 'zod'
 
 import { requireRole } from '@/lib/auth'
 import {
+  adjustMembershipDates as adjustMembershipDatesRow,
   cancelMembership as cancelMembershipRow,
   freezeMembership as freezeMembershipRow,
   renewMembership as renewMembershipRow,
@@ -13,16 +14,19 @@ import {
 import {
   recordPayment as recordPaymentRow,
   refundPayment as refundPaymentRow,
+  reversePayment as reversePaymentRow,
 } from '@/lib/db/payments'
 import { listPlansForBranch } from '@/lib/db/plans'
-import { formatMoney } from '@/lib/format'
+import { formatDate, formatMoney } from '@/lib/format'
 import {
+  adjustMembershipDatesSchema,
   cancelMembershipSchema,
   freezeMembershipSchema,
   membershipIdSchema,
   recordPaymentSchema,
   refundPaymentSchema,
   renewMembershipSchema,
+  reversePaymentSchema,
 } from '@/lib/validation/payments'
 
 export type MembershipActionState = {
@@ -311,4 +315,103 @@ export async function cancelMembership(
   if (memberId.success) revalidateMember(memberId.data)
 
   return { success: 'Membership cancelled.' }
+}
+
+
+/**
+ * Moving -- or correcting -- the window of a membership already sold. Owners
+ * and managers only, checked here so the button can be hidden and again inside
+ * the RPC, which is what the Flutter app will hit.
+ */
+export async function adjustMembershipDates(
+  _prevState: MembershipActionState,
+  formData: FormData
+): Promise<MembershipActionState> {
+  await requireRole('owner', 'manager')
+
+  const memberId = z.uuid().safeParse(formData.get('memberId'))
+
+  const parsed = adjustMembershipDatesSchema.safeParse({
+    membershipId: formData.get('membershipId'),
+    startDate: formData.get('startDate'),
+    endDate: optional(formData, 'endDate') || undefined,
+    reason: formData.get('reason'),
+  })
+
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+  }
+
+  let result: Awaited<ReturnType<typeof adjustMembershipDatesRow>>
+  try {
+    result = await adjustMembershipDatesRow(parsed.data)
+  } catch (error) {
+    return { error: rpcErrorMessage(error, 'The dates could not be changed.') }
+  }
+
+  if (memberId.success) revalidateMember(memberId.data)
+
+  // Two separate facts, and the desk cares about both: where it runs now, and
+  // whether the member ended up with more or fewer days than they paid for.
+  const moved = result.days_moved
+  const changed = result.days_changed
+  const term = changed - moved
+
+  const window = result.end_date
+    ? `Runs ${formatDate(result.start_date)} to ${formatDate(result.end_date)}.`
+    : `Starts ${formatDate(result.start_date)}.`
+
+  const movement =
+    moved !== 0
+      ? ` Pushed back ${Math.abs(moved)} day${Math.abs(moved) === 1 ? '' : 's'}${
+          term === 0 ? ', same length' : ''
+        }.`
+      : ''
+
+  const length =
+    term !== 0
+      ? ` ${term > 0 ? 'Gained' : 'Lost'} ${Math.abs(term)} day${Math.abs(term) === 1 ? '' : 's'}.`
+      : ''
+
+  return { success: `${window}${movement}${length}` }
+}
+
+
+/**
+ * The payment that was rung up but never handed over. Owner and manager only,
+ * checked here and again in the RPC; the front desk records money, it does not
+ * decide that money never came.
+ */
+export async function reversePayment(
+  _prevState: MembershipActionState,
+  formData: FormData
+): Promise<MembershipActionState> {
+  await requireRole('owner', 'manager')
+
+  const memberId = z.uuid().safeParse(formData.get('memberId'))
+
+  const parsed = reversePaymentSchema.safeParse({
+    paymentId: formData.get('paymentId'),
+    reason: formData.get('reason'),
+  })
+
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+  }
+
+  let result: Awaited<ReturnType<typeof reversePaymentRow>>
+  try {
+    result = await reversePaymentRow(parsed.data)
+  } catch (error) {
+    return { error: rpcErrorMessage(error, 'The payment could not be reversed.') }
+  }
+
+  if (memberId.success) revalidateMember(memberId.data)
+
+  return {
+    success:
+      result.invoice_no && result.due_paisa !== null
+        ? `Reversed. Invoice ${result.invoice_no} owes ${formatMoney(result.due_paisa)} again.`
+        : 'Reversed. The payment no longer counts against the drawer.',
+  }
 }

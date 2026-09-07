@@ -88,10 +88,39 @@ export const refundPaymentSchema = z.object({
   referenceNo: referenceSchema,
 })
 
+/**
+ * Reversing a payment that never arrived. No amount: a reversal is the whole
+ * entry or nothing -- a part payment that was only partly received is two facts,
+ * and the honest record of it is a reversal plus a fresh payment for what did
+ * come in.
+ */
+export const reversePaymentSchema = z.object({
+  paymentId: z.uuid(),
+  reason: z.string().trim().min(3, 'Say why it is being reversed').max(500),
+})
+
 export const membershipIdSchema = z.object({ membershipId: z.uuid() })
 
 export const freezeMembershipSchema = membershipIdSchema.extend({
   notes: notesSchema,
+})
+
+/**
+ * Moving the window of a membership already sold. The reason is mandatory: free
+ * days are money, and the row keeps the sentence that explains them.
+ *
+ * The end date is nullable because a session pack can be sold without one; the
+ * RPC refuses a null against a membership that has an end date, and vice versa.
+ */
+const isoDateSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter the date as YYYY-MM-DD')
+
+export const adjustMembershipDatesSchema = membershipIdSchema.extend({
+  startDate: isoDateSchema,
+  endDate: isoDateSchema.optional().transform((value) => value ?? null),
+  reason: z.string().trim().min(3, 'Say why the dates are changing').max(500),
 })
 
 export const cancelMembershipSchema = membershipIdSchema.extend({

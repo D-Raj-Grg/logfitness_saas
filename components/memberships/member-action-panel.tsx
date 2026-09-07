@@ -6,12 +6,14 @@ import { Printer } from 'lucide-react'
 
 import { AuthFormMessage } from '@/components/auth/auth-form-message'
 import {
+  AdjustDatesForm,
   CancelForm,
   FreezeForm,
   UnfreezeForm,
 } from '@/components/memberships/membership-status-forms'
 import { RecordPaymentForm } from '@/components/memberships/record-payment-form'
 import { RefundForm } from '@/components/memberships/refund-form'
+import { ReversePaymentForm } from '@/components/memberships/reverse-payment-form'
 import { RenewForm } from '@/components/memberships/renew-form'
 import {
   AlertDialog,
@@ -46,7 +48,7 @@ import type {
   listMembershipsForMember,
 } from '@/lib/db/memberships'
 import type { listPaymentsForMember } from '@/lib/db/payments'
-import { daysUntil, formatDate, formatDateTime, formatMoney } from '@/lib/format'
+import { addDays, daysUntil, formatDate, formatDateTime, formatMoney } from '@/lib/format'
 import {
   MEMBERSHIP_STATUS_LABELS,
   PAYMENT_METHOD_LABELS,
@@ -59,7 +61,9 @@ type OpenDialog =
   | { kind: 'freeze' }
   | { kind: 'unfreeze' }
   | { kind: 'cancel' }
+  | { kind: 'dates' }
   | { kind: 'refund'; paymentId: string }
+  | { kind: 'reverse'; paymentId: string }
   | null
 
 export function MemberActionPanel({
@@ -69,6 +73,7 @@ export function MemberActionPanel({
   payments,
   staff,
   branches,
+  checkedInMembershipIds,
 }: {
   member: MemberOverviewRow
   memberships: Awaited<ReturnType<typeof listMembershipsForMember>>
@@ -76,6 +81,11 @@ export function MemberActionPanel({
   payments: Awaited<ReturnType<typeof listPaymentsForMember>>
   staff: CurrentStaff
   branches: Awaited<ReturnType<typeof listBranches>>
+  /**
+   * Memberships someone has already trained on. A start date that has visits
+   * behind it is a fact about attendance, not a plan, so it stops moving.
+   */
+  checkedInMembershipIds: string[]
 }) {
   const [open, setOpen] = useState<OpenDialog>(null)
   const [message, setMessage] = useState<
@@ -91,6 +101,9 @@ export function MemberActionPanel({
   )
 
   const canAct = staff.role !== 'trainer'
+  // Free days are money: extending a membership already sold is an owner and
+  // manager decision, and the RPC refuses anyone else even if this slips.
+  const canAdjustDates = staff.role === 'owner' || staff.role === 'manager'
   const hasLeft = member.status === 'left'
 
   const current =
@@ -122,6 +135,11 @@ export function MemberActionPanel({
 
   const refundTarget =
     open?.kind === 'refund'
+      ? (payments.find((payment) => payment.id === open.paymentId) ?? null)
+      : null
+
+  const reverseTarget =
+    open?.kind === 'reverse'
       ? (payments.find((payment) => payment.id === open.paymentId) ?? null)
       : null
 
@@ -230,6 +248,11 @@ export function MemberActionPanel({
                   Unfreeze
                 </Button>
               ) : null}
+              {canAdjustDates && current && current.status !== 'cancelled' ? (
+                <Button size="sm" variant="outline" onClick={() => setOpen({ kind: 'dates' })}>
+                  Adjust dates
+                </Button>
+              ) : null}
               {current && (current.status === 'active' || current.status === 'frozen') ? (
                 <Button
                   size="sm"
@@ -284,7 +307,9 @@ export function MemberActionPanel({
                   <span>
                     <span
                       className={
-                        payment.kind === 'refund' ? 'font-medium text-destructive' : 'font-medium'
+                        payment.kind === 'payment'
+                          ? 'font-medium'
+                          : 'font-medium text-destructive'
                       }
                     >
                       {formatMoney(payment.amount_paisa)}
@@ -296,20 +321,35 @@ export function MemberActionPanel({
                       {formatDateTime(payment.paid_at)}
                       {payment.collector?.full_name ? ` · ${payment.collector.full_name}` : ''}
                     </span>
-                    {payment.kind === 'refund' && payment.reason ? (
+                    {payment.kind !== 'payment' && payment.reason ? (
                       <span className="block text-xs text-muted-foreground">
-                        Refund: {payment.reason}
+                        {payment.kind === 'refund' ? 'Refund' : 'Never received'}:{' '}
+                        {payment.reason}
                       </span>
                     ) : null}
                   </span>
                   {canAct && payment.kind === 'payment' && payment.amount_paisa > 0 ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setOpen({ kind: 'refund', paymentId: payment.id })}
-                    >
-                      Refund
-                    </Button>
+                    <span className="flex shrink-0 items-center">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setOpen({ kind: 'refund', paymentId: payment.id })}
+                      >
+                        Refund
+                      </Button>
+                      {/* Money that never arrived is not money given back, so
+                          the two are different buttons and different rows on
+                          the drawer sheet. */}
+                      {canAdjustDates ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setOpen({ kind: 'reverse', paymentId: payment.id })}
+                        >
+                          Not paid
+                        </Button>
+                      ) : null}
+                    </span>
                   ) : null}
                 </div>
               </div>
@@ -422,6 +462,52 @@ export function MemberActionPanel({
             </DialogContent>
           </Dialog>
 
+          <Dialog open={open?.kind === 'dates'} onOpenChange={dialogChange}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Adjust membership dates</DialogTitle>
+                <DialogDescription>
+                  Start it later, or extend the end. The change is recorded on
+                  the membership with the reason given.
+                </DialogDescription>
+              </DialogHeader>
+              {open?.kind === 'dates' && current ? (
+                <AdjustDatesForm
+                  memberId={member.id}
+                  membershipId={current.id}
+                  currentStartDate={current.start_date}
+                  currentEndDate={current.end_date}
+                  canMoveStart={!checkedInMembershipIds.includes(current.id)}
+                  onSuccess={closeWith}
+                />
+              ) : null}
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={open?.kind === 'reverse'} onOpenChange={dialogChange}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Payment never received</DialogTitle>
+                <DialogDescription>
+                  For an entry recorded in error -- the member said they would pay
+                  and did not. Nothing left the drawer, so this is not a refund.
+                </DialogDescription>
+              </DialogHeader>
+              {reverseTarget ? (
+                <ReversePaymentForm
+                  memberId={member.id}
+                  payment={{
+                    id: reverseTarget.id,
+                    amount_paisa: reverseTarget.amount_paisa,
+                    method: reverseTarget.method,
+                    paid_at: reverseTarget.paid_at,
+                  }}
+                  onSuccess={closeWith}
+                />
+              ) : null}
+            </DialogContent>
+          </Dialog>
+
           <Dialog open={open?.kind === 'refund'} onOpenChange={dialogChange}>
             <DialogContent>
               <DialogHeader>
@@ -448,11 +534,4 @@ export function MemberActionPanel({
       ) : null}
     </div>
   )
-}
-
-/** Calendar arithmetic on a YYYY-MM-DD string, free of timezone drift. */
-function addDays(isoDate: string, days: number) {
-  const [y, m, d] = isoDate.split('-').map(Number)
-  const date = new Date(Date.UTC(y, m - 1, d + days))
-  return date.toISOString().slice(0, 10)
 }
