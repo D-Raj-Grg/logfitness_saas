@@ -34,6 +34,28 @@ function first(value: string | string[] | undefined): string | undefined {
 }
 
 /**
+ * True only for a date that actually exists on the calendar, not merely a
+ * string shaped like one. `2026-13-01` and `2026-02-30` match ISO_DATE but
+ * are not real dates -- JS silently rolls them over into a neighbouring
+ * month, so the only reliable check is to parse and see whether the parsed
+ * value round-trips back to the same year/month/day. This value goes
+ * straight into a Postgres `date` parameter, which throws (an uncaught 500)
+ * rather than rolling over, so it must be rejected here first.
+ */
+function isValidIsoDate(value: string): boolean {
+  if (!ISO_DATE.test(value)) return false
+
+  const [year, month, day] = value.split('-').map(Number)
+  const parsed = new Date(Date.UTC(year, month - 1, day))
+
+  return (
+    parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === month - 1 &&
+    parsed.getUTCDate() === day
+  )
+}
+
+/**
  * Reads the period out of the URL. Defaults to the last 30 days grouped by day
  * -- long enough to see a shape, short enough to read.
  *
@@ -65,8 +87,8 @@ export function resolvePeriod(
   if (preset === 'custom') {
     const rawFrom = first(searchParams.from)
     const rawTo = first(searchParams.to)
-    from = rawFrom && ISO_DATE.test(rawFrom) ? rawFrom : back(30)
-    to = rawTo && ISO_DATE.test(rawTo) ? rawTo : todayIso
+    from = rawFrom && isValidIsoDate(rawFrom) ? rawFrom : back(30)
+    to = rawTo && isValidIsoDate(rawTo) ? rawTo : todayIso
   } else if (preset === 'today') {
     from = todayIso
   } else if (preset === '7d') {

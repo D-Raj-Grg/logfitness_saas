@@ -43,6 +43,12 @@ export function AttendanceTrendChart({ points }: { points: AttendanceTrendPoint[
   }
   const data = Array.from(byPeriod.values()).sort((a, b) => a.period.localeCompare(b.period))
 
+  // A line between one point and nothing draws nothing. A one-day custom range,
+  // or a month grouping over a short window, is a real thing to ask for -- and a
+  // blank plot above a populated table reads as missing data rather than as one
+  // data point. Show the marker when there is only one.
+  const dot = data.length === 1
+
   return (
     <ChartContainer config={chartConfig} className="h-[280px] w-full">
       <LineChart data={data} margin={{ left: 12, right: 12 }}>
@@ -66,14 +72,14 @@ export function AttendanceTrendChart({ points }: { points: AttendanceTrendPoint[
           type="monotone"
           stroke="var(--color-check_ins)"
           strokeWidth={2}
-          dot={false}
+          dot={dot}
         />
         <Line
           dataKey="distinct_members"
           type="monotone"
           stroke="var(--color-distinct_members)"
           strokeWidth={2}
-          dot={false}
+          dot={dot}
         />
       </LineChart>
     </ChartContainer>
