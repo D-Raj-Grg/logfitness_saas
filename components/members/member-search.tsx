@@ -13,8 +13,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-type Branch = { id: string; name: string }
-
 const ALL = 'all'
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
@@ -33,13 +31,9 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
 export function MemberSearch({
   q,
   status,
-  branchId,
-  branches,
 }: {
   q: string
   status?: string
-  branchId?: string
-  branches: Branch[]
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -76,8 +70,6 @@ export function MemberSearch({
   const statusLabel =
     STATUS_OPTIONS.find((option) => option.value === (status ?? ALL))?.label ??
     'All statuses'
-  const branchLabel =
-    branches.find((branch) => branch.id === branchId)?.name ?? 'All branches'
 
   return (
     <div className="flex flex-wrap items-end gap-3">
@@ -113,30 +105,6 @@ export function MemberSearch({
           </SelectContent>
         </Select>
       </div>
-
-      {branches.length > 1 ? (
-        <div className="flex w-48 flex-col gap-1.5">
-          <Label htmlFor="member-branch">Branch</Label>
-          <Select
-            value={branchId ?? ALL}
-            onValueChange={(value) =>
-              replaceParams({ branchId: value === ALL ? undefined : String(value) })
-            }
-          >
-            <SelectTrigger id="member-branch" className="w-full">
-              <SelectValue>{branchLabel}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>All branches</SelectItem>
-              {branches.map((branch) => (
-                <SelectItem key={branch.id} value={branch.id}>
-                  {branch.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      ) : null}
     </div>
   )
 }

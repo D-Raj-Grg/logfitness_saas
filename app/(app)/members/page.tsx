@@ -28,28 +28,22 @@ export default async function MembersPage({
 
   const parsed = memberListQuerySchema.safeParse({
     q: first(raw.q),
-    // The page keeps its own `branchId` filter (independent of the header's
-    // `branch` switcher) but defaults to the switcher's pick, so choosing a
-    // branch up top narrows this list too until overridden here.
     status: first(raw.status) || undefined,
-    branchId: first(raw.branchId) || scope.selectedId || undefined,
     page: first(raw.page),
     pageSize: first(raw.pageSize),
   })
   // A hand-edited URL should not 500 the front desk; fall back to defaults.
   const query = parsed.success ? parsed.data : memberListQuerySchema.parse({})
 
-  const result = await listMembers(query)
+  // The header switcher is the only way to say which branches to look at --
+  // there used to be a second, page-local branch filter here too, but two
+  // controls that can disagree (`?branch=` vs `?branchId=`) is worse than one.
+  const result = await listMembers(query, scope.branchIds)
 
   // One signing round trip for the page, not one per row.
   const photoUrls = await memberPhotoUrls(result.rows.map((row) => row.photo_path))
 
-  // Non-owners only see their own branches in the filter; RLS already scopes
-  // the rows themselves. resolveBranchScope is the single source of truth for
-  // this, shared with the header switcher.
-  const branches = scope.options
-
-  const filtered = Boolean(query.q || query.status || query.branchId)
+  const filtered = Boolean(query.q || query.status)
 
   return (
     <div className="flex flex-col gap-6">
@@ -63,12 +57,7 @@ export default async function MembersPage({
         <Button render={<Link href="/members/new" />}>Register member</Button>
       </div>
 
-      <MemberSearch
-        q={query.q}
-        status={query.status}
-        branchId={query.branchId}
-        branches={branches}
-      />
+      <MemberSearch q={query.q} status={query.status} />
 
       <MembersTable rows={result.rows} filtered={filtered} photoUrls={photoUrls} />
 
@@ -79,7 +68,9 @@ export default async function MembersPage({
         params={{
           q: query.q || undefined,
           status: query.status,
-          branchId: query.branchId,
+          // Preserved so Prev/Next don't silently drop the header's branch
+          // scope back to the default.
+          branch: first(raw.branch),
           pageSize: first(raw.pageSize),
         }}
       />

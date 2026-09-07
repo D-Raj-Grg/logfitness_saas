@@ -85,7 +85,6 @@ export const memberListQuerySchema = z.object({
   status: z
     .enum(['active', 'expired', 'frozen', 'left', 'expiring', 'dues', 'archived'])
     .optional(),
-  branchId: z.uuid().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(10).max(100).default(25),
 })

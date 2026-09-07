@@ -40,8 +40,19 @@ export default async function CheckInPage({
   const canCheckIn =
     staff.role === 'owner' || staff.role === 'manager' || staff.role === 'front_desk'
 
-  const branchId = scope.selectedId
   const branchIds = scope.branchIds
+
+  // The branch to write attendance against (and to filter the log/label by).
+  // Deliberately not `scope.selectedId`: a caller who covers exactly one
+  // branch -- a single-branch desk or manager -- must always write to that
+  // branch, even though the switcher never renders for them and `selectedId`
+  // stays null. Null is reserved for the aggregate `CheckInConsole` actually
+  // documents: a caller who covers *more than one* branch and has not picked
+  // one, where the member's own home branch decides. Getting this wrong sent
+  // a single-branch desk's checked-in members through the home-branch path,
+  // which the server action then rejected as "You do not work at that branch"
+  // whenever the member's home branch differed from the desk's own.
+  const branchId = scope.options.length === 1 ? scope.options[0].id : scope.selectedId
 
   const [inGym, summary, log] = await Promise.all([
     inGymNow(branchIds),
@@ -54,10 +65,10 @@ export default async function CheckInPage({
 
   const checkIns = summary.reduce((total, row) => total + row.check_ins, 0)
   const distinctMembers = summary.reduce((total, row) => total + row.distinct_members, 0)
-  // The label already covers the single-branch-non-owner case ("their branch
-  // by name") as well as an explicit selection -- only the true aggregate
-  // (canSwitch with nothing picked) should read as "every branch."
-  const branchName = branchId || !scope.canSwitch ? scope.label : null
+  // `scope.label` is already the branch's own name whenever `branchId` above
+  // is concrete (an explicit pick, or the caller's only branch); only the
+  // genuine multi-branch aggregate should read as "every branch."
+  const branchName = branchId ? scope.label : null
 
   return (
     <div className="flex flex-col gap-6">

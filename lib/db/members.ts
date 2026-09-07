@@ -39,7 +39,10 @@ export type MemberListResult = {
  * search term matches the phone prefix, the member code prefix, or any part of
  * the name -- the three things a front desk is ever told.
  */
-export async function listMembers(query: MemberListQuery): Promise<MemberListResult> {
+export async function listMembers(
+  query: MemberListQuery,
+  branchIds?: string[] | null
+): Promise<MemberListResult> {
   const supabase = await createClient()
 
   let request = supabase
@@ -64,8 +67,11 @@ export async function listMembers(query: MemberListQuery): Promise<MemberListRes
     }
   }
 
-  if (query.branchId) {
-    request = request.eq('home_branch_id', query.branchId)
+  // null means every branch RLS allows (an owner's aggregate); an array is a
+  // real filter, whether the whole org (a multi-branch manager's aggregate)
+  // or a single selected branch.
+  if (branchIds) {
+    request = request.in('home_branch_id', branchIds)
   }
 
   switch (query.status) {

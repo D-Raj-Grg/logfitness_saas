@@ -71,7 +71,11 @@ export async function resolveBranchScope(
   return {
     branchIds: isOwner ? null : options.map((option) => option.id),
     selectedId: null,
-    label: isOwner ? 'All branches' : canSwitch ? 'All my branches' : (options[0]?.name ?? 'No branch'),
+    label: canSwitch
+      ? isOwner
+        ? 'All branches'
+        : 'All my branches'
+      : (options[0]?.name ?? 'No branch'),
     options,
     canSwitch,
   }
