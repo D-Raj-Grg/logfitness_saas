@@ -9,6 +9,10 @@ import {
 } from '@/app/(app)/members/[id]/membership-actions'
 import { AuthFormMessage, FieldError } from '@/components/auth/auth-form-message'
 import { PaymentMethodFields } from '@/components/memberships/payment-method-fields'
+import {
+  PaymentStatusChoice,
+  type PaymentStatus,
+} from '@/components/memberships/payment-status-choice'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -54,6 +58,7 @@ export function RenewForm({
   const [discount, setDiscount] = useState('')
   const [paid, setPaid] = useState('')
   const [method, setMethod] = useState<PaymentMethod>('cash')
+  const [payment, setPayment] = useState<PaymentStatus>('full')
 
   useEffect(() => {
     startLoadingPlans(async () => {
@@ -74,24 +79,35 @@ export function RenewForm({
   const subtotal = plan ? plan.price_paisa + signupFee : 0
   const discountPaisa = Math.min(paisaOrZero(discount), subtotal)
   const total = subtotal - discountPaisa
-  const paidPaisa = Math.min(paisaOrZero(paid), total)
+  const paidPaisa = payment === 'unpaid' ? 0 : Math.min(paisaOrZero(paid), total)
   const dueAfter = total - paidPaisa
+
+  /** The full price of a plan after a discount -- what "paid in full" means. */
+  function fullAmount(target: PlanOption | null, discountValue: string) {
+    if (!target) return ''
+    const fee = isFirstMembership ? target.signup_fee_paisa : 0
+    return rupees(Math.max(target.price_paisa + fee - paisaOrZero(discountValue), 0))
+  }
 
   function choosePlan(nextPlanId: string) {
     setPlanId(nextPlanId)
-    const next = plans.find((item) => item.id === nextPlanId)
+    const next = plans.find((item) => item.id === nextPlanId) ?? null
     if (!next) return
     // The common case is paid in full at the desk, so the amount starts there
     // and the cashier only edits it for a part payment.
-    const fee = isFirstMembership ? next.signup_fee_paisa : 0
-    setPaid(rupees(Math.max(next.price_paisa + fee - paisaOrZero(discount), 0)))
+    if (payment === 'full') setPaid(fullAmount(next, discount))
   }
 
   function changeDiscount(value: string) {
     setDiscount(value)
-    if (plan) {
-      setPaid(rupees(Math.max(subtotal - paisaOrZero(value), 0)))
-    }
+    if (payment === 'full') setPaid(fullAmount(plan, value))
+  }
+
+  /** The amount follows the choice; see PaymentStatusChoice for why it exists. */
+  function choosePayment(next: PaymentStatus) {
+    setPayment(next)
+    if (next === 'full') setPaid(fullAmount(plan, discount))
+    if (next === 'unpaid') setPaid('')
   }
 
   const selectedBranch = branches.find((branch) => branch.id === branchId)
@@ -176,29 +192,50 @@ export function RenewForm({
           <FieldError messages={state.fieldErrors?.discountPaisa} />
         </div>
 
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="renew-paid">Paid now (NPR)</Label>
-          <Input
-            id="renew-paid"
-            name="amountPaidPaisa"
-            type="number"
-            inputMode="decimal"
-            min={0}
-            step="1"
-            value={paid}
-            onChange={(event) => setPaid(event.target.value)}
-            placeholder="0"
+        <div className="flex flex-col gap-2 sm:col-span-2">
+          <Label>Payment</Label>
+          <PaymentStatusChoice
+            value={payment}
+            onChange={choosePayment}
+            idPrefix="renew"
           />
-          <FieldError messages={state.fieldErrors?.amountPaidPaisa} />
         </div>
 
-        <PaymentMethodFields
-          idPrefix="renew"
-          method={method}
-          onMethodChange={setMethod}
-          referenceRequired={paidPaisa > 0}
-          fieldErrors={state.fieldErrors}
-        />
+        {payment === 'unpaid' ? (
+          // Unmounted, so nothing is submitted: the invoice is raised in full
+          // and the whole amount stands as a due.
+          <p className="text-sm text-muted-foreground sm:col-span-2">
+            The invoice is raised in full and the whole amount shows as due.
+            Record the payment from this profile when it comes in.
+          </p>
+        ) : (
+          <>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="renew-paid">Paid now (NPR)</Label>
+              <Input
+                id="renew-paid"
+                name="amountPaidPaisa"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="1"
+                readOnly={payment === 'full'}
+                value={paid}
+                onChange={(event) => setPaid(event.target.value)}
+                placeholder="0"
+              />
+              <FieldError messages={state.fieldErrors?.amountPaidPaisa} />
+            </div>
+
+            <PaymentMethodFields
+              idPrefix="renew"
+              method={method}
+              onMethodChange={setMethod}
+              referenceRequired={paidPaisa > 0}
+              fieldErrors={state.fieldErrors}
+            />
+          </>
+        )}
 
         <div className="flex flex-col gap-2 sm:col-span-2">
           <Label htmlFor="renew-notes">Notes (optional)</Label>

@@ -5,6 +5,10 @@ import { useEffect, useRef, useState, useTransition } from 'react'
 import { loadPlansForBranch } from '@/app/(app)/members/[id]/membership-actions'
 import { FieldError } from '@/components/auth/auth-form-message'
 import { PaymentMethodFields } from '@/components/memberships/payment-method-fields'
+import {
+  PaymentStatusChoice,
+  type PaymentStatus,
+} from '@/components/memberships/payment-status-choice'
 import { PlanDialog, type PlanFormContext } from '@/components/plans/plan-dialog'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -54,6 +58,8 @@ export function MemberSaleFields({
   const [planId, setPlanId] = useState('')
   const [discount, setDiscount] = useState('')
   const [paid, setPaid] = useState('')
+  const [payment, setPayment] = useState<PaymentStatus>('full')
+  const [startDate, setStartDate] = useState('')
   const [method, setMethod] = useState<PaymentMethod>('cash')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [plansVersion, setPlansVersion] = useState(0)
@@ -91,10 +97,14 @@ export function MemberSaleFields({
       const created = justCreated
         ? (result.plans.find((plan) => plan.id === justCreated) ?? null)
         : null
-      if (created) {
+      if (created && payment === 'full') {
         setPaid(rupees(Math.max(created.price_paisa + created.signup_fee_paisa, 0)))
       }
     })
+    // `payment` is read inside the transaction but deliberately not a
+    // dependency: changing it must not refetch the plan list, and choosePayment
+    // already rewrites the amount when it changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchId, selling, plansVersion])
 
   const plan = plans.find((item) => item.id === planId) ?? null
@@ -104,8 +114,22 @@ export function MemberSaleFields({
   const subtotal = plan ? plan.price_paisa + plan.signup_fee_paisa : 0
   const discountPaisa = Math.min(paisaOrZero(discount), subtotal)
   const total = subtotal - discountPaisa
-  const paidPaisa = Math.min(paisaOrZero(paid), total)
+  const paidPaisa = payment === 'unpaid' ? 0 : Math.min(paisaOrZero(paid), total)
   const dueAfter = total - paidPaisa
+
+  /** The full price of a plan after a discount -- what "paid in full" means. */
+  function fullAmount(
+    target: PlanOption | null | undefined,
+    discountValue: string
+  ) {
+    if (!target) return ''
+    return rupees(
+      Math.max(
+        target.price_paisa + target.signup_fee_paisa - paisaOrZero(discountValue),
+        0
+      )
+    )
+  }
 
   function choosePlan(nextPlanId: string) {
     setPlanId(nextPlanId)
@@ -113,19 +137,23 @@ export function MemberSaleFields({
     if (!next) return
     // Paid in full at the desk is the common case, so the amount starts there
     // and the cashier only edits it for a part payment.
-    setPaid(
-      rupees(
-        Math.max(next.price_paisa + next.signup_fee_paisa - paisaOrZero(discount), 0)
-      )
-    )
+    if (payment === 'full') setPaid(fullAmount(next, discount))
   }
 
   function changeDiscount(value: string) {
     setDiscount(value)
-    if (!plan) return
-    setPaid(
-      rupees(Math.max(plan.price_paisa + plan.signup_fee_paisa - paisaOrZero(value), 0))
-    )
+    if (payment === 'full') setPaid(fullAmount(plan, value))
+  }
+
+  /**
+   * The amount follows the choice rather than the other way round: full refills
+   * it, unpaid empties it, and part leaves whatever is there for the cashier to
+   * correct -- so switching back and forth never leaves a stale number behind.
+   */
+  function choosePayment(next: PaymentStatus) {
+    setPayment(next)
+    if (next === 'full') setPaid(fullAmount(plan, discount))
+    if (next === 'unpaid') setPaid('')
   }
 
   const planLabel = loadingPlans
@@ -150,7 +178,7 @@ export function MemberSaleFields({
           <span className="font-medium">Also sell a plan now</span>
           <span className="text-xs text-muted-foreground">
             {branchId
-              ? `Starts today at ${branchName ?? 'this branch'}. The joining fee is added automatically.`
+              ? `Sold at ${branchName ?? 'this branch'}. The joining fee is added automatically.`
               : 'Pick a home branch first.'}
           </span>
         </span>
@@ -189,6 +217,22 @@ export function MemberSaleFields({
           </div>
 
           <div className="flex flex-col gap-2">
+            <Label htmlFor="saleStartDate">Starts on</Label>
+            <Input
+              id="saleStartDate"
+              name="saleStartDate"
+              type="date"
+              value={startDate}
+              onChange={(event) => setStartDate(event.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Leave blank to start today. A future date registers them now and
+              holds the plan until it comes round.
+            </p>
+            <FieldError messages={fieldErrors?.startDate} />
+          </div>
+
+          <div className="flex flex-col gap-2">
             <Label htmlFor="saleDiscountPaisa">Discount (NPR)</Label>
             <Input
               id="saleDiscountPaisa"
@@ -201,27 +245,49 @@ export function MemberSaleFields({
             <FieldError messages={fieldErrors?.discountPaisa} />
           </div>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="saleAmountPaidPaisa">Paid now (NPR)</Label>
-            <Input
-              id="saleAmountPaidPaisa"
-              name="saleAmountPaidPaisa"
-              inputMode="decimal"
-              placeholder="0"
-              value={paid}
-              onChange={(event) => setPaid(event.target.value)}
+          <div className="flex flex-col gap-2 sm:col-span-2">
+            <Label>Payment</Label>
+            <PaymentStatusChoice
+              value={payment}
+              onChange={choosePayment}
+              idPrefix="sale"
             />
-            <FieldError messages={fieldErrors?.amountPaidPaisa} />
           </div>
 
-          <PaymentMethodFields
-            method={method}
-            onMethodChange={setMethod}
-            idPrefix="sale"
-            referenceRequired={paidPaisa > 0}
-            fieldErrors={fieldErrors}
-            names={{ method: 'saleMethod', reference: 'saleReferenceNo' }}
-          />
+          {payment === 'unpaid' ? (
+            // Nothing is mounted, so nothing is submitted: the RPC raises the
+            // invoice with the full amount outstanding and the profile shows the
+            // due the moment the desk lands on it.
+            <p className="text-sm text-muted-foreground sm:col-span-2">
+              The invoice is raised in full and the whole amount shows as due.
+              Record the payment from their profile when it comes in.
+            </p>
+          ) : (
+            <>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="saleAmountPaidPaisa">Paid now (NPR)</Label>
+                <Input
+                  id="saleAmountPaidPaisa"
+                  name="saleAmountPaidPaisa"
+                  inputMode="decimal"
+                  placeholder="0"
+                  readOnly={payment === 'full'}
+                  value={paid}
+                  onChange={(event) => setPaid(event.target.value)}
+                />
+                <FieldError messages={fieldErrors?.amountPaidPaisa} />
+              </div>
+
+              <PaymentMethodFields
+                method={method}
+                onMethodChange={setMethod}
+                idPrefix="sale"
+                referenceRequired={paidPaisa > 0}
+                fieldErrors={fieldErrors}
+                names={{ method: 'saleMethod', reference: 'saleReferenceNo' }}
+              />
+            </>
+          )}
 
           {plan ? (
             <dl className="flex flex-col gap-1 rounded-lg bg-muted/40 p-3 text-sm sm:col-span-2">
