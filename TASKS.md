@@ -236,6 +236,14 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       the same instant). Both now end on `id`. Verified against 24 members
       sharing three names and 24 check-ins sharing one timestamp: three pages,
       every row exactly once.
+- [x] **2026-09-07** `/members`, `/visitors`, and every other paged list threw
+      at runtime: "Attempted to call DEFAULT_PAGE_SIZE() from the server but
+      DEFAULT_PAGE_SIZE is on the client". `lib/validation/pagination.ts` read
+      `PAGE_SIZES`/`DEFAULT_PAGE_SIZE` from `components/app/page-size-select`,
+      a `'use client'` module, so the server got a client reference rather than
+      the number. The constants now live in `lib/pagination.ts` and both the
+      control and the schemas import them from there. `next build` does not
+      catch this -- the boundary only fails when the page actually renders.
 
 - [x] **2026-09-05** Adversarial audit of the member-principal work found four
       real defects, all fixed, applied, and covered by regression cases in

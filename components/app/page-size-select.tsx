@@ -9,11 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-
-/** What a list offers. The query schemas clamp to this range independently. */
-export const PAGE_SIZES = [10, 25, 50, 100] as const
-
-export const DEFAULT_PAGE_SIZE = 25
+import { DEFAULT_PAGE_SIZE, PAGE_SIZES } from '@/lib/pagination'
 
 /**
  * How many rows a list shows. Lives in the URL like every other filter, so a

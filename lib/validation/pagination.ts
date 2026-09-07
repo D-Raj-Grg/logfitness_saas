@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { DEFAULT_PAGE_SIZE, PAGE_SIZES } from '@/components/app/page-size-select'
+import { DEFAULT_PAGE_SIZE, PAGE_SIZES } from '@/lib/pagination'
 
 /**
  * How many rows a list returns. Clamped to the sizes the control offers rather
