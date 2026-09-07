@@ -571,3 +571,198 @@ begin
 
   raise notice 'chain_layer: staff assignment manager-ceiling assertions OK';
 end $$;
+
+-- Task 7 (/reports/attendance, /reports/plan-mix): attendance_trend's
+-- check-in counts must agree with attendance_day_summary for the same
+-- branch/day, distinct_members must never exceed check_ins, plan_mix's
+-- share_pct over a scope must sum to 100 (within rounding) and must not
+-- divide by zero when the scope has no active memberships, and the branch
+-- list must still be a filter and not a permission grant for both.
+do $$
+declare
+  v_org_a uuid;
+  v_org_b uuid;
+  v_branch_a1 uuid;
+  v_branch_a2 uuid;
+  v_branch_b1 uuid;
+  v_owner uuid;
+  v_plan_month uuid;
+  v_plan_year uuid;
+  v_res jsonb;
+  v_member1 uuid;
+  v_member2 uuid;
+  v_member3 uuid;
+  v_today date;
+  v_check_ins_trend bigint;
+  v_distinct_trend bigint;
+  v_check_ins_summary bigint;
+  v_distinct_summary bigint;
+  v_rows bigint;
+  v_sum_share numeric;
+  v_active_month bigint;
+  v_active_year bigint;
+  rec record;
+begin
+  insert into public.orgs (name, slug, timezone) values ('Gate7 Org A', 'gate7-org-a-test', 'Asia/Kathmandu')
+    returning id into v_org_a;
+  insert into public.orgs (name, slug, timezone) values ('Gate7 Org B', 'gate7-org-b-test', 'Asia/Kathmandu')
+    returning id into v_org_b;
+
+  insert into public.branches (org_id, name) values (v_org_a, 'A1') returning id into v_branch_a1;
+  insert into public.branches (org_id, name) values (v_org_a, 'A2') returning id into v_branch_a2;
+  insert into public.branches (org_id, name) values (v_org_b, 'B1') returning id into v_branch_b1;
+
+  insert into public.staff (org_id, full_name, email, role, branch_ids, status)
+  values (v_org_a, 'Gate7 Owner', 'owner@gate7-org-a-test.example', 'owner', '{}', 'active')
+  returning id into v_owner;
+
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', v_org_a::text, 'staff_id', v_owner::text,
+    'staff_role', 'owner', 'branch_ids', json_build_array()
+  )::text, true);
+  execute 'set local role authenticated';
+
+  insert into public.membership_plans
+    (org_id, name, plan_type, duration_days, price_paisa, branch_ids)
+  values (v_org_a, 'Gate7 Monthly', 'time', 30, 100000, array[v_branch_a1])
+  returning id into v_plan_month;
+
+  insert into public.membership_plans
+    (org_id, name, plan_type, duration_days, price_paisa, branch_ids)
+  values (v_org_a, 'Gate7 Yearly', 'time', 365, 900000, array[v_branch_a1])
+  returning id into v_plan_year;
+
+  -- Two active memberships on the monthly plan, one on the yearly plan.
+  v_res := public.register_member(
+    'Gate7 Member One', '9800000101', v_branch_a1,
+    p_plan_id => v_plan_month, p_amount_paid_paisa => 100000
+  );
+  v_member1 := (v_res ->> 'member_id')::uuid;
+
+  v_res := public.register_member(
+    'Gate7 Member Two', '9800000102', v_branch_a1,
+    p_plan_id => v_plan_month, p_amount_paid_paisa => 100000
+  );
+  v_member2 := (v_res ->> 'member_id')::uuid;
+
+  v_res := public.register_member(
+    'Gate7 Member Three', '9800000103', v_branch_a1,
+    p_plan_id => v_plan_year, p_amount_paid_paisa => 900000
+  );
+  v_member3 := (v_res ->> 'member_id')::uuid;
+
+  v_today := public.org_today(v_org_a);
+
+  -- Attendance: member1 checks in today and yesterday (two rows, one
+  -- person -- check_ins must exceed distinct_members for that member's
+  -- span). member2 checks in today only, alongside member1.
+  --
+  -- attended_on is derived by the prepare_attendance_row trigger from
+  -- checked_in_at (never trusted from the caller), so the "yesterday" row
+  -- must set checked_in_at explicitly rather than attended_on.
+  insert into public.attendance (org_id, branch_id, member_id, checked_in_by)
+  values (v_org_a, v_branch_a1, v_member1, v_owner);
+  insert into public.attendance (org_id, branch_id, member_id, checked_in_by, checked_in_at)
+  values (
+    v_org_a, v_branch_a1, v_member1, v_owner,
+    (v_today - 1 + time '12:00')::timestamp at time zone 'Asia/Kathmandu'
+  );
+  insert into public.attendance (org_id, branch_id, member_id, checked_in_by)
+  values (v_org_a, v_branch_a1, v_member2, v_owner);
+
+  -- 1. attendance_trend for a single day/branch must agree with
+  --    attendance_day_summary for the same day/branch.
+  select coalesce(sum(check_ins), 0), coalesce(sum(distinct_members), 0)
+    into v_check_ins_trend, v_distinct_trend
+  from public.attendance_trend(array[v_branch_a1], v_today, v_today, 'day');
+
+  select coalesce(sum(check_ins), 0), coalesce(sum(distinct_members), 0)
+    into v_check_ins_summary, v_distinct_summary
+  from public.attendance_day_summary(v_today, array[v_branch_a1]);
+
+  if v_check_ins_trend is distinct from v_check_ins_summary then
+    raise exception 'gate7.1: attendance_trend check_ins (%) <> attendance_day_summary (%)',
+      v_check_ins_trend, v_check_ins_summary;
+  end if;
+  if v_distinct_trend is distinct from v_distinct_summary then
+    raise exception 'gate7.1: attendance_trend distinct_members (%) <> attendance_day_summary (%)',
+      v_distinct_trend, v_distinct_summary;
+  end if;
+  if v_check_ins_trend <> 2 or v_distinct_trend <> 2 then
+    raise exception 'gate7.1: expected 2 check_ins and 2 distinct_members today, got % / %',
+      v_check_ins_trend, v_distinct_trend;
+  end if;
+
+  -- 2. distinct_members must never exceed check_ins, per row. Over the two
+  --    days member1 alone produced 2 check_ins but is still 1 distinct
+  --    member -- assert that at the row level for every row returned.
+  for rec in
+    select * from public.attendance_trend(array[v_branch_a1], v_today - 1, v_today, 'month')
+  loop
+    if rec.distinct_members > rec.check_ins then
+      raise exception 'gate7.2: distinct_members (%) > check_ins (%) for period %',
+        rec.distinct_members, rec.check_ins, rec.period;
+    end if;
+  end loop;
+
+  select check_ins, distinct_members into v_check_ins_trend, v_distinct_trend
+  from public.attendance_trend(array[v_branch_a1], v_today - 1, v_today, 'month');
+
+  if v_check_ins_trend <> 3 then
+    raise exception 'gate7.2: expected 3 check_ins across the two days, got %', v_check_ins_trend;
+  end if;
+  if v_distinct_trend <> 2 then
+    raise exception 'gate7.2: expected 2 distinct_members across the two days, got %', v_distinct_trend;
+  end if;
+
+  -- 3. plan_mix share_pct over a scope with active memberships sums to 100
+  --    (within rounding): 2 of 3 active memberships on the monthly plan,
+  --    1 of 3 on the yearly plan.
+  select coalesce(sum(share_pct), 0) into v_sum_share
+  from public.plan_mix(array[v_branch_a1]);
+
+  if abs(v_sum_share - 100.0) > 0.2 then
+    raise exception 'gate7.3: plan_mix share_pct should sum to ~100, got %', v_sum_share;
+  end if;
+
+  select active_memberships into v_active_month
+  from public.plan_mix(array[v_branch_a1]) where plan_id = v_plan_month;
+  select active_memberships into v_active_year
+  from public.plan_mix(array[v_branch_a1]) where plan_id = v_plan_year;
+
+  if v_active_month <> 2 then
+    raise exception 'gate7.3: expected 2 active memberships on the monthly plan, got %', v_active_month;
+  end if;
+  if v_active_year <> 1 then
+    raise exception 'gate7.3: expected 1 active membership on the yearly plan, got %', v_active_year;
+  end if;
+
+  -- 4. plan_mix on a scope with no active memberships returns zero rows,
+  --    not a division-by-zero error.
+  select count(*) into v_rows from public.plan_mix(array[v_branch_a2]);
+  if v_rows <> 0 then
+    raise exception 'gate7.4: plan_mix on an empty scope should return zero rows, got %', v_rows;
+  end if;
+
+  -- 5. The branch list is a filter, never a permission grant: org A's owner
+  --    asking for org B's branch gets zero rows from both functions.
+  select count(*) into v_rows
+  from public.attendance_trend(array[v_branch_b1], null, null, 'day');
+  if v_rows <> 0 then
+    raise exception 'gate7.5: attendance_trend on another org''s branch should return zero rows, got %', v_rows;
+  end if;
+
+  select count(*) into v_rows from public.plan_mix(array[v_branch_b1]);
+  if v_rows <> 0 then
+    raise exception 'gate7.5: plan_mix on another org''s branch should return zero rows, got %', v_rows;
+  end if;
+
+  execute 'reset role';
+  perform set_config('request.jwt.claims', null, true);
+
+  delete from public.branches where org_id in (v_org_a, v_org_b);
+  delete from public.orgs where id in (v_org_a, v_org_b);
+
+  raise notice 'chain_layer: attendance_trend and plan_mix assertions OK';
+end $$;

@@ -64,3 +64,45 @@ export async function membershipMovement(args: {
   if (error) throw error
   return data ?? []
 }
+
+/**
+ * Check-ins by period and branch. distinct_members is the honest number: one
+ * member who trains six times is six check_ins but one person still using
+ * the gym, and distinct_members is what tells you whether the branch is
+ * growing.
+ */
+export async function attendanceTrend(args: {
+  branchIds?: string[] | null
+  from?: string
+  to?: string
+  groupBy?: ReportPeriod
+}) {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase.rpc('attendance_trend', {
+    p_branch_ids: args.branchIds ?? undefined,
+    p_from: args.from ?? undefined,
+    p_to: args.to ?? undefined,
+    p_group_by: args.groupBy ?? 'day',
+  })
+
+  if (error) throw error
+  return data ?? []
+}
+
+/**
+ * Active memberships and billed revenue by plan and branch. share_pct is
+ * each row's share of ALL active memberships in scope (every branch
+ * branchIds allows, summed together), not a share confined to that row's
+ * own branch -- pass a single branch id to get that branch's own mix.
+ */
+export async function planMix(branchIds?: string[] | null) {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase.rpc('plan_mix', {
+    p_branch_ids: branchIds ?? undefined,
+  })
+
+  if (error) throw error
+  return data ?? []
+}

@@ -1580,6 +1580,21 @@ export type Database = {
           in_gym_now: number
         }[]
       }
+      attendance_trend: {
+        Args: {
+          p_branch_ids?: string[]
+          p_from?: string
+          p_group_by?: string
+          p_to?: string
+        }
+        Returns: {
+          branch_id: string
+          branch_name: string
+          check_ins: number
+          distinct_members: number
+          period: string
+        }[]
+      }
       book_class_session: {
         Args: { p_member_id?: string; p_session_id: string }
         Returns: Json
@@ -1751,6 +1766,19 @@ export type Database = {
         }[]
       }
       org_today: { Args: { p_org_id: string }; Returns: string }
+      plan_mix: {
+        Args: { p_branch_ids?: string[] }
+        Returns: {
+          active_memberships: number
+          branch_id: string
+          branch_name: string
+          plan_id: string
+          plan_kind: string
+          plan_name: string
+          revenue_paisa: number
+          share_pct: number
+        }[]
+      }
       plan_sold_at: {
         Args: { p_branch_id: string; p_plan_id: string }
         Returns: boolean
