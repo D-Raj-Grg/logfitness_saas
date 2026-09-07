@@ -26,6 +26,26 @@ const REPORTS = [
     href: '/payments?view=arrears',
     description: 'Who owes money, and for how long. Oldest debts first.',
   },
+  {
+    title: 'Revenue',
+    href: '/reports/revenue',
+    description: 'Gross, refunds, reversals and net, by period, branch and method.',
+  },
+  {
+    title: 'Membership movement',
+    href: '/reports/movement',
+    description: 'New, renewed, expired and churned members, by period and branch.',
+  },
+  {
+    title: 'Attendance trend',
+    href: '/reports/attendance',
+    description: 'Check-ins and distinct members over time, across branches.',
+  },
+  {
+    title: 'Plan mix',
+    href: '/reports/plans',
+    description: 'Active memberships and revenue by plan, per branch.',
+  },
 ]
 
 export default async function ReportsPage() {
