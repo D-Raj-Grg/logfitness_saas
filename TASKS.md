@@ -397,6 +397,56 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       If another RPC ever needs the same trick, lift it into a shared helper
       rather than re-deriving the convention.
 
+- [x] **2026-09-07** Members can be archived instead of deleted:
+      `members.archived_at` / `archived_reason` / `archived_by`, the
+      `archive_member` and `restore_member` RPCs, an Archived filter on
+      `/members`, and hiding archived rows from the list, the check-in search,
+      the dashboard tiles and `absent_members()`. The real delete stays
+      owner-only (RLS policy + `requireRole('owner')` + typed-name confirm) and
+      cascades the member's financial history away with them.
+- [x] **2026-09-07** Registration and renewal ask what was actually paid --
+      paid in full / part paid / unpaid -- so a failed QR is not recorded as
+      cash. An unpaid sale raises the invoice in full and the due shows on the
+      profile.
+- [x] **2026-09-07** A sale can start on a future date from the registration
+      form (`register_member(p_start_date)`), which lands as an `upcoming`
+      membership.
+- [x] **2026-09-07** `adjust_membership_dates()` moves the window of a
+      membership already sold. Owner or the branch's manager only, reason
+      required and appended to the membership notes; an expired membership goes
+      back to active when its new end date is ahead. The start date may move
+      too -- for the member who pays today and asks to start Tuesday -- but only
+      through this RPC, only before any check-in against that membership, and
+      never while frozen; the end date shifts with it so the term is preserved.
+      `guard_membership_immutability` gates that on a transaction-local GUC the
+      RPC sets, so a direct update is still refused. Gate:
+      `supabase/tests/member_archive_and_dates.sql`.
+- [x] **2026-09-07** `reverse_payment()` corrects a payment that was recorded
+      but never received. New `reversal` value on `payment_kind`, widened
+      `payments_kind_shape`, reason required, method carried over from the
+      original so the drawer line lands on the right column. Owner or the
+      branch's manager only. "Not paid" sits beside "Refund" on the member
+      profile; the collection sheet labels the line "never received" and the day
+      nets to zero. Gate: `supabase/tests/reverse_payment.sql`.
+- [x] **2026-09-07** Every reason box (reversal, refund, cancel, freeze notes,
+      mark as left, archive, date adjustment) now shows four one-tap chips above
+      an always-visible textarea -- `components/forms/reason-field.tsx`. Chips
+      fill the box rather than replacing it, and tapping the active chip clears
+      it; nothing is hidden behind an "Other" option, because these sentences
+      are read back months later during a reconciliation.
+- [ ] **2026-09-07** A reversal prints as a "Payment correction" through the
+      existing receipt route. Fine as a record, but it is not a receipt -- if
+      members are ever handed one, it deserves its own wording rather than a
+      relabelled receipt.
+- [ ] **2026-09-07** Archiving does not touch the membership, so an archived
+      member with a live plan still counts in the collection and arrears
+      reports. That is deliberate -- a due is a due -- but if archiving is ever
+      used to write off a bad debt, arrears needs its own answer.
+- [ ] **2026-09-07** `supabase/tests/member_archive_and_dates.sql` was run
+      through the Supabase MCP rather than psql (no CLI login on this machine),
+      so it is not wired into any CI step yet. Neither are the older spine
+      tests.
+
 ## Open questions (from the PRD)
 
 - [ ] Which SMS/Viber gateway for Nepal, and cost per message at chain volume?

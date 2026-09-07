@@ -101,6 +101,52 @@ added what.
 Known gap: because the desk cannot open `/plans`, a duplicate plan name is
 refused without them being able to see the plan they collided with.
 
+**Scope decision (2026-09-07): archiving is the delete the desk gets.** "Delete
+this member" at the counter means a duplicate entry or a walk-in who never came
+back -- not "destroy the cash trail". So `members.archived_at` is its own axis,
+separate from `left` (a fact about a member who stopped training, which reports
+count on). Archiving hides the member from the list, the check-in search, the
+dashboard tiles and the absent-members report, and changes no membership,
+invoice or derived status; `archive_member` / `restore_member` carry it, and the
+Archived filter on `/members` is where they come back from.
+
+The real delete stays owner-only -- the `owners delete members` policy, plus
+`requireRole('owner')` and a typed-name confirmation -- and takes the member's
+memberships, invoices and payments with it through the cascade.
+
+**Scope decision (2026-09-07): dates.** A sale may start in the future
+(`register_member` now takes `p_start_date`, which `renew_membership` already
+resolved and marks `upcoming`), and the window of a membership already sold can
+be moved by `adjust_membership_dates` -- owner or the branch's manager only,
+reason required, appended to the membership notes and recorded in `audit_log`.
+Free days are money, so the front desk sells and freezes but does not move dates.
+
+Moving the start date is the narrow exception to append-only. It is allowed only
+through that RPC, only while the membership has no attendance behind it (once
+someone has trained on it, when it started is a fact about attendance, not a
+plan), and never while frozen. `guard_membership_immutability` stays the
+enforcement point: it opens for `start_date` only when the function has set
+`app.shift_membership_dates` on the transaction, which a direct PostgREST update
+cannot do. The dialog shifts the end date by the same number of days, because
+the member bought a term, not a pair of dates. Plan, price, discount, branch and
+member remain immutable: this is not a rewrite of the sale.
+Gate: `supabase/tests/member_archive_and_dates.sql`.
+
+**Payment status at the point of sale.** Registration and renewal both ask what
+actually came in -- paid in full, part paid, or unpaid -- because a failed QR
+must not be recorded as cash. An unpaid sale still raises the invoice in full,
+so the due lands on the profile and in the arrears report.
+
+**Reversals (2026-09-07).** When money was recorded but never received -- "I'll
+pay tomorrow", said after the sale was rung up -- the correction is
+`reverse_payment`, a third `payment_kind` beside `payment` and `refund`. It is
+mechanically a refund (a negative row the invoice totals follow back into a due)
+but reported separately, because a refund says cash left the drawer and gross
+takings should not count a note that never arrived. Owner and the branch's
+manager only: the person who recorded the money is not the person who gets to
+say it never came. Payments stay immutable and nothing is deleted.
+Gate: `supabase/tests/reverse_payment.sql`.
+
 ## 5. Data model
 
 ```
