@@ -21,7 +21,9 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 - [x] Staff invite flow: owner invites by email → accept → `staff` row created
 - [x] Replace `app/signup` with org onboarding (create org + owner + first branch)
 - [x] `app/(app)` shell: sidebar, role-aware nav, user menu
-- [ ] Branch switcher in the app shell header (needs Phase 3 branch scoping)
+- [x] Branch switcher in the app shell header — `lib/scope.ts` resolves scope once
+      server-side from `?branch=` plus an `lg_branch` cookie; the switcher renders
+      in the shell only when the caller covers more than one branch.
 - [x] Generate TypeScript DB types via Supabase MCP; wire into `lib/db`
 - [x] Currency (NPR paisa) and date/time (Asia/Kathmandu) formatting helpers
 - [x] Seed script: demo org, 3 branches, staff across all four roles (`supabase/seed.sql`, `npm run db:seed`)
@@ -65,9 +67,18 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Phase 3 — Chain layer
 
-- [ ] HQ dashboard: active members, today's collection, today's check-ins, expiring — all branches
-- [ ] Per-branch drill-down from every HQ metric
-- [ ] Branch CRUD (owner only)
+- [x] HQ dashboard: active members, today's collection, today's check-ins, expiring — all branches.
+      One `org_snapshot(p_branch_ids uuid[])` RPC returns a row per branch plus a
+      totals row, replacing the one-collection-query-per-branch N+1 the dashboard
+      used to issue.
+- [x] Per-branch drill-down from every HQ metric — every number in the branch
+      table links into the screen that already shows that detail, scoped by
+      `?branch=`. No new detail pages.
+- [x] Branch CRUD (owner only) — `/branches` lists, creates, edits and
+      deactivates. **Never deletes:** an `owners delete branches` policy left over
+      from the foundation migrations was found still in place and dropped
+      (`20260908100200_branch_write_policies.sql`), so the rule is enforced by the
+      database rather than by the absence of a button.
 - [x] Staff management — invite, role and branch assignment, deactivate/reactivate
       (`/staff`, `inviteStaff` / `setStaffStatus`). Role and branches are set at
       invite time.
@@ -514,6 +525,24 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       tells a new contributor to edit `app/page.tsx` and nothing about the
       tenancy model, the seed, or the SQL gates. `CHANGELOG.md` now exists and
       should be linked from it once it is rewritten.
+
+- [ ] **2026-09-07** Nothing in the codebase reads `branches.status`. A branch
+      deactivated on `/branches` still appears in the registration branch picker
+      and in staff assignment — deactivating changes what the branch list says
+      and nothing else. Deliberately left out of the Branch CRUD task rather
+      than smuggled into it; it needs its own pass over every place a branch is
+      offered for selection.
+- [ ] **2026-09-07** Migration filenames do not match the versions Supabase
+      recorded, for all 58 of them — `member_archive` is `20260907044352` on the
+      remote and `20260907120000` in git. The names match; only the numeric
+      prefix differs, because `apply_migration` assigns its own timestamp while
+      the mirrored file is named by hand. Harmless until someone logs the CLI in
+      and runs `supabase migration repair`, which will have to reconcile the lot.
+- [ ] **2026-09-07** Three remote migrations have no file in git, beyond the
+      known Phase 0 gap: `renew_membership_casts_status_enum` (20260905032657),
+      `sync_invoice_totals_casts_status_enum` (20260905032812) and
+      `register_member_error_hints` (20260905172322). A project rebuilt from git
+      alone would miss three fixes.
 
 ## Open questions (from the PRD)
 
