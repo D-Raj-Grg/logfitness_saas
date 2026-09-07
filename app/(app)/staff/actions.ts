@@ -6,7 +6,11 @@ import { z } from 'zod'
 import { requireRole } from '@/lib/auth'
 import { assignableRoles } from '@/lib/roles'
 import { createClient } from '@/lib/supabase/server'
-import { inviteStaffSchema, setStaffStatusSchema } from '@/lib/validation/staff'
+import {
+  inviteStaffSchema,
+  setStaffStatusSchema,
+  updateStaffAssignmentSchema,
+} from '@/lib/validation/staff'
 
 export type StaffFormState = {
   error?: string
@@ -124,4 +128,57 @@ export async function setStaffStatus(
 
   revalidatePath('/staff')
   return { success: 'Updated.' }
+}
+
+export async function updateStaffAssignment(
+  _prevState: StaffFormState,
+  formData: FormData
+): Promise<StaffFormState> {
+  const actor = await requireRole('owner', 'manager')
+
+  const parsed = updateStaffAssignmentSchema.safeParse({
+    staffId: formData.get('staffId'),
+    role: formData.get('role'),
+    branchIds: formData.getAll('branchIds').map(String),
+  })
+
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+  }
+
+  // The same ceiling inviteStaff applies: a manager staffs their own floor and
+  // cannot create peers or superiors. RLS is the backstop; this states the rule.
+  if (!assignableRoles(actor.role).includes(parsed.data.role)) {
+    return { fieldErrors: { role: ['You cannot give someone that role.'] } }
+  }
+
+  if (parsed.data.staffId === actor.staffId) {
+    return { error: 'You cannot change your own role or branches here.' }
+  }
+
+  // A manager may only assign branches they cover themselves.
+  if (actor.role !== 'owner') {
+    const outside = parsed.data.branchIds.filter((id) => !actor.branchIds.includes(id))
+    if (outside.length > 0) {
+      return { fieldErrors: { branchIds: ['You can only assign branches you work at.'] } }
+    }
+  }
+
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from('staff')
+    .update({
+      role: parsed.data.role,
+      branch_ids: parsed.data.role === 'owner' ? [] : parsed.data.branchIds,
+    })
+    .eq('id', parsed.data.staffId)
+
+  if (error) {
+    // The guard trigger raises check_violation with a sentence worth showing.
+    return { error: error.message }
+  }
+
+  revalidatePath('/staff')
+  return { success: 'Saved. It takes effect the next time they sign in.' }
 }

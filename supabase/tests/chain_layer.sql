@@ -202,3 +202,162 @@ begin
 
   raise notice 'chain_layer: branch write policy assertions OK';
 end $$;
+
+-- Task 5 (staff role/branch reassignment): guard_staff_assignment blocks
+-- demoting or deactivating the last active owner, a staff member (owner or
+-- manager -- RLS otherwise lets both edit their own row) changing their own
+-- role, a non-owner ending up with no branches, and a manager reaching past
+-- a peer manager. A manager may still edit a front-desk/trainer row they
+-- cover, which the last assertion checks does NOT get refused.
+do $$
+declare
+  v_org_a uuid;
+  v_branch_1 uuid;
+  v_branch_2 uuid;
+  v_owner uuid;
+  v_mgr1 uuid;
+  v_mgr2 uuid;
+  v_fd uuid;
+  v_failed boolean;
+begin
+  insert into public.orgs (name, slug, timezone) values ('Gate5 Org A', 'gate5-org-a-test', 'Asia/Kathmandu')
+    returning id into v_org_a;
+
+  insert into public.branches (org_id, name) values (v_org_a, 'B1') returning id into v_branch_1;
+  insert into public.branches (org_id, name) values (v_org_a, 'B2') returning id into v_branch_2;
+
+  insert into public.staff (org_id, full_name, email, role, branch_ids, status)
+  values (v_org_a, 'Gate5 Owner', 'owner@gate5-org-a-test.example', 'owner', '{}', 'active')
+  returning id into v_owner;
+
+  insert into public.staff (org_id, full_name, email, role, branch_ids, status)
+  values (v_org_a, 'Gate5 Mgr1', 'mgr1@gate5-org-a-test.example', 'manager', array[v_branch_1], 'active')
+  returning id into v_mgr1;
+
+  insert into public.staff (org_id, full_name, email, role, branch_ids, status)
+  values (v_org_a, 'Gate5 Mgr2', 'mgr2@gate5-org-a-test.example', 'manager', array[v_branch_2], 'active')
+  returning id into v_mgr2;
+
+  insert into public.staff (org_id, full_name, email, role, branch_ids, status)
+  values (v_org_a, 'Gate5 FrontDesk', 'fd@gate5-org-a-test.example', 'front_desk', array[v_branch_1], 'active')
+  returning id into v_fd;
+
+  -- 1. Demoting the only active owner in an org must be refused.
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', v_org_a::text, 'staff_id', v_owner::text,
+    'staff_role', 'owner', 'branch_ids', json_build_array()
+  )::text, true);
+  execute 'set local role authenticated';
+
+  v_failed := false;
+  begin
+    update public.staff set role = 'manager' where id = v_owner;
+  exception when others then v_failed := true;
+  end;
+  execute 'reset role';
+  if not v_failed then
+    raise exception 'gate5.1: demoting the only active owner should have been refused';
+  end if;
+
+  -- 1b. The same guard covers deactivation, not just demotion: the org loses
+  --     its only administrator either way.
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', v_org_a::text, 'staff_id', v_owner::text,
+    'staff_role', 'owner', 'branch_ids', json_build_array()
+  )::text, true);
+  execute 'set local role authenticated';
+
+  v_failed := false;
+  begin
+    update public.staff set status = 'inactive' where id = v_owner;
+  exception when others then v_failed := true;
+  end;
+  execute 'reset role';
+  if not v_failed then
+    raise exception 'gate5.1b: deactivating the only active owner should have been refused';
+  end if;
+
+  -- 2. A staff member changing their own role must be refused. RLS permits a
+  --    manager to update their own row, so without this the trigger's other
+  --    checks would let it through.
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', v_org_a::text, 'staff_id', v_mgr1::text,
+    'staff_role', 'manager', 'branch_ids', json_build_array(v_branch_1::text)
+  )::text, true);
+  execute 'set local role authenticated';
+
+  v_failed := false;
+  begin
+    update public.staff set role = 'front_desk' where id = v_mgr1;
+  exception when others then v_failed := true;
+  end;
+  execute 'reset role';
+  if not v_failed then
+    raise exception 'gate5.2: a manager changing their own role should have been refused';
+  end if;
+
+  -- 3. Setting a non-owner role with an empty branch_ids must be refused.
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', v_org_a::text, 'staff_id', v_owner::text,
+    'staff_role', 'owner', 'branch_ids', json_build_array()
+  )::text, true);
+  execute 'set local role authenticated';
+
+  v_failed := false;
+  begin
+    update public.staff set branch_ids = '{}' where id = v_fd;
+  exception when others then v_failed := true;
+  end;
+  execute 'reset role';
+  if not v_failed then
+    raise exception 'gate5.3: a non-owner with empty branch_ids should have been refused';
+  end if;
+
+  -- 4. A manager reassigning another manager must be refused. RLS's own
+  --    check only excludes role = 'owner' from what a manager may touch,
+  --    which leaves peer managers exposed without this.
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', v_org_a::text, 'staff_id', v_mgr1::text,
+    'staff_role', 'manager', 'branch_ids', json_build_array(v_branch_1::text)
+  )::text, true);
+  execute 'set local role authenticated';
+
+  v_failed := false;
+  begin
+    update public.staff set branch_ids = array[v_branch_1] where id = v_mgr2;
+  exception when others then v_failed := true;
+  end;
+  execute 'reset role';
+  if not v_failed then
+    raise exception 'gate5.4: a manager reassigning another manager should have been refused';
+  end if;
+
+  -- 5. Negative control: a manager editing a front-desk/trainer row they
+  --    cover must still succeed. Without this, a guard broad enough to pass
+  --    1-4 could also be broad enough to break ordinary reassignment.
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', v_org_a::text, 'staff_id', v_mgr1::text,
+    'staff_role', 'manager', 'branch_ids', json_build_array(v_branch_1::text)
+  )::text, true);
+  execute 'set local role authenticated';
+
+  begin
+    update public.staff set role = 'trainer' where id = v_fd;
+  exception when others then
+    raise exception 'gate5.5: a manager editing a front_desk/trainer row they cover should have succeeded';
+  end;
+  execute 'reset role';
+
+  perform set_config('request.jwt.claims', null, true);
+
+  delete from public.branches where org_id = v_org_a;
+  delete from public.orgs where id = v_org_a;
+
+  raise notice 'chain_layer: staff assignment guard assertions OK';
+end $$;

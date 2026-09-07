@@ -5,6 +5,7 @@ import { useActionState } from 'react'
 import { setStaffStatus, type StaffFormState } from '@/app/(app)/staff/actions'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { EditStaffDialog } from '@/components/staff/edit-staff-dialog'
 import {
   Table,
   TableBody,
@@ -13,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ROLE_LABELS, type StaffRole } from '@/lib/roles'
+import { ROLE_LABELS, assignableRoles, type StaffRole } from '@/lib/roles'
 
 export type StaffListRow = {
   id: string
@@ -57,11 +58,17 @@ function StatusToggle({ row }: { row: StaffListRow }) {
 export function StaffTable({
   rows,
   branchNames,
+  branches,
   currentStaffId,
+  actorRole,
+  actorBranchIds,
 }: {
   rows: StaffListRow[]
   branchNames: Record<string, string>
+  branches: { id: string; name: string }[]
   currentStaffId: string
+  actorRole: StaffRole
+  actorBranchIds: string[]
 }) {
   if (rows.length === 0) {
     return (
@@ -106,7 +113,20 @@ export function StaffTable({
               {row.id === currentStaffId ? (
                 <span className="text-xs text-muted-foreground">You</span>
               ) : (
-                <StatusToggle row={row} />
+                <div className="flex justify-end gap-2">
+                  {/* Only offer editing rows this actor is actually allowed
+                      to reassign -- assignableRoles is the same ceiling the
+                      action enforces, so a disabled path is never shown. */}
+                  {assignableRoles(actorRole).includes(row.role) ? (
+                    <EditStaffDialog
+                      row={row}
+                      actorRole={actorRole}
+                      actorBranchIds={actorBranchIds}
+                      branches={branches}
+                    />
+                  ) : null}
+                  <StatusToggle row={row} />
+                </div>
               )}
             </TableCell>
           </TableRow>

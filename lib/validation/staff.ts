@@ -46,4 +46,10 @@ export const setStaffStatusSchema = z.object({
   status: staffStatusSchema,
 })
 
+export const updateStaffAssignmentSchema = z.object({
+  staffId: z.uuid(),
+  role: z.enum(['owner', 'manager', 'front_desk', 'trainer']),
+  branchIds: z.array(z.uuid()),
+})
+
 export type InviteStaffInput = z.infer<typeof inviteStaffSchema>

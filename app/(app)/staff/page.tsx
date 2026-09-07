@@ -27,7 +27,10 @@ export default async function StaffPage() {
       <StaffTable
         rows={rows as StaffListRow[]}
         branchNames={branchNames}
+        branches={branches}
         currentStaffId={staff.staffId}
+        actorRole={staff.role}
+        actorBranchIds={staff.branchIds}
       />
     </div>
   )
