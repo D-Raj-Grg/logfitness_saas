@@ -17,6 +17,27 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-09-08 — Part of an entry can come back
+
+### Added
+
+- **Take back part of a payment that never arrived** (`47b1678`).
+  `reverse_payment()` takes an amount, for the sale rung up at the full price
+  when the member handed over less. One negative row for the difference, not a
+  full undo plus a fresh payment; the invoice falls to part paid and the balance
+  lands on the profile, in the members list and in arrears. Left empty it takes
+  the whole entry, which is what it always did. What the invoice still holds is
+  the ceiling on any correction, so part reversals cannot be repeated past the
+  original entry. Owner and branch manager only, as before.
+
+### Changed
+
+- **The "never received" dialog asks what was actually paid** (`47b1678`), not
+  what to take back, and subtracts it itself. Doing that arithmetic at the till
+  is how the wrong number gets typed.
+
+---
+
 ## 2026-09-07 — Corrections the front desk actually needs
 
 The day's theme is the gap between what the desk records and what happened:
