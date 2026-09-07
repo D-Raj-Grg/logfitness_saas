@@ -722,6 +722,18 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       branch list produces a valid PostgREST filter rather than a parse error;
       and a trainer reading a dues reminder leaks nothing, because trainers can
       already read `invoices` directly.
+- [x] **2026-09-09** An automated review of the Phase 5 commit flagged the retry
+      and cancel Server Actions as gating on `requireStaff()` while the UI shows
+      them to owners and managers only. Not exploitable -- verified against the
+      live database that a front desk, a trainer and a manager of another branch
+      are each refused `42501` by `retry_notification`, and the gate already
+      asserts the desk case. But it pointed at a worse defect beside it: both
+      actions swallowed the refusal, so a manager resending a message raised at
+      a branch they do not cover saw nothing happen, which is indistinguishable
+      from success. Both now gate on `requireRole('owner', 'manager')` -- the
+      database stays the boundary, the app states the rule, as every other
+      action here does -- and the row actions moved into a client component that
+      reports the outcome through a toast instead of discarding it.
 - [ ] **2026-09-09** `notification_messages` answers an unauthenticated request
       with `401 permission denied for function jwt_member_id`, where
       `device_tokens` and `members` answer `200 []` -- despite carrying a

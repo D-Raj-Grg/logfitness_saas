@@ -1,6 +1,5 @@
-import { resendNotification, stopNotification } from '@/app/(app)/notifications/actions'
+import { NotificationRowActions } from '@/components/notifications/notification-row-actions'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -117,21 +116,8 @@ export function NotificationsTable({
                 ) : null}
               </TableCell>
               <TableCell className="align-top text-right">
-                {canAct && ['failed', 'cancelled', 'skipped'].includes(row.status) ? (
-                  <form action={resendNotification}>
-                    <input type="hidden" name="notificationId" value={row.id} />
-                    <Button type="submit" variant="outline" size="sm">
-                      Send again
-                    </Button>
-                  </form>
-                ) : null}
-                {canAct && row.status === 'queued' ? (
-                  <form action={stopNotification}>
-                    <input type="hidden" name="notificationId" value={row.id} />
-                    <Button type="submit" variant="ghost" size="sm">
-                      Cancel
-                    </Button>
-                  </form>
+                {canAct ? (
+                  <NotificationRowActions notificationId={row.id} status={row.status} />
                 ) : null}
               </TableCell>
             </TableRow>
