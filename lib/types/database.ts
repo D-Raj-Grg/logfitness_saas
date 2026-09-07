@@ -1713,6 +1713,23 @@ export type Database = {
         Args: { p_left_on: string; p_member_id: string }
         Returns: Database["public"]["Enums"]["member_status"]
       }
+      membership_movement: {
+        Args: {
+          p_branch_ids?: string[]
+          p_from?: string
+          p_group_by?: string
+          p_to?: string
+        }
+        Returns: {
+          branch_id: string
+          branch_name: string
+          churned: number
+          expiries: number
+          new_members: number
+          period: string
+          renewals: number
+        }[]
+      }
       mint_qr_token: {
         Args: { p_member_id?: string; p_ttl_seconds?: number }
         Returns: Json
@@ -1800,7 +1817,30 @@ export type Database = {
         }
         Returns: Json
       }
+      report_period: {
+        Args: { p_group_by: string; p_on: string }
+        Returns: string
+      }
       restore_member: { Args: { p_member_id: string }; Returns: Json }
+      revenue_report: {
+        Args: {
+          p_branch_ids?: string[]
+          p_from?: string
+          p_group_by?: string
+          p_to?: string
+        }
+        Returns: {
+          branch_id: string
+          branch_name: string
+          gross_paisa: number
+          method: Database["public"]["Enums"]["payment_method"]
+          net_paisa: number
+          period: string
+          refunds_paisa: number
+          reversals_paisa: number
+          txn_count: number
+        }[]
+      }
       reverse_payment: {
         Args: {
           p_amount_paisa?: number

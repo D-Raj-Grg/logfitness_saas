@@ -361,3 +361,213 @@ begin
 
   raise notice 'chain_layer: staff assignment guard assertions OK';
 end $$;
+
+-- Task 6 (/reports/revenue, /reports/membership-movement): revenue_report
+-- must agree with daily_collection about the same branch/day, reversals must
+-- stay out of refunds_paisa, the branch list must still be a filter and not a
+-- permission grant, and a renewal must never be double-counted as new.
+do $$
+declare
+  v_org_a uuid;
+  v_org_b uuid;
+  v_branch_a1 uuid;
+  v_branch_b1 uuid;
+  v_owner uuid;
+  v_plan_id uuid;
+  v_member_id uuid;
+  v_payment_id uuid;
+  v_res jsonb;
+  v_today date;
+  v_net_revenue bigint;
+  v_net_daily bigint;
+  v_reversals_col bigint;
+  v_refunds_col bigint;
+  v_rows bigint;
+  v_new_members bigint;
+  v_renewals bigint;
+begin
+  insert into public.orgs (name, slug, timezone) values ('Gate6 Org A', 'gate6-org-a-test', 'Asia/Kathmandu')
+    returning id into v_org_a;
+  insert into public.orgs (name, slug, timezone) values ('Gate6 Org B', 'gate6-org-b-test', 'Asia/Kathmandu')
+    returning id into v_org_b;
+
+  insert into public.branches (org_id, name) values (v_org_a, 'A1') returning id into v_branch_a1;
+  insert into public.branches (org_id, name) values (v_org_b, 'B1') returning id into v_branch_b1;
+
+  insert into public.staff (org_id, full_name, email, role, branch_ids, status)
+  values (v_org_a, 'Gate6 Owner', 'owner@gate6-org-a-test.example', 'owner', '{}', 'active')
+  returning id into v_owner;
+
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', v_org_a::text, 'staff_id', v_owner::text,
+    'staff_role', 'owner', 'branch_ids', json_build_array()
+  )::text, true);
+  execute 'set local role authenticated';
+
+  insert into public.membership_plans
+    (org_id, name, plan_type, duration_days, price_paisa, branch_ids)
+  values (v_org_a, 'Gate6 Monthly', 'time', 30, 100000, array[v_branch_a1])
+  returning id into v_plan_id;
+
+  -- First membership, sold through register_member. This must land in
+  -- new_members, never renewals.
+  v_res := public.register_member(
+    'Gate6 Member', '9800000001', v_branch_a1,
+    p_plan_id => v_plan_id, p_amount_paid_paisa => 100000
+  );
+  v_member_id := (v_res ->> 'member_id')::uuid;
+  v_payment_id := (v_res ->> 'payment_id')::uuid;
+
+  v_today := public.org_today(v_org_a);
+
+  -- 1. revenue_report's net for this branch/day must equal daily_collection's
+  --    net for the same branch/day. Two functions disagreeing about one day's
+  --    takings is worse than one of them being wrong.
+  select coalesce(sum(net_paisa), 0) into v_net_revenue
+  from public.revenue_report(array[v_branch_a1], v_today, v_today, 'day');
+
+  select coalesce(sum(amount_paisa), 0) into v_net_daily
+  from public.daily_collection(v_today, array[v_branch_a1]);
+
+  if v_net_revenue is distinct from v_net_daily then
+    raise exception 'gate6.1: revenue_report net (%) <> daily_collection net (%)',
+      v_net_revenue, v_net_daily;
+  end if;
+
+  -- 2. Reversing part of that payment must show up in reversals_paisa, never
+  --    refunds_paisa. A refund says cash left the drawer; a reversal says a
+  --    note that was rung up never arrived.
+  perform public.reverse_payment(v_payment_id, 'gate6 test reversal', 20000);
+
+  select coalesce(sum(reversals_paisa), 0), coalesce(sum(refunds_paisa), 0)
+    into v_reversals_col, v_refunds_col
+  from public.revenue_report(array[v_branch_a1], v_today, v_today, 'day');
+
+  if v_reversals_col <> 20000 then
+    raise exception 'gate6.2: reversals_paisa should be 20000, got %', v_reversals_col;
+  end if;
+  if v_refunds_col <> 0 then
+    raise exception 'gate6.2: refunds_paisa should be 0, got %', v_refunds_col;
+  end if;
+
+  -- Net must still reconcile with daily_collection after the reversal.
+  select coalesce(sum(net_paisa), 0) into v_net_revenue
+  from public.revenue_report(array[v_branch_a1], v_today, v_today, 'day');
+  select coalesce(sum(amount_paisa), 0) into v_net_daily
+  from public.daily_collection(v_today, array[v_branch_a1]);
+  if v_net_revenue is distinct from v_net_daily then
+    raise exception 'gate6.2b: revenue_report net (%) <> daily_collection net (%) after reversal',
+      v_net_revenue, v_net_daily;
+  end if;
+
+  -- 3. Org A's owner asking for Org B's branch gets zero rows. The branch
+  --    list is a filter on top of RLS, never a permission grant beyond it.
+  select count(*) into v_rows
+  from public.revenue_report(array[v_branch_b1], null, null, 'day');
+  if v_rows <> 0 then
+    raise exception 'gate6.3: revenue_report on another org''s branch should return zero rows, got %', v_rows;
+  end if;
+
+  -- 4. A second membership for the same member is a renewal, never counted as
+  --    new again. Append-only history is what makes "first" answerable at all.
+  perform public.renew_membership(v_member_id, v_plan_id, v_branch_a1, v_today);
+
+  select coalesce(sum(new_members), 0), coalesce(sum(renewals), 0)
+    into v_new_members, v_renewals
+  from public.membership_movement(array[v_branch_a1], v_today - 365, v_today, 'month');
+
+  if v_new_members <> 1 then
+    raise exception 'gate6.4: expected exactly 1 new_members, got %', v_new_members;
+  end if;
+  if v_renewals <> 1 then
+    raise exception 'gate6.4: expected exactly 1 renewal, got %', v_renewals;
+  end if;
+
+  execute 'reset role';
+  perform set_config('request.jwt.claims', null, true);
+
+  delete from public.branches where org_id in (v_org_a, v_org_b);
+  delete from public.orgs where id in (v_org_a, v_org_b);
+
+  raise notice 'chain_layer: revenue_report and membership_movement assertions OK';
+end $$;
+
+-- Task 5 follow-up (review finding): guard_staff_assignment's manager
+-- ceiling must mirror "owners and managers invite staff" exactly -- a
+-- manager may only ever leave a covered row as front_desk or trainer, so
+-- promoting one into a peer manager is refused exactly like reaching an
+-- existing peer already was. A manager editing that same row's branches
+-- (no role change) must still succeed.
+do $$
+declare
+  v_org_a uuid;
+  v_branch_1 uuid;
+  v_branch_2 uuid;
+  v_owner uuid;
+  v_mgr1 uuid;
+  v_fd uuid;
+  v_failed boolean;
+begin
+  insert into public.orgs (name, slug, timezone) values ('Gate5b Org A', 'gate5b-org-a-test', 'Asia/Kathmandu')
+    returning id into v_org_a;
+
+  insert into public.branches (org_id, name) values (v_org_a, 'B1') returning id into v_branch_1;
+  insert into public.branches (org_id, name) values (v_org_a, 'B2') returning id into v_branch_2;
+
+  insert into public.staff (org_id, full_name, email, role, branch_ids, status)
+  values (v_org_a, 'Gate5b Owner', 'owner@gate5b-org-a-test.example', 'owner', '{}', 'active')
+  returning id into v_owner;
+
+  insert into public.staff (org_id, full_name, email, role, branch_ids, status)
+  values (v_org_a, 'Gate5b Mgr1', 'mgr1@gate5b-org-a-test.example', 'manager', array[v_branch_1], 'active')
+  returning id into v_mgr1;
+
+  insert into public.staff (org_id, full_name, email, role, branch_ids, status)
+  values (v_org_a, 'Gate5b FrontDesk', 'fd@gate5b-org-a-test.example', 'front_desk', array[v_branch_1], 'active')
+  returning id into v_fd;
+
+  -- 1. A manager promoting a covered front_desk to manager must be refused.
+  --    This is the escalation the RLS WITH CHECK alone does not stop:
+  --    manager's only role ceiling there is role <> 'owner'.
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', v_org_a::text, 'staff_id', v_mgr1::text,
+    'staff_role', 'manager', 'branch_ids', json_build_array(v_branch_1::text)
+  )::text, true);
+  execute 'set local role authenticated';
+
+  v_failed := false;
+  begin
+    update public.staff set role = 'manager' where id = v_fd;
+  exception when others then v_failed := true;
+  end;
+  execute 'reset role';
+  if not v_failed then
+    raise exception 'gate5b.1: a manager promoting a covered front_desk to manager should have been refused';
+  end if;
+
+  -- 2. Editing that same front_desk's branches (no role change) must still
+  --    succeed -- the ceiling fix must not collaterally break ordinary
+  --    reassignment.
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', v_org_a::text, 'staff_id', v_mgr1::text,
+    'staff_role', 'manager', 'branch_ids', json_build_array(v_branch_1::text)
+  )::text, true);
+  execute 'set local role authenticated';
+
+  begin
+    update public.staff set branch_ids = array[v_branch_1] where id = v_fd;
+  exception when others then
+    raise exception 'gate5b.2: a manager editing a covered front_desk''s branches should have succeeded';
+  end;
+  execute 'reset role';
+
+  perform set_config('request.jwt.claims', null, true);
+
+  delete from public.branches where org_id = v_org_a;
+  delete from public.orgs where id = v_org_a;
+
+  raise notice 'chain_layer: staff assignment manager-ceiling assertions OK';
+end $$;
