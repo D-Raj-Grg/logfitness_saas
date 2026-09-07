@@ -1,8 +1,8 @@
 import Link from 'next/link'
 
+import { Pagination } from '@/components/app/pagination'
 import { MemberSearch } from '@/components/members/member-search'
 import { MembersTable } from '@/components/members/members-table'
-import { Pagination } from '@/components/members/pagination'
 import { Button } from '@/components/ui/button'
 import { requireRole } from '@/lib/auth'
 import { listMembers } from '@/lib/db/members'
@@ -62,6 +62,7 @@ export default async function MembersPage({
       <MembersTable rows={result.rows} filtered={filtered} photoUrls={photoUrls} />
 
       <Pagination
+        basePath="/members"
         page={result.page}
         pageSize={result.pageSize}
         total={result.total}

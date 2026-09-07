@@ -27,6 +27,7 @@ import {
   removeMemberPhoto,
   uploadMemberPhoto,
 } from '@/lib/db/photos'
+import { convertVisitor } from '@/lib/db/visitors'
 import type { CurrentStaff } from '@/lib/roles'
 import {
   inviteMemberToAppSchema,
@@ -247,6 +248,20 @@ export async function createMember(
     } catch {
       // Swallowed on purpose -- see above. The edit screen can retry.
     }
+  }
+
+  // Registration may have started from the visitor log. The link is written
+  // after the fact, and a failure to write it does not undo a member who now
+  // exists: the desk can set the status by hand, and refusing the registration
+  // because the bookkeeping failed would be the worse trade.
+  const visitorId = formData.get('visitorId')
+  if (typeof visitorId === 'string' && visitorId) {
+    try {
+      await convertVisitor(visitorId, result.member_id)
+    } catch {
+      // Swallowed on purpose -- see above.
+    }
+    revalidatePath('/visitors')
   }
 
   revalidatePath('/members')

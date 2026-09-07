@@ -147,6 +147,34 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
+- [x] **2026-09-08** Visitor log shipped (`/visitors`): `visitors` table with
+      RLS, `set_visitor_defaults` filling the org's today and the author,
+      `convert_visitor`, the sidebar entry for every role, the log/filters/table
+      UI, and prefilled registration from a visitor row. Scope decision recorded
+      in `PLANNING.md` section 4; gate is `supabase/tests/visitors.sql`.
+- [x] **2026-09-08** Review of the above caught a branch-scoping bug: the read
+      is org-wide but the update policy was not, so a desk that could see an
+      enquiry logged at another branch registered the member and then failed to
+      mark the row -- silently, because the Server Action swallows a failed
+      link. Follow-up is now org-wide for staff
+      (`20260908110200_visitors_follow_up_is_org_wide.sql`); logging stays
+      branch-scoped. Covered by two new cases in the gate.
+- [x] **2026-09-08** Visitor list paginated with a rows-per-page control
+      (10/25/50/100). `Pagination` moved from `components/members/` to
+      `components/app/` and takes a `basePath`; the new `PageSizeSelect` puts
+      the size in the URL and resets to page one. `/members` gains the same
+      control -- its query already accepted `pageSize` with no way to set it.
+      Sort carries `id` as a final tiebreak: rows written in one transaction
+      share `created_at`, and without a unique last sort key a row can appear on
+      two pages and another on none.
+- [x] **2026-09-08** Same tiebreak defect fixed in the two lists that already
+      paged: `listMembers` sorted by `full_name` alone (names repeat -- and a
+      duplicate entry is the very thing archiving exists for) and
+      `listAttendance` by `checked_in_at` alone (two people can be checked in at
+      the same instant). Both now end on `id`. Verified against 24 members
+      sharing three names and 24 check-ins sharing one timestamp: three pages,
+      every row exactly once.
+
 - [x] **2026-09-05** Adversarial audit of the member-principal work found four
       real defects, all fixed, applied, and covered by regression cases in
       `supabase/tests/`. (1) The `member-photos` storage read policy still

@@ -5,17 +5,12 @@ import { CollectionSheet } from '@/components/payments/collection-sheet'
 import { PaymentsFilters, type PaymentsView } from '@/components/payments/payments-filters'
 import { requireRole } from '@/lib/auth'
 import { arrearsReport, dailyCollection } from '@/lib/db/payments'
-import { DEFAULT_TIMEZONE } from '@/lib/format'
+import { todayInTimezone } from '@/lib/format'
 import { resolveBranchScope } from '@/lib/scope'
 import { arrearsQuerySchema, collectionQuerySchema } from '@/lib/validation/payments'
 
 function first(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value
-}
-
-/** Today at the front desk, not on the server. */
-function todayInKathmandu() {
-  return new Date().toLocaleDateString('en-CA', { timeZone: DEFAULT_TIMEZONE })
 }
 
 export default async function PaymentsPage({
@@ -50,7 +45,7 @@ export default async function PaymentsPage({
         <Suspense>
           <PaymentsFilters
             view={view}
-            on={todayInKathmandu()}
+            on={todayInTimezone()}
             branchId={branchId}
             bucket={bucket}
             branches={scope.options}
@@ -66,7 +61,7 @@ export default async function PaymentsPage({
     on: first(params.on),
     branchId: branchId ?? undefined,
   })
-  const on = (query.success && query.data.on) || todayInKathmandu()
+  const on = (query.success && query.data.on) || todayInTimezone()
 
   const rows = await dailyCollection({ on, branchIds: scope.branchIds })
 

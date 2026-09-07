@@ -36,11 +36,19 @@ type Branch = { id: string; name: string }
 
 const NO_GENDER = 'unspecified'
 
+export type MemberPrefill = {
+  visitorId: string
+  fullName: string
+  phone: string
+  branchId: string | null
+}
+
 export function MemberForm({
   member,
   branches,
   photoUrl,
   planContext,
+  prefill,
 }: {
   /** When present the form edits this member instead of registering one. */
   member?: MemberRow
@@ -54,6 +62,12 @@ export function MemberForm({
    * edit screen -- where the profile's own sell dialog is the right tool.
    */
   planContext?: PlanFormContext
+  /**
+   * Registering someone who is already in the visitor log. Their name and
+   * mobile fill the form, and the hidden visitor id is what marks them
+   * converted once the member exists.
+   */
+  prefill?: MemberPrefill
 }) {
   const editing = Boolean(member)
   const [state, formAction, pending] = useActionState<MemberFormState, FormData>(
@@ -61,7 +75,9 @@ export function MemberForm({
     {}
   )
   const [branchId, setBranchId] = useState<string>(
-    member?.home_branch_id ?? (branches.length === 1 ? branches[0].id : '')
+    member?.home_branch_id ??
+      prefill?.branchId ??
+      (branches.length === 1 ? branches[0].id : '')
   )
   const [gender, setGender] = useState<string>(member?.gender ?? NO_GENDER)
   const [pickedUrl, setPickedUrl] = useState<string | null>(null)
@@ -87,6 +103,9 @@ export function MemberForm({
         <form action={formAction} className="flex flex-col gap-6">
           <AuthFormMessage error={state.error} notice={state.success} />
           {member ? <input type="hidden" name="memberId" value={member.id} /> : null}
+          {prefill ? (
+            <input type="hidden" name="visitorId" value={prefill.visitorId} />
+          ) : null}
           <input type="hidden" name="homeBranchId" value={branchId} />
           <input type="hidden" name="gender" value={gender === NO_GENDER ? '' : gender} />
 
@@ -99,7 +118,7 @@ export function MemberForm({
                 required
                 autoFocus
                 autoComplete="off"
-                defaultValue={member?.full_name ?? ''}
+                defaultValue={member?.full_name ?? prefill?.fullName ?? ''}
               />
               <FieldError messages={state.fieldErrors?.fullName} />
             </div>
@@ -112,7 +131,7 @@ export function MemberForm({
                 inputMode="tel"
                 required
                 autoComplete="off"
-                defaultValue={member?.phone ?? ''}
+                defaultValue={member?.phone ?? prefill?.phone ?? ''}
               />
               <FieldError messages={state.fieldErrors?.phone} />
             </div>

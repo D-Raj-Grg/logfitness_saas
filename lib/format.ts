@@ -33,6 +33,15 @@ export function toPaisa(rupees: string | number) {
 
 export const DEFAULT_TIMEZONE = 'Asia/Kathmandu'
 
+/**
+ * Today as a YYYY-MM-DD day at the front desk, not on the server. Postgres has
+ * `org_today(org_id)` for the same question; this is the render-side answer,
+ * for defaulting a date input or a report's "on" parameter.
+ */
+export function todayInTimezone(timeZone: string = DEFAULT_TIMEZONE) {
+  return new Date().toLocaleDateString('en-CA', { timeZone })
+}
+
 export function formatDate(
   value: string | Date,
   timeZone: string = DEFAULT_TIMEZONE

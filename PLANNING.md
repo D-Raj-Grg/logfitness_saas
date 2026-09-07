@@ -147,6 +147,33 @@ manager only: the person who recorded the money is not the person who gets to
 say it never came. Payments stay immutable and nothing is deleted.
 Gate: `supabase/tests/reverse_payment.sql`.
 
+**Scope decision (2026-09-08): the visitor log is a log, not a CRM.** `docs/PRD.md`
+names a lead pipeline a non-goal, and it stays one. What was missing is smaller
+and concrete: the person who walks in asking what a month costs, and the guest
+who trains for a day, both end up on a paper pad, and the pad is where the
+callback dies. So `visitors` -- name, mobile, the org's own today, which branch,
+enquiry or guest, one note, one plan they asked about, and a status of
+new / contacted / converted / lost.
+
+Deliberately narrow. No reminders, no assignment to a staff member, no
+campaigns, no conversion-rate report, and no link into `attendance` -- a guest
+is not a check-in, and check-in needs a member. Drip follow-ups are a new scope
+decision, not an extension of this.
+
+Every role logs one, trainers included: a walk-in asks whoever is standing
+there. Reads are org-wide like members, so someone who enquired at one branch is
+found at another rather than logged twice. Logging one is branch-scoped -- a
+walk-in happens at a place, and `branch_id` records it -- but following one up
+(status, note, conversion) is org-wide, because the callback is made by whoever
+has the number. The delete is owner-only. `converted` is not a status
+anyone picks -- `convert_visitor` sets it after `register_member` has returned
+a member, and the check constraint refuses the status without one. Registering
+from a visitor row prefills the name and mobile, and the link is written after
+the member exists: a failure there leaves a real member and an unconverted
+visitor, which is a correctable mistake, where refusing the registration would
+not be.
+Gate: `supabase/tests/visitors.sql`.
+
 ## 5. Data model
 
 ```
@@ -160,6 +187,7 @@ orgs
       │    ├── attendance
       │    └── class_bookings
       ├── membership_plans
+      ├── visitors        (walk-ins; converted ones point at a member)
       ├── classes
       │    └── class_sessions   (materialized 60 days ahead by pg_cron)
       └── pt_sessions

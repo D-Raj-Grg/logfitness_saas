@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { emailSchema } from '@/lib/validation/auth'
+import { pageSizeSchema } from '@/lib/validation/pagination'
 import { paymentMethodSchema } from '@/lib/validation/payments'
 import { optionalRupeesSchema } from '@/lib/validation/plans'
 
@@ -86,7 +87,7 @@ export const memberListQuerySchema = z.object({
     .enum(['active', 'expired', 'frozen', 'left', 'expiring', 'dues', 'archived'])
     .optional(),
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(10).max(100).default(25),
+  pageSize: pageSizeSchema,
 })
 
 export type MemberInput = z.infer<typeof memberSchema>

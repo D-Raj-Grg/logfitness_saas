@@ -3,6 +3,7 @@ import {
   Building2,
   CalendarDays,
   CreditCard,
+  DoorOpen,
   LayoutDashboard,
   ScanLine,
   Settings,
@@ -30,6 +31,12 @@ const ALL_ROLES: StaffRole[] = ['owner', 'manager', 'front_desk', 'trainer']
 export const NAV_ITEMS: NavItem[] = [
   { title: 'Dashboard', href: '/', icon: LayoutDashboard, roles: ALL_ROLES },
   { title: 'Check-in', href: '/check-in', icon: ScanLine, roles: ALL_ROLES },
+  {
+    title: 'Visitors',
+    href: '/visitors',
+    icon: DoorOpen,
+    roles: ALL_ROLES,
+  },
   {
     title: 'Members',
     href: '/members',
