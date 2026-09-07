@@ -82,8 +82,12 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 - [x] Staff management — invite, role and branch assignment, deactivate/reactivate
       (`/staff`, `inviteStaff` / `setStaffStatus`). Role and branches are set at
       invite time.
-- [ ] Edit an *existing* staff row's role or branch list. Not built: the only
-      way to change either today is to deactivate and re-invite.
+- [x] Edit an *existing* staff row's role or branch list — `updateStaffAssignment`
+      plus a guard trigger. Closed a real escalation while doing it: the RLS
+      update policy restricted a manager only to `role <> 'owner'`, so a manager
+      could promote a covered front_desk or trainer into a peer manager by
+      calling PostgREST directly, bypassing `assignableRoles`. The ceiling now
+      lives in `guard_staff_assignment()`, matching the invite policy's own.
 - [ ] Revenue report by branch / period / payment method
 - [ ] New members, renewals, and churn per period
 - [ ] Attendance trend report
@@ -119,7 +123,7 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Phase 5 — Notifications
 
-- [ ] Choose Nepali SMS/Viber gateway; document cost per message
+- [ ] Choose Custom/Nepali SMS/Viber gateway; document cost per message
 - [ ] Provider abstraction behind a single interface
 - [ ] Per-org editable templates
 - [ ] Renewal reminders at T-7 and T-1
