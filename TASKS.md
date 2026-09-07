@@ -88,11 +88,31 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       could promote a covered front_desk or trainer into a peer manager by
       calling PostgREST directly, bypassing `assignableRoles`. The ceiling now
       lives in `guard_staff_assignment()`, matching the invite policy's own.
-- [ ] Revenue report by branch / period / payment method
-- [ ] New members, renewals, and churn per period
-- [ ] Attendance trend report
-- [ ] Plan mix report
-- [ ] CSV export on every report
+- [x] Revenue report by branch / period / payment method — `/reports/revenue`.
+      Refunds and reversals stay in their own columns: a refund says cash left
+      the drawer, a reversal says a note that was rung up never arrived, and a
+      branch with a problem has a different problem in each case. Reconciled
+      against `daily_collection` on real data as a release gate.
+- [x] New members, renewals, and churn per period — `/reports/movement`.
+      Sequence and churn are read from a member's whole history, not from the
+      branch in view: a member who joins at one branch and renews at another is
+      a renewal, not a second signup, and is not churn at the branch they left.
+      Churn is an expiry with nothing sold after it. A cancelled membership is
+      counted on the day it was cancelled, not on the end date it still carries.
+- [x] Attendance trend report — `/reports/attendance`, check-ins and the
+      distinct members behind them. One member training six times is six
+      check-ins and one person still using the gym; the second number is the one
+      that says whether the branch is growing.
+- [x] Plan mix report — `/reports/plans`. `plan_mix.share_pct` is each row's
+      share of every active membership **in scope**, not of its own branch, so
+      the screen and the export both recompute the share per branch rather than
+      printing a percentage that means something other than its column header.
+- [x] CSV export on every report — all seven, including the collection sheet,
+      arrears and absent screens. `/api/reports/<report>/csv` re-runs the report
+      as the caller through the same cookie-bound client the page used, so RLS
+      applies to the file exactly as it applied to the screen, and the file is
+      the whole report rather than the page on screen. Cells beginning `=`, `+`,
+      `-`, `@`, tab or CR are quoted: these land in Excel.
 - [x] `/reports` index page — a thin catalogue so the nav item resolves, listing
       the reports that exist today (absent members, daily collection, arrears).
       Phase 3 fills it out with the chain-layer reports.
@@ -547,6 +567,17 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       `sync_invoice_totals_casts_status_enum` (20260905032812) and
       `register_member_error_hints` (20260905172322). A project rebuilt from git
       alone would miss three fixes.
+
+- [ ] **2026-09-07** `npm run db:test` now names all twelve gate files, but it
+      still cannot run from this machine — `psql` is not installed and the
+      Supabase CLI is not logged in. Every Phase 3 gate was run through the
+      Supabase MCP with the throwaway-function loop instead. Wiring this into CI
+      needs a hosted preview database.
+- [ ] **2026-09-07** The chain reports have no UI regression coverage. The SQL
+      is gated in `chain_layer.sql`, but nothing exercises the screens: the two
+      URL controls composing, an invalid date falling back, the per-branch share
+      being recomputed. `scripts/smoke.mjs` renders routes as the seeded owner
+      and would be the place for it, once a login is reachable from CI.
 
 ## Open questions (from the PRD)
 

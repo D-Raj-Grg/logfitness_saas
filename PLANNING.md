@@ -132,6 +132,26 @@ the member bought a term, not a pair of dates. Plan, price, discount, branch and
 member remain immutable: this is not a rewrite of the sale.
 Gate: `supabase/tests/member_archive_and_dates.sql`.
 
+**Scope decision (2026-09-07): one way to say which branches.** A manager who
+runs three branches could not previously ask any screen for their own total --
+the dashboard silently showed them `branchIds[0]` and called it the branch. Scope
+is now resolved once, in `lib/scope.ts`: an owner's default is every branch RLS
+allows, a manager's is the union of their own, and a single-branch desk never
+sees a switcher at all. The members list had a second, page-local branch filter;
+it was deleted rather than reconciled, because two controls that can disagree
+are worse than one.
+
+**The `branch` parameter is a filter, never a permission.** RLS remains the
+boundary: an id the caller does not cover falls back to their default scope
+rather than erroring, and a forged one returns nothing. A stale bookmark is not
+an attack and must not produce a dead screen.
+
+**No branch is ever deleted.** A branch carries members, cash and attendance.
+`/branches` deactivates instead, and the `owners delete branches` policy left
+over from the foundation migrations was dropped, so the rule is enforced by the
+database rather than by the absence of a button. Note that nothing reads
+`branches.status` yet -- deactivating changes the branch list and nothing else.
+
 **Payment status at the point of sale.** Registration and renewal both ask what
 actually came in -- paid in full, part paid, or unpaid -- because a failed QR
 must not be recorded as cash. An unpaid sale still raises the invoice in full,
@@ -284,4 +304,17 @@ Do not build these without an explicit decision to change scope.
   rows written earlier carry 0 and print as one line, which is correct -- the
   split does not exist for them.
 - DNS resolved directly to Vercel (Cloudflare proxy disabled); single DMARC record in place.
-- Next task: Phase 3, the chain layer. See `TASKS.md`.
+- Phase 3 shipped: the chain layer. Branch scope is resolved once, server-side
+  (`lib/scope.ts`), from a `?branch=` parameter plus an `lg_branch` cookie, and
+  every screen reads it; the switcher sits in the app shell. The five Phase 1-2
+  report functions now take `p_branch_ids uuid[]` instead of a single branch id.
+  `org_snapshot` feeds an HQ dashboard whose every number links into the screen
+  that already shows that detail. `/branches` is an owner-only admin screen, and
+  an existing staff row's role and branches are editable. Four chain reports --
+  `revenue_report`, `membership_movement`, `attendance_trend`, `plan_mix` -- with
+  CSV export on all seven report screens through `/api/reports/<report>/csv`.
+  Gate: `supabase/tests/chain_layer.sql`.
+- Next task: Phase 4, classes. The schema and the booking RPCs already exist
+  (shipped early, in Phase 0-2); what is missing is the timetable UI, the
+  `pg_cron` session materializer, `pt_sessions`, and trainer utilization.
+  See `TASKS.md`.

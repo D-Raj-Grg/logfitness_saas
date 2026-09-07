@@ -17,6 +17,76 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-09-07 — The chain layer
+
+Phase 3. The console could only ever show one branch at a time; it now shows a
+chain, and a manager who runs three branches can finally ask it for their own
+total.
+
+### Added
+
+- **One branch scope the whole console reads** (`6dbd2dc`, `992eaf5`). Resolved
+  once server-side from a `?branch=` parameter plus a cookie that remembers the
+  last choice, so a drill-down is an ordinary link and a link is shareable. The
+  switcher sits in the app shell and does not render for a single-branch desk.
+- **An HQ dashboard** (`2bd2911`). `org_snapshot` answers for every branch in
+  scope in one round trip, where the dashboard used to issue one collection
+  query per branch. Every number in the branch table links into the screen that
+  already shows that detail -- no new detail pages were built.
+- **`/branches`** (`e4b1f0a`), owner-only: list, create, edit, deactivate.
+- **Role and branch reassignment** (`fdd3156`), so moving a front-desk hire to
+  another branch no longer means deactivating them and starting over.
+- **Four chain reports** (`eb31a7a`, `58fb6b4`, `eda875c`): revenue by branch,
+  period and method; new members, renewals and churn; the attendance trend; and
+  the plan mix.
+- **CSV export on all seven report screens** (`37d0835`). The handler re-runs
+  the report as the caller through the same cookie-bound client the page used,
+  so RLS applies to the file exactly as it applied to the screen, and the file
+  is the whole report rather than the page on screen.
+
+### Security
+
+- **A manager could promote someone into a peer manager** (`f40f7a9`). The RLS
+  update policy on `staff` restricted a manager only to `role <> 'owner'`, so a
+  manager could raise any front desk or trainer they covered to `manager` by
+  calling PostgREST directly -- the Flutter app, curl, anything that was not the
+  Server Action, which correctly refused it. The invite policy already had the
+  right ceiling; the update path never got one. It now lives in
+  `guard_staff_assignment()`, alongside guards that the last active owner cannot
+  be demoted or deactivated and that nobody changes their own role.
+- **`branches` still carried a delete policy** (`e4b1f0a`). Dropped. Nothing in
+  the application ever used it.
+
+### Fixed
+
+- **The dashboard lied to multi-branch managers** (`e41c4ac`). Every report
+  function took a single branch id, so a manager covering three branches was
+  shown the first one with no indication the others were missing. They take
+  `p_branch_ids uuid[]` now.
+- **Check-in broke for single-branch desks** (`992eaf5`), briefly, during this
+  phase: routing the page through the new scope made the write branch null for
+  exactly the commonest case, and the desk was told "You do not work at that
+  branch" for any member whose home branch differed from theirs.
+- **A cross-branch renewal counted as a new member** (`3e2d3f8`), and the member
+  who came back at another branch counted as churn. Sequence and churn are facts
+  about a member's whole history, not about the branch in view.
+- **A cancelled membership was counted on its old end date** (`3e2d3f8`), so a
+  year-long plan cancelled in month two surfaced ten months later in a month
+  where nothing had happened -- or never.
+- **A mistyped date in the URL returned a 500** (`73fbd3f`). `2026-13-01` is
+  shaped like a date; Postgres does not roll it over, it raises.
+
+### Database
+
+Six migrations: the branch-list report signatures, `org_snapshot`, the branch
+write policies, the staff assignment guard and its manager ceiling, and the four
+report functions. Gate: `supabase/tests/chain_layer.sql`.
+
+`npm run db:test` now names all twelve gate files. It named four of nine before,
+which is worse than a script that cannot run: it looked like it had passed.
+
+---
+
 ## 2026-09-08 — The walk-in who is not a member yet
 
 ### Added
