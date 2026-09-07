@@ -1,46 +1,37 @@
+import { BranchTable } from '@/components/dashboard/branch-table'
 import { StatusTiles } from '@/components/dashboard/status-tiles'
 import { requireStaff } from '@/lib/auth'
-import { listBranches } from '@/lib/db/branches'
-import { memberStatusCounts } from '@/lib/db/members'
-import { dailyCollection } from '@/lib/db/payments'
+import { orgSnapshot } from '@/lib/db/reports'
+import { resolveBranchScope } from '@/lib/scope'
 
-/** Net paisa collected today across the branches the caller can see. */
-async function todaysCollection(branchIds: string[] | null) {
-  const rows = await dailyCollection({ branchIds })
-  return rows.reduce((sum, row) => sum + row.amount_paisa, 0)
-}
-
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const staff = await requireStaff()
+  const scope = await resolveBranchScope(await searchParams, staff)
 
-  const isOwner = staff.role === 'owner'
-  const isTrainer = staff.role === 'trainer'
-  // Managers may run several branches; the tiles show the first until the
-  // chain-layer phase adds a branch picker.
-  const scopeBranchIds = isOwner ? null : staff.branchIds
-  const scopeBranchId = isOwner ? undefined : staff.branchIds[0]
-
-  const [branches, counts, collectionPaisa] = await Promise.all([
-    listBranches(),
-    memberStatusCounts(scopeBranchIds),
-    isTrainer ? Promise.resolve(undefined) : todaysCollection(scopeBranchIds),
-  ])
-
-  const scopeName = scopeBranchId
-    ? branches.find((branch) => branch.id === scopeBranchId)?.name
-    : null
+  const rows = await orgSnapshot(scope.branchIds)
+  const totals = rows.find((row) => row.branch_id === null)
+  const branches = rows.filter(
+    (row): row is typeof row & { branch_id: string; branch_name: string } =>
+      row.branch_id !== null
+  )
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold">Good to see you, {staff.fullName}</h1>
         <p className="text-sm text-muted-foreground">
-          {branches.length} branch{branches.length === 1 ? '' : 'es'} in {staff.orgName}
-          {scopeName ? ` · showing ${scopeName}` : ''}
+          {staff.orgName} · {scope.label}
         </p>
       </div>
 
-      <StatusTiles counts={counts} collectionPaisa={collectionPaisa} compact={isTrainer} />
+      <StatusTiles snapshot={totals} compact={staff.role === 'trainer'} />
+
+      {/* One branch is not a chain -- the table would repeat the tiles. */}
+      {branches.length > 1 ? <BranchTable rows={branches} /> : null}
     </div>
   )
 }

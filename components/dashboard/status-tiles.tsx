@@ -1,33 +1,11 @@
 import Link from 'next/link'
 
 import { Card, CardContent } from '@/components/ui/card'
-import type { memberStatusCounts } from '@/lib/db/members'
+import type { orgSnapshot } from '@/lib/db/reports'
 import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-type Counts = Awaited<ReturnType<typeof memberStatusCounts>>
-
-type Tile = {
-  key: keyof Counts
-  label: string
-  href: string
-  tone: 'default' | 'warn' | 'bad' | 'muted'
-}
-
-const TILES: Tile[] = [
-  { key: 'active', label: 'Active', href: '/members?status=active', tone: 'default' },
-  { key: 'expiring', label: 'Expiring in 7 days', href: '/members?status=expiring', tone: 'warn' },
-  { key: 'expired', label: 'Expired', href: '/members?status=expired', tone: 'bad' },
-  { key: 'frozen', label: 'Frozen', href: '/members?status=frozen', tone: 'muted' },
-  { key: 'withDues', label: 'With dues', href: '/members?status=dues', tone: 'bad' },
-]
-
-const TONE_CLASS: Record<Tile['tone'], string> = {
-  default: '',
-  warn: 'text-amber-700 dark:text-amber-400',
-  bad: 'text-destructive',
-  muted: 'text-muted-foreground',
-}
+type SnapshotRow = Awaited<ReturnType<typeof orgSnapshot>>[number]
 
 function StatTile({
   label,
@@ -58,44 +36,77 @@ function StatTile({
 }
 
 /**
- * The dashboard's headline numbers. Every tile is a link into the member list
- * already filtered to that group, so the number is also the way to act on it.
+ * The dashboard's headline numbers, from the totals row of org_snapshot.
+ * Every tile is a link into the screen that already shows that detail, so the
+ * number is also the way to act on it.
  */
 export function StatusTiles({
-  counts,
-  collectionPaisa,
+  snapshot,
   compact = false,
 }: {
-  counts: Counts
-  /** Net cash in today; omitted for roles that do not handle money. */
-  collectionPaisa?: number
+  /** The totals row (branch_id null). Undefined only while the aggregate is
+   * out of scope entirely, which does not happen for a signed-in caller. */
+  snapshot?: SnapshotRow
   /** Trainers only need to know who is in and who is about to lapse. */
   compact?: boolean
 }) {
-  const tiles = compact
-    ? TILES.filter((tile) => tile.key === 'active' || tile.key === 'expiring')
-    : TILES
+  if (!snapshot) return null
+
+  const tiles = [
+    {
+      key: 'active',
+      label: 'Active members',
+      value: String(snapshot.active_members),
+      href: '/members?status=active',
+      className: '',
+    },
+    {
+      key: 'expiring',
+      label: 'Expiring in 7 days',
+      value: String(snapshot.expiring_7d),
+      href: '/members?status=expiring',
+      className: 'text-amber-700 dark:text-amber-400',
+    },
+    {
+      key: 'checkins',
+      label: 'Check-ins today',
+      value: String(snapshot.check_ins_today),
+      href: '/check-in',
+      className: '',
+    },
+    {
+      key: 'collection',
+      label: "Today's collection",
+      value: formatMoney(snapshot.collected_today_paisa),
+      href: '/payments?view=collection',
+      hint: 'Net of refunds and reversals',
+      className: snapshot.collected_today_paisa < 0 ? 'text-destructive' : '',
+    },
+    {
+      key: 'dues',
+      label: 'Dues outstanding',
+      value: formatMoney(snapshot.dues_paisa),
+      href: '/payments?view=arrears',
+      className: snapshot.dues_paisa > 0 ? 'text-destructive' : '',
+    },
+  ]
+
+  const visible = compact
+    ? tiles.filter((tile) => tile.key === 'active' || tile.key === 'expiring')
+    : tiles
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-      {tiles.map((tile) => (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      {visible.map((tile) => (
         <StatTile
           key={tile.key}
           label={tile.label}
-          value={String(counts[tile.key])}
+          value={tile.value}
           href={tile.href}
-          className={TONE_CLASS[tile.tone]}
+          hint={'hint' in tile ? tile.hint : undefined}
+          className={tile.className}
         />
       ))}
-      {collectionPaisa !== undefined ? (
-        <StatTile
-          label="Today's collection"
-          value={formatMoney(collectionPaisa)}
-          href="/payments"
-          hint="Net of refunds"
-          className={collectionPaisa < 0 ? 'text-destructive' : ''}
-        />
-      ) : null}
     </div>
   )
 }

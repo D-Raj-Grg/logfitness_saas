@@ -1294,6 +1294,103 @@ export type Database = {
           },
         ]
       }
+      visitors: {
+        Row: {
+          branch_id: string
+          converted_at: string | null
+          converted_member_id: string | null
+          created_at: string
+          created_by: string | null
+          full_name: string
+          id: string
+          interested_plan_id: string | null
+          kind: Database["public"]["Enums"]["visitor_kind"]
+          note: string | null
+          org_id: string
+          phone: string
+          status: Database["public"]["Enums"]["visitor_status"]
+          updated_at: string
+          visited_on: string
+        }
+        Insert: {
+          branch_id: string
+          converted_at?: string | null
+          converted_member_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          full_name: string
+          id?: string
+          interested_plan_id?: string | null
+          kind?: Database["public"]["Enums"]["visitor_kind"]
+          note?: string | null
+          org_id: string
+          phone: string
+          status?: Database["public"]["Enums"]["visitor_status"]
+          updated_at?: string
+          visited_on: string
+        }
+        Update: {
+          branch_id?: string
+          converted_at?: string | null
+          converted_member_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          full_name?: string
+          id?: string
+          interested_plan_id?: string | null
+          kind?: Database["public"]["Enums"]["visitor_kind"]
+          note?: string | null
+          org_id?: string
+          phone?: string
+          status?: Database["public"]["Enums"]["visitor_status"]
+          updated_at?: string
+          visited_on?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "visitors_branch_id_fkey"
+            columns: ["branch_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "visitors_converted_member_id_fkey"
+            columns: ["converted_member_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "member_overview"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "visitors_converted_member_id_fkey"
+            columns: ["converted_member_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "visitors_created_by_fkey"
+            columns: ["created_by", "org_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "visitors_interested_plan_id_fkey"
+            columns: ["interested_plan_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "membership_plans"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "visitors_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       attendance_detail: {
@@ -1511,6 +1608,10 @@ export type Database = {
         Args: { p_org_id: string }
         Returns: number
       }
+      convert_visitor: {
+        Args: { p_member_id: string; p_visitor_id: string }
+        Returns: Json
+      }
       create_org_with_owner: {
         Args: {
           p_branch_name: string
@@ -1620,6 +1721,18 @@ export type Database = {
         Args: { p_counter: string; p_org_id: string }
         Returns: number
       }
+      org_snapshot: {
+        Args: { p_branch_ids?: string[] }
+        Returns: {
+          active_members: number
+          branch_id: string | null
+          branch_name: string | null
+          check_ins_today: number
+          collected_today_paisa: number
+          dues_paisa: number
+          expiring_7d: number
+        }[]
+      }
       org_today: { Args: { p_org_id: string }; Returns: string }
       plan_sold_at: {
         Args: { p_branch_id: string; p_plan_id: string }
@@ -1689,7 +1802,11 @@ export type Database = {
       }
       restore_member: { Args: { p_member_id: string }; Returns: Json }
       reverse_payment: {
-        Args: { p_payment_id: string; p_reason: string }
+        Args: {
+          p_amount_paisa?: number
+          p_payment_id: string
+          p_reason: string
+        }
         Returns: Json
       }
       revoke_device_token: { Args: { p_token: string }; Returns: undefined }
@@ -1740,6 +1857,8 @@ export type Database = {
       plan_type: "time" | "session_pack"
       staff_role: "owner" | "manager" | "front_desk" | "trainer"
       staff_status: "invited" | "active" | "inactive"
+      visitor_kind: "enquiry" | "guest"
+      visitor_status: "new" | "contacted" | "converted" | "lost"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1894,6 +2013,8 @@ export const Constants = {
       plan_type: ["time", "session_pack"],
       staff_role: ["owner", "manager", "front_desk", "trainer"],
       staff_status: ["invited", "active", "inactive"],
+      visitor_kind: ["enquiry", "guest"],
+      visitor_status: ["new", "contacted", "converted", "lost"],
     },
   },
 } as const

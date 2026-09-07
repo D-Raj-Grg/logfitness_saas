@@ -42,6 +42,77 @@ begin
 
   raise notice 'chain_layer: branch-list signatures OK';
 
+  -- org_snapshot: the totals row is the sum of the branch rows. If these ever
+  -- disagree, the tiles and the table on the same screen contradict each other.
+  declare
+    v_total_active bigint;
+    v_sum_active bigint;
+  begin
+    select active_members into v_total_active
+    from public.org_snapshot(null) where branch_id is null;
+
+    select coalesce(sum(active_members), 0) into v_sum_active
+    from public.org_snapshot(null) where branch_id is not null;
+
+    if v_total_active is distinct from v_sum_active then
+      raise exception 'org_snapshot totals (%) <> sum of branches (%)',
+        v_total_active, v_sum_active;
+    end if;
+  end;
+
+  -- An archived member is not an active member.
+  -- (Fixture: one active member at A1, then archive them.)
+  declare
+    v_staff_owner uuid;
+    v_plan_id uuid;
+    v_member_id uuid;
+    v_res jsonb;
+    v_before bigint;
+    v_after bigint;
+  begin
+    insert into public.staff (org_id, full_name, email, role, branch_ids, status)
+    values (v_org_a, 'Gate Owner', 'owner@gate-org-a-test.example', 'owner', '{}', 'active')
+    returning id into v_staff_owner;
+
+    perform set_config('request.jwt.claims', json_build_object(
+      'sub', gen_random_uuid()::text, 'role', 'authenticated',
+      'org_id', v_org_a::text, 'staff_id', v_staff_owner::text,
+      'staff_role', 'owner', 'branch_ids', json_build_array()
+    )::text, true);
+    execute 'set local role authenticated';
+
+    -- A plan and a paid-in-full sale, so the member's derived status comes
+    -- out 'active' and org_snapshot has something to count.
+    insert into public.membership_plans
+      (org_id, name, plan_type, duration_days, price_paisa, branch_ids)
+    values (v_org_a, 'Gate Monthly', 'time', 30, 100000, array[v_branch_a1])
+    returning id into v_plan_id;
+
+    v_res := public.register_member(
+      'Gate Member', '9800000000', v_branch_a1,
+      p_plan_id => v_plan_id, p_amount_paid_paisa => 100000
+    );
+    v_member_id := (v_res ->> 'member_id')::uuid;
+
+    select active_members into v_before
+    from public.org_snapshot(array[v_branch_a1]) where branch_id = v_branch_a1;
+
+    perform public.archive_member(v_member_id, 'gate test cleanup');
+
+    select active_members into v_after
+    from public.org_snapshot(array[v_branch_a1]) where branch_id = v_branch_a1;
+
+    execute 'reset role';
+    perform set_config('request.jwt.claims', null, true);
+
+    if v_after is distinct from (v_before - 1) then
+      raise exception 'archiving a member left active_members at % (was %)',
+        v_after, v_before;
+    end if;
+  end;
+
+  raise notice 'chain_layer: org_snapshot assertions OK';
+
   delete from public.branches where org_id in (v_org_a, v_org_b);
   delete from public.orgs where id in (v_org_a, v_org_b);
 end $$;
