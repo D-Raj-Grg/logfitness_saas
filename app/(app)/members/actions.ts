@@ -6,9 +6,12 @@ import { z } from 'zod'
 
 import { requireRole } from '@/lib/auth'
 import {
+  archiveMember as archiveMemberRpc,
+  deleteMember as deleteMemberRow,
   getMember,
   inviteMemberToApp as inviteMemberToAppRpc,
   registerMember,
+  restoreMember as restoreMemberRpc,
   updateMember as updateMemberRow,
   type MemberInsert,
   type RegisterMemberResult,
@@ -27,6 +30,8 @@ import {
 import type { CurrentStaff } from '@/lib/roles'
 import {
   inviteMemberToAppSchema,
+  memberArchiveSchema,
+  memberDeleteSchema,
   memberIdSchema,
   memberLeaveSchema,
   memberSaleSchema,
@@ -132,6 +137,7 @@ function readSaleFields(formData: FormData) {
     amountPaidPaisa: text('saleAmountPaidPaisa'),
     method: text('saleMethod') ?? undefined,
     referenceNo: text('saleReferenceNo'),
+    startDate: text('saleStartDate'),
   }
 }
 
@@ -159,6 +165,7 @@ function mapRegisterError(error: unknown): MemberFormState {
   }
 
   if (hint === 'sale') {
+    if (/start date/i.test(text)) return { fieldErrors: { startDate: [text] } }
     if (/discount/i.test(text)) return { fieldErrors: { discountPaisa: [text] } }
     if (/payment/i.test(text)) return { fieldErrors: { amountPaidPaisa: [text] } }
     if (/plan/i.test(text)) return { fieldErrors: { planId: [text] } }
@@ -224,6 +231,7 @@ export async function createMember(
       amountPaidPaisa: selling ? sale.data.amountPaidPaisa : 0,
       method: selling ? sale.data.method : 'cash',
       referenceNo: selling ? sale.data.referenceNo : null,
+      startDate: selling ? sale.data.startDate : null,
     })
   } catch (error) {
     return mapRegisterError(error)
@@ -431,4 +439,120 @@ export async function reactivateMember(
   revalidatePath(`/members/${parsed.data.memberId}`)
 
   return { success: 'Member reactivated.' }
+}
+
+
+/**
+ * Archive, restore, and -- for the owner alone -- delete.
+ *
+ * The three are deliberately separate actions rather than one with a mode: the
+ * confirmation each needs is different, and so is who may run it.
+ */
+export async function archiveMember(
+  _prevState: MemberFormState,
+  formData: FormData
+): Promise<MemberFormState> {
+  await requireRole('owner', 'manager', 'front_desk')
+
+  const parsed = memberArchiveSchema.safeParse({
+    memberId: formData.get('memberId'),
+    reason: formData.get('reason') ?? undefined,
+  })
+
+  if (!parsed.success) {
+    return { error: 'That member could not be archived.' }
+  }
+
+  try {
+    await archiveMemberRpc(parsed.data.memberId, parsed.data.reason)
+  } catch (error) {
+    return mapDbError(error)
+  }
+
+  revalidatePath('/members')
+  revalidatePath(`/members/${parsed.data.memberId}`)
+
+  return { success: 'Member archived.' }
+}
+
+export async function restoreMember(
+  _prevState: MemberFormState,
+  formData: FormData
+): Promise<MemberFormState> {
+  await requireRole('owner', 'manager', 'front_desk')
+
+  const parsed = memberIdSchema.safeParse({ memberId: formData.get('memberId') })
+
+  if (!parsed.success) {
+    return { error: 'That member could not be restored.' }
+  }
+
+  try {
+    await restoreMemberRpc(parsed.data.memberId)
+  } catch (error) {
+    return mapDbError(error)
+  }
+
+  revalidatePath('/members')
+  revalidatePath(`/members/${parsed.data.memberId}`)
+
+  return { success: 'Member restored.' }
+}
+
+/**
+ * The irreversible one. requireRole keeps a non-owner out of the action, the
+ * delete policy keeps them out of the row, and the typed name keeps the owner
+ * from deleting the profile they merely had open. All three, because this
+ * takes the member's payment history with it.
+ */
+export async function deleteMember(
+  _prevState: MemberFormState,
+  formData: FormData
+): Promise<MemberFormState> {
+  await requireRole('owner')
+
+  const parsed = memberDeleteSchema.safeParse({
+    memberId: formData.get('memberId'),
+    confirmName: formData.get('confirmName'),
+  })
+
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+  }
+
+  const member = await getMember(parsed.data.memberId)
+  if (!member) {
+    return { error: 'That member could not be found.' }
+  }
+
+  if (
+    member.full_name.trim().toLowerCase() !== parsed.data.confirmName.toLowerCase()
+  ) {
+    return {
+      fieldErrors: { confirmName: ['That does not match the member\'s name.'] },
+    }
+  }
+
+  let deleted: boolean
+  try {
+    deleted = await deleteMemberRow(parsed.data.memberId)
+  } catch (error) {
+    return mapDbError(error)
+  }
+
+  // RLS refuses the row rather than raising, so nothing deleted means the
+  // caller is not the owner of this org -- not that the member had gone.
+  if (!deleted) {
+    return { error: 'Only the gym owner can delete a member.' }
+  }
+
+  // The photo outlives the row it belonged to: storage has no foreign key.
+  if (member.photo_path) {
+    await removeMemberPhoto(member.photo_path).catch(() => {})
+  }
+
+  revalidatePath('/members')
+  revalidatePath('/')
+
+  redirect('/members')
 }

@@ -4,6 +4,7 @@ import { Printer } from 'lucide-react'
 
 import { MemberAppAccess } from '@/components/members/member-app-access'
 import { MemberHistoryTabs } from '@/components/members/member-history-tabs'
+import { MemberRecordActions } from '@/components/members/member-record-actions'
 import { MemberStatusActions } from '@/components/members/member-status-actions'
 import { MemberPhoto } from '@/components/members/member-photo'
 import { MemberStatusBadge } from '@/components/members/member-status-badge'
@@ -65,6 +66,7 @@ export default async function MemberProfilePage({
   const branchNames = Object.fromEntries(branches.map((branch) => [branch.id, branch.name]))
   const canManage = staff.role !== 'trainer'
   const left = overview.status === 'left'
+  const archived = Boolean(member.archived_at)
   const lastSeen = attendance[0] ?? null
 
   return (
@@ -101,9 +103,29 @@ export default async function MemberProfilePage({
               Edit
             </Button>
             <MemberStatusActions memberId={id} fullName={overview.full_name} left={left} />
+            <MemberRecordActions
+              memberId={id}
+              fullName={overview.full_name}
+              archived={archived}
+              isOwner={staff.role === 'owner'}
+            />
           </div>
         ) : null}
       </div>
+
+      {archived ? (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/60 px-4 py-3 text-sm"
+        >
+          <span className="font-medium">Archived</span>
+          <span className="text-muted-foreground">
+            {member.archived_reason
+              ? `${member.archived_reason} · hidden from the member list and search.`
+              : 'Hidden from the member list and search. Nothing else has changed.'}
+          </span>
+        </div>
+      ) : null}
 
       {soldInvoice ? (
         <div
@@ -229,6 +251,13 @@ export default async function MemberProfilePage({
             payments={payments}
             staff={staff}
             branches={branches}
+            checkedInMembershipIds={[
+              ...new Set(
+                attendance
+                  .map((visit) => visit.membership_id)
+                  .filter((id): id is string => Boolean(id))
+              ),
+            ]}
           />
         </div>
       </div>

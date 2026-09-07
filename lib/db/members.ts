@@ -46,6 +46,14 @@ export async function listMembers(query: MemberListQuery): Promise<MemberListRes
     .from('member_overview')
     .select('*', { count: 'exact' })
 
+  // Archived members are hidden everywhere except the filter that asks for
+  // them. They are still rows, still auditable, still restorable -- just not in
+  // the list the desk works from all day.
+  request =
+    query.status === 'archived'
+      ? request.not('archived_at', 'is', null)
+      : request.is('archived_at', null)
+
   const term = query.q.trim()
   if (term) {
     const escaped = term.replace(/[%_,()]/g, ' ').trim()
@@ -61,6 +69,8 @@ export async function listMembers(query: MemberListQuery): Promise<MemberListRes
   }
 
   switch (query.status) {
+    case 'archived':
+      break
     case 'active':
     case 'expired':
     case 'frozen':
@@ -106,6 +116,7 @@ export async function searchMembersForCheckIn(term: string, limit = 8) {
   const { data, error } = await supabase
     .from('member_overview')
     .select('*')
+    .is('archived_at', null)
     .or(
       `phone.ilike.${cleaned}%,member_code.ilike.${cleaned}%,full_name.ilike.%${cleaned}%`
     )
@@ -181,6 +192,8 @@ export async function registerMember(args: {
   amountPaidPaisa?: number
   method?: Database['public']['Enums']['payment_method']
   referenceNo?: string | null
+  /** Sale only. Null lets the RPC resolve it, which for a new member is today. */
+  startDate?: string | null
 }): Promise<RegisterMemberResult> {
   const supabase = await createClient()
 
@@ -200,6 +213,7 @@ export async function registerMember(args: {
     p_amount_paid_paisa: args.amountPaidPaisa ?? 0,
     p_method: args.method ?? 'cash',
     p_reference_no: args.referenceNo ?? undefined,
+    p_start_date: args.startDate ?? undefined,
   })
 
   if (error) throw error
@@ -244,6 +258,52 @@ export async function inviteMemberToApp(memberId: string, email: string) {
   if (error) throw error
 }
 
+/**
+ * Archiving hides a member from every default list without touching a single
+ * membership, invoice or payment. Restoring puts them back. Both are RPCs
+ * because the audit trail and the "already archived" rule belong next to the
+ * write, where the Flutter app will reach them too.
+ */
+export async function archiveMember(memberId: string, reason?: string | null) {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase.rpc('archive_member', {
+    p_member_id: memberId,
+    p_reason: reason ?? undefined,
+  })
+
+  if (error) throw error
+  return data as unknown as { member_id: string; archived_at: string }
+}
+
+export async function restoreMember(memberId: string) {
+  const supabase = await createClient()
+
+  const { error } = await supabase.rpc('restore_member', { p_member_id: memberId })
+
+  if (error) throw error
+}
+
+/**
+ * The real delete, and the reason archiving exists. The row goes, and the
+ * cascade takes its memberships, invoices and payments with it. No RPC: the
+ * "owners delete members" policy is the whole rule, so a non-owner's delete
+ * simply matches nothing -- which is why the caller checks the count rather
+ * than trusting a silent success.
+ */
+export async function deleteMember(memberId: string) {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from('members')
+    .delete()
+    .eq('id', memberId)
+    .select('id')
+
+  if (error) throw error
+  return (data ?? []).length > 0
+}
+
 /** Counts for the dashboard tiles: expiring within 7 days, expired, frozen. */
 export async function memberStatusCounts(branchId?: string) {
   const supabase = await createClient()
@@ -252,6 +312,7 @@ export async function memberStatusCounts(branchId?: string) {
     let request = supabase
       .from('member_overview')
       .select('id', { count: 'exact', head: true })
+      .is('archived_at', null)
     if (branchId) request = request.eq('home_branch_id', branchId)
     return request
   }

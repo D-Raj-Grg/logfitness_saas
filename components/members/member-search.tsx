@@ -25,6 +25,9 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: 'frozen', label: 'Frozen' },
   { value: 'dues', label: 'Dues outstanding' },
   { value: 'left', label: 'Left' },
+  // The one option that widens the list rather than narrowing it: archived
+  // members are excluded from every other choice, including "All statuses".
+  { value: 'archived', label: 'Archived' },
 ]
 
 export function MemberSearch({

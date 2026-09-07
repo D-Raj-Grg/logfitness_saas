@@ -634,6 +634,9 @@ export type Database = {
         Row: {
           accepted_at: string | null
           address: string | null
+          archived_at: string | null
+          archived_by: string | null
+          archived_reason: string | null
           auth_user_id: string | null
           created_at: string
           created_by: string | null
@@ -661,6 +664,9 @@ export type Database = {
         Insert: {
           accepted_at?: string | null
           address?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
+          archived_reason?: string | null
           auth_user_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -688,6 +694,9 @@ export type Database = {
         Update: {
           accepted_at?: string | null
           address?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
+          archived_reason?: string | null
           auth_user_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -713,6 +722,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "members_archived_by_fkey"
+            columns: ["archived_by", "org_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id", "org_id"]
+          },
           {
             foreignKeyName: "members_created_by_fkey"
             columns: ["created_by", "org_id"]
@@ -1354,6 +1370,7 @@ export type Database = {
       }
       member_overview: {
         Row: {
+          archived_at: string | null
           current_membership_id: string | null
           current_plan_id: string | null
           current_plan_name: string | null
@@ -1417,6 +1434,19 @@ export type Database = {
           membership_end_date: string
           phone: string
         }[]
+      }
+      adjust_membership_dates: {
+        Args: {
+          p_end_date: string
+          p_membership_id: string
+          p_reason: string
+          p_start_date: string
+        }
+        Returns: Json
+      }
+      archive_member: {
+        Args: { p_member_id: string; p_reason?: string }
+        Returns: Json
       }
       arrears_report: {
         Args: { p_branch_id?: string }
@@ -1639,6 +1669,7 @@ export type Database = {
           p_phone: string
           p_plan_id?: string
           p_reference_no?: string
+          p_start_date?: string
         }
         Returns: Json
       }
@@ -1654,6 +1685,11 @@ export type Database = {
           p_reference_no?: string
           p_start_date?: string
         }
+        Returns: Json
+      }
+      restore_member: { Args: { p_member_id: string }; Returns: Json }
+      reverse_payment: {
+        Args: { p_payment_id: string; p_reason: string }
         Returns: Json
       }
       revoke_device_token: { Args: { p_token: string }; Returns: undefined }
@@ -1699,7 +1735,7 @@ export type Database = {
         | "expired"
         | "cancelled"
       org_status: "active" | "suspended" | "cancelled"
-      payment_kind: "payment" | "refund"
+      payment_kind: "payment" | "refund" | "reversal"
       payment_method: "cash" | "esewa" | "khalti" | "fonepay" | "bank" | "card"
       plan_type: "time" | "session_pack"
       staff_role: "owner" | "manager" | "front_desk" | "trainer"
@@ -1853,7 +1889,7 @@ export const Constants = {
         "cancelled",
       ],
       org_status: ["active", "suspended", "cancelled"],
-      payment_kind: ["payment", "refund"],
+      payment_kind: ["payment", "refund", "reversal"],
       payment_method: ["cash", "esewa", "khalti", "fonepay", "bank", "card"],
       plan_type: ["time", "session_pack"],
       staff_role: ["owner", "manager", "front_desk", "trainer"],

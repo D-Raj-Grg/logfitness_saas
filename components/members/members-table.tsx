@@ -2,6 +2,7 @@ import Link from 'next/link'
 
 import { MemberPhoto } from '@/components/members/member-photo'
 import { MemberStatusBadge } from '@/components/members/member-status-badge'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Table,
@@ -105,12 +106,17 @@ export function MembersTable({
                 )}
               </TableCell>
               <TableCell>
-                <MemberStatusBadge
-                  status={row.status}
-                  daysToExpiry={row.days_to_expiry}
-                  membershipStatus={row.membership_status}
-                  hasMembershipHistory={row.has_membership_history ?? true}
-                />
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <MemberStatusBadge
+                    status={row.status}
+                    daysToExpiry={row.days_to_expiry}
+                    membershipStatus={row.membership_status}
+                    hasMembershipHistory={row.has_membership_history ?? true}
+                  />
+                  {/* Only ever seen under the Archived filter, where it says why
+                      these rows are missing from every other view. */}
+                  {row.archived_at ? <Badge variant="outline">Archived</Badge> : null}
+                </div>
               </TableCell>
               <TableCell
                 className={cn(
