@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Bell,
   Building2,
   CalendarDays,
   CreditCard,
@@ -67,6 +68,12 @@ export const NAV_ITEMS: NavItem[] = [
     title: 'Reports',
     href: '/reports',
     icon: BarChart3,
+    roles: ['owner', 'manager'],
+  },
+  {
+    title: 'Notifications',
+    href: '/notifications',
+    icon: Bell,
     roles: ['owner', 'manager'],
   },
   { title: 'Settings', href: '/settings', icon: Settings, roles: ['owner'] },

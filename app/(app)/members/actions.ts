@@ -67,6 +67,7 @@ function readMemberFields(formData: FormData) {
     emergencyContactName: text('emergencyContactName'),
     emergencyContactPhone: text('emergencyContactPhone'),
     notes: text('notes'),
+    notificationsOptOut: formData.get('notificationsOptOut') === 'on',
   }
 }
 
@@ -92,6 +93,7 @@ function toMemberColumns(input: MemberInput): Omit<MemberInsert, 'org_id'> {
     emergency_contact_name: input.emergencyContactName,
     emergency_contact_phone: input.emergencyContactPhone,
     notes: input.notes,
+    notifications_opt_out: input.notificationsOptOut,
   }
 }
 

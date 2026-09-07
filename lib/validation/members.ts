@@ -45,6 +45,9 @@ export const memberSchema = z.object({
   emergencyContactName: optionalText(120),
   emergencyContactPhone: optionalText(32),
   notes: optionalText(2000),
+  // A member who asks not to be texted must have somewhere for that to be
+  // recorded. Every enqueue job checks it before writing a message.
+  notificationsOptOut: z.boolean().default(false),
 })
 
 export const updateMemberSchema = memberSchema.extend({

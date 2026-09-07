@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { OrgLetterheadForm } from '@/components/settings/org-letterhead-form'
@@ -20,6 +21,16 @@ export default async function SettingsPage() {
           The gym&apos;s own details, as they appear on printed documents.
         </p>
       </div>
+
+      <Link
+        href="/settings/notifications"
+        className="rounded-lg border p-4 transition-colors hover:bg-muted/50"
+      >
+        <div className="font-medium">Notifications</div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          The SMS gateway, when renewal and dues reminders go out, and what they say.
+        </p>
+      </Link>
 
       <OrgLetterheadForm org={org} logoUrl={orgLogoUrl(org.logo_path)} />
     </div>

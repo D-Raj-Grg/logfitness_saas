@@ -4,6 +4,10 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
 import { requireRole } from '@/lib/auth'
+import {
+  enqueueNotification,
+  previewNotificationTemplate,
+} from '@/lib/db/notifications'
 import { assignableRoles } from '@/lib/roles'
 import { createClient } from '@/lib/supabase/server'
 import {
@@ -52,16 +56,20 @@ export async function inviteStaff(
 
   // org_id is set from the caller's own staff record rather than the form, and
   // the RLS insert policy independently rejects any org but their own.
-  const { error } = await supabase.from('staff').insert({
-    org_id: staff.orgId,
-    full_name: parsed.data.fullName,
-    email: parsed.data.email,
-    phone: parsed.data.phone,
-    role: parsed.data.role,
-    branch_ids: parsed.data.branchIds,
-    status: 'invited',
-    invited_by: staff.staffId,
-  })
+  const { data: invited, error } = await supabase
+    .from('staff')
+    .insert({
+      org_id: staff.orgId,
+      full_name: parsed.data.fullName,
+      email: parsed.data.email,
+      phone: parsed.data.phone,
+      role: parsed.data.role,
+      branch_ids: parsed.data.branchIds,
+      status: 'invited',
+      invited_by: staff.staffId,
+    })
+    .select('id')
+    .single()
 
   if (error) {
     if (error.code === '23505') {
@@ -70,10 +78,65 @@ export async function inviteStaff(
     return { error: error.message }
   }
 
+  // Until Phase 5 an invited person was simply told, by whoever invited them,
+  // to go and sign up. Now the invitation is queued as an email -- and if the
+  // gym has no email gateway the message lands in the log as `skipped`, so the
+  // flow behaves exactly as it did before rather than failing the invite. An
+  // invitation that was created must never be rolled back because a message
+  // could not be sent.
+  let emailed = false
+  try {
+    const template = await previewNotificationTemplate(
+      staff.orgId,
+      'staff_invite',
+      'email',
+      'en'
+    )
+
+    const vars = {
+      member_name: parsed.data.fullName,
+      name: parsed.data.fullName,
+      gym_name: staff.orgName,
+      email: parsed.data.email,
+    }
+    const fill = (text: string | null) =>
+      (text ?? '').replace(
+        /\{\{([a-z_]+)\}\}/g,
+        (_match, key: string) => (vars as Record<string, string>)[key] ?? ''
+      )
+
+    const messageId = await enqueueNotification({
+      channel: 'email',
+      event: 'staff_invite',
+      to: parsed.data.email,
+      subject: fill(template?.subject ?? null) || `You have been invited to ${staff.orgName}`,
+      body: fill(template?.body ?? null),
+      staffId: invited.id,
+      dedupeKey: `staff_invite:${invited.id}`,
+    })
+
+    // A message is enqueued whether or not a gateway exists -- an org with no
+    // email account gets a `skipped` row saying so. Read the status back rather
+    // than assuming, because telling someone an email is on its way when none
+    // is means they stop chasing.
+    const { data: message } = await supabase
+      .from('notification_messages')
+      .select('status')
+      .eq('id', messageId)
+      .maybeSingle()
+
+    emailed = message?.status === 'queued'
+  } catch {
+    // Same reasoning: the person is on the team either way.
+  }
+
   revalidatePath('/staff')
+  revalidatePath('/notifications')
 
   return {
-    success: `${parsed.data.fullName} was invited. They can sign up with ${parsed.data.email} to get in.`,
+    success: emailed
+      ? `${parsed.data.fullName} was invited and an email is on its way to ${parsed.data.email}.`
+      : `${parsed.data.fullName} was invited. They can sign up with ${parsed.data.email} to get in.`,
   }
 }
 

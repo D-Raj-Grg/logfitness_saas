@@ -19,6 +19,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -238,6 +239,27 @@ export function MemberForm({
               <Textarea id="notes" name="notes" defaultValue={member?.notes ?? ''} />
               <FieldError messages={state.fieldErrors?.notes} />
             </div>
+
+            {/* Only on an existing member: registration has no way to set it,
+                and a checkbox that silently does nothing is worse than none. */}
+            {member ? (
+              <div className="flex items-start gap-2 sm:col-span-2">
+                <Checkbox
+                  id="notificationsOptOut"
+                  name="notificationsOptOut"
+                  defaultChecked={member.notifications_opt_out}
+                />
+                <div>
+                  <Label htmlFor="notificationsOptOut" className="font-normal">
+                    Do not send automated reminders
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Renewal, dues and birthday messages stop. Anything the desk
+                    sends by hand is unaffected.
+                  </p>
+                </div>
+              </div>
+            ) : null}
 
             <div className="flex flex-col gap-2 sm:col-span-2">
               <Label htmlFor="photo">Photo (optional)</Label>
