@@ -143,13 +143,40 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Phase 5 — Notifications
 
-- [ ] Choose Custom/Nepali SMS/Viber gateway; document cost per message
-- [ ] Provider abstraction behind a single interface
-- [ ] Per-org editable templates
-- [ ] Renewal reminders at T-7 and T-1
-- [ ] Dues reminder
-- [ ] Birthday greeting
-- [ ] Delivery log and failure retry
+- [x] Choose Custom/Nepali SMS/Viber gateway; document cost per message —
+      `docs/notifications.md`. Not one gateway: the choice is a per-org setting,
+      because every chain buys its own credits and registers its own sender ID
+      with the NTA. Adapters ship for Sparrow SMS, Aakash SMS, Viber Business,
+      Resend (email) and a generic `custom_http`. Costs are quoted, not
+      contracted, and the Nepali-template multiplier (UCS-2, 70 characters a
+      segment) is documented with them.
+- [x] Provider abstraction behind a single interface — two **pure** functions,
+      `notification_request()` and `notification_response_ok()`. No network and
+      no writes, so the gate asserts both against real provider payloads;
+      adding a gateway is two `case` arms and an enum value.
+- [x] Per-org editable templates — `notification_templates`, keyed by
+      (event, channel, locale), English and Nepali built-ins from
+      `notification_default_template()` when an org has edited nothing. Wording
+      is rendered at **enqueue** time, so editing a template never retroactively
+      changes what a member was already told.
+- [x] Renewal reminders at T-7 and T-1 — not two events: two
+      `notification_rules` rows for one `renewal_reminder` with different
+      `offset_days`, so a chain that wants T-3 adds a row.
+- [x] Dues reminder — one message per member, not per unpaid invoice, with a
+      minimum amount and a cadence guard so chasing is not a daily habit.
+- [x] Birthday greeting — from `members.date_of_birth`, which had existed since
+      Phase 1 and which nothing had ever read.
+- [x] Delivery log and failure retry — `notification_messages` is the outbox
+      *and* the log, one table, so there is one answer to "was this member
+      told". `/notifications` reads it; retry is 5/25/125 minutes and gives up
+      at four attempts.
+- [x] Consent, which the PRD does not mention — `members.notifications_opt_out`,
+      on the member edit form, checked by every enqueue job. Sending automated
+      SMS with no way to stop is not shippable.
+- [x] Staff invitations are actually emailed (was a Discovered item folded into
+      this phase). With no email gateway configured the message lands as
+      `skipped` and the invite behaves exactly as it did before, so this cannot
+      regress the existing flow.
 
 ## Phase 6 — Flutter member app
 
@@ -406,9 +433,11 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 - [ ] **2026-09-05** Branch-specific pricing for the same plan is modelled as
       separate plans scoped by `branch_ids`. If the PRD open question resolves
       to "same plan, different price per branch", add a `plan_prices` table.
-- [ ] **2026-09-05** Email delivery for staff invitations. An invited person is
-      currently told to sign up with their email address by whoever invited
-      them; nothing is sent. Folds into Phase 5 notifications.
+- [x] **2026-09-05** Email delivery for staff invitations. Done in Phase 5:
+      `inviteStaff` enqueues a `staff_invite` email and reads the message's
+      status back, so it only claims an email is on its way when one actually
+      is. An org with no email gateway gets a `skipped` row and the old
+      behaviour.
 - [ ] **2026-09-05** Next.js 16 renamed Middleware to Proxy (`proxy.ts` at the repo
       root, exporting `proxy`). Remember this for any future request interception.
 
@@ -579,6 +608,147 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       being recomputed. `scripts/smoke.mjs` renders routes as the seeded owner
       and would be the place for it, once a login is reachable from CI.
 
+- [x] **2026-09-09** Phase 5 notifications shipped. Design notes a reviewer will
+      want:
+      - **Sending is Postgres, not an Edge Function.** `pg_net` for the request,
+        `pg_cron` for the schedule, gateway tokens in `supabase_vault` per org.
+        The reason is the same wall `qr-token` and `push-fanout` hit: a Supabase
+        project secret can only be set from the dashboard or a logged-in CLI,
+        and this project's tooling has neither. Nothing here needs provisioning
+        by hand, which is what let the send path be proven end to end -- the
+        thing `push-fanout` still has not been.
+      - **Proven against live traffic** before commit, through a throwaway org
+        pointed at an HTTPS echo endpoint: request shaping and TLS, pg_net
+        dispatch, the reaper, a 200 marked `sent`, a 500 retried with backoff, a
+        DNS failure recorded as `Couldn't resolve host name`, and a channel with
+        no gateway marked `skipped`. Fixtures torn down.
+      - **`net.http_post` cannot send form-encoded bodies.** pg_net 0.20 raises
+        unless Content-Type is exactly `application/json`. Sparrow and Aakash
+        both document GET as equivalent, so those go out as `net.http_get` with
+        `params`. There is no PUT or PATCH at all -- a gateway that requires one
+        cannot ship this way.
+      - **Delivery is at-least-once.** `net.http_request_queue` and
+        `net._http_response` are UNLOGGED, so a crash, compute resize or
+        Postgres upgrade truncates both. A row stuck `sending` for ten minutes
+        with no response is retried, which means a member can rarely receive the
+        same message twice. Never retrying would silently drop reminders, which
+        is worse, but this is a product fact worth someone signing off on.
+      - **`skipped` is not `failed`.** No gateway, no token, an opted-out member
+        or an undeliverable number all produce `skipped`, which is not retried
+        and is not shown in red. An org with no gateway is skipped at enqueue
+        time entirely rather than accumulating a row per member per day.
+      - Phone numbers are normalised at enqueue time into the message's own
+        `to_address`, never in `members.phone`: that column is free text under
+        `unique (org_id, phone)`, so normalising in place could collide two real
+        members.
+      - Gate: `supabase/tests/notifications.sql`, run through the Supabase MCP
+        (no `psql` on this machine). Docs: `docs/notifications.md`.
+- [ ] **2026-09-09** **The Sparrow, Aakash, Viber and Resend adapters have never
+      been exercised against a real account.** The echo-endpoint test proves the
+      plumbing and the request shaping, not that any provider accepts the
+      payload. Each one is written from published documentation. Connect an
+      account and use the **Send test** button on `/settings/notifications`
+      before relying on it, and tick this off per provider.
+- [ ] **2026-09-09** `pg_net`'s install script grants schema, table, sequence and
+      function access to `PUBLIC`, so `anon` and `authenticated` hold EXECUTE on
+      `net.http_post` and write access to `net.http_request_queue` -- an
+      outbound-HTTP primitive. The migration's REVOKEs are **no-ops**: schema
+      `net` and every object in it is owned by `supabase_admin`, and `postgres`
+      (which is what a migration and the dashboard SQL editor both run as) has
+      no grant option. What actually keeps this closed is that `net` is not one
+      of PostgREST's exposed schemas, so no API caller can reach it. Worth a
+      support ticket, or at least a note before anyone adds `net` to the exposed
+      schema list. Gateway tokens also sit in `net.http_request_queue.url` for
+      up to the pg_net TTL (six hours here).
+- [x] **2026-09-09** `get_advisors(security)` found two real holes in the Phase 5
+      work, both fixed in `20260909140700_notification_definer_surface.sql` and
+      both now covered by the gate. (1) `resolve_notification_template` was
+      SECURITY DEFINER and took an org id, so any signed-in user could read any
+      gym's message wording through `/rest/v1/rpc` -- the gate had tested the
+      table's RLS and missed the RPC that stepped around it. It is SECURITY
+      INVOKER with an explicit org check now. (2) The two trigger functions
+      (`drop_notification_secret`, `seed_notification_rules_for_new_org`) were
+      `anon`-callable definer functions, a new advisory category for this project
+      rather than one of the standing 0029 exceptions; EXECUTE revoked.
+- [x] **2026-09-09** The advisor fix above then broke the product, which is
+      worth recording because it is the more instructive half. Making
+      `resolve_notification_template` SECURITY INVOKER with an
+      `is_org_member(p_org_id)` guard closed the leak and stopped every nightly
+      sweep: the three enqueue jobs call it, pg_cron holds no JWT claims, the
+      guard was false for every org, the lateral join produced no row, and
+      `enqueue_renewal_reminders()` returned 0 for a gym with a member expiring
+      in seven days. Nothing errored. Reminders would simply have stopped, which
+      is the worst way this feature can fail. Caught by re-running the sweep the
+      way cron runs it -- with no claims at all -- rather than the way the gate
+      had been running it. Fixed in
+      `20260909140800_notification_template_resolution_split.sql` by splitting
+      the two callers: `resolve_notification_template` stays definer and is
+      callable by no client role (the sweeps), and
+      `notification_template_preview` is invoker and org-guarded (the console).
+      The gate now runs the sweep with claims cleared, so this cannot come back.
+- [ ] **2026-09-09** Phase 5 has **not** been walked in a browser. The routes
+      mount and redirect correctly (`/notifications` and
+      `/settings/notifications` both 307 to `/login`), the build is clean and the
+      SQL gate is green, but no environment variable on this machine carries a
+      password for the seeded owner, so nobody has actually connected a gateway,
+      edited wording or clicked Send test through the UI. Do that before calling
+      the screens finished.
+- [x] **2026-09-09** Post-implementation review of the Phase 5 work (no browser;
+      migration files diffed against the live database, then the logic probed
+      case by case). Two more real defects, both fixed in
+      `20260909140900_dues_reminders_do_not_repeat_for_a_skipped_member.sql` and
+      both now in the gate:
+      - **The dues sweep wrote a row a night, for ever, for any member with an
+        outstanding balance and a phone number that will not normalise.** The
+        cadence guard counted only `queued`/`sending`/`sent`, and the dedupe key
+        carries the date, so a `skipped` row suppressed nothing. Verified two
+        rows after two simulated nights with no reason to stop -- the exact row
+        explosion the design claims to prevent at the org level, missed one
+        level down at the member. `skipped` now counts, and the gate simulates
+        the next night.
+      - Every SMS carried `subject = ''` rather than null, because a subject
+        rendered from a null template returned the empty string. Invisible
+        today; the first `coalesce(subject, ...)` on the email path would have
+        chosen '' over its own fallback. Fixed centrally in
+        `render_notification_template`.
+      Two app-side defects fixed at the same time: the delivery log's summary
+      strip fetched **every** message row to count four numbers (now four
+      `head: true` counts), and the settings form picked the first gateway row
+      for a channel rather than the active one.
+      Also checked and found sound: all 28 function bodies in
+      `supabase/migrations/2026090914*.sql` match the live database
+      byte-for-byte once whitespace is normalised; every table, policy, index,
+      trigger and constraint the schema migration declares exists; an empty
+      branch list produces a valid PostgREST filter rather than a parse error;
+      and a trainer reading a dues reminder leaks nothing, because trainers can
+      already read `invoices` directly.
+- [ ] **2026-09-09** `notification_messages` answers an unauthenticated request
+      with `401 permission denied for function jwt_member_id`, where
+      `device_tokens` and `members` answer `200 []` -- despite carrying a
+      byte-identical member policy. No data is exposed and no real caller is
+      affected (`authenticated` holds EXECUTE on all three `jwt_*` helpers, so
+      the console and the Flutter app are unaffected), but it is an
+      inconsistent error surface that names an internal function to `anon`.
+      Worth understanding before the member app ships.
+- [ ] **2026-09-09** A 29 February birthday never fires in a non-leap year --
+      `enqueue_birthday_greetings` matches month and day exactly. Deliberate
+      rather than guessing at 28 February or 1 March, but if a gym ever asks, the
+      decision is theirs to make.
+- [ ] **2026-09-09** Notification configuration changes are not written to
+      `audit_log`. `CLAUDE.md` scopes auditing to members, memberships, payments
+      and plans, and the repository still has **no audit-writing helper at all**
+      -- `audit_log` is a declared-but-unwired table. Building the first one is
+      its own task; changing who receives what, and what it says, is a
+      reasonable second candidate for it.
+- [ ] **2026-09-09** A rule whose `send_at_local` is earlier than 02:30
+      Kathmandu goes out the following morning, because the nightly enqueue runs
+      at 02:30 (just after `sweep-membership-expiry`, so membership statuses are
+      already recomputed). The settings screen says so; nobody has asked for an
+      earlier send yet.
+- [ ] **2026-09-09** There is no per-org send cap or spend alert. A misconfigured
+      rule on a 50-branch chain is a real bill. The same gap is already recorded
+      for `push-fanout`'s missing rate limit; both want one answer.
+
 - [ ] **2026-09-07** Phase 3 was verified statically, never in a browser — no
       seeded login is reachable from this machine. What *was* checked, live
       against the database: `revenue_report` reconciles with `daily_collection`
@@ -598,7 +768,10 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Open questions (from the PRD)
 
-- [ ] Which SMS/Viber gateway for Nepal, and cost per message at chain volume?
+- [x] Which SMS/Viber gateway for Nepal, and cost per message at chain volume?
+      Answered as a per-org setting rather than one choice, with adapters for
+      Sparrow, Aakash, Viber and any HTTP gateway. Costs in `docs/notifications.md`,
+      quoted rather than contracted.
 - [ ] Do chains need branch-specific pricing for the same plan?
 - [ ] Is the home branch binding for billing, or can any branch collect a renewal?
 - [ ] What existing Excel formats must be migrated at onboarding?

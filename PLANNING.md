@@ -194,6 +194,47 @@ visitor, which is a correctable mistake, where refusing the registration would
 not be.
 Gate: `supabase/tests/visitors.sql`.
 
+**Scope decision (2026-09-09): a reminder is about the member's own money.**
+Phase 5 sends renewal reminders at T-7 and T-1, a dues chase, and a birthday
+greeting. That is the whole list, and it is the PRD's list (§9, M8). Marketing
+automation and CRM are a non-goal in three places, and the visitor log's own
+decision above says drip follow-ups are a new scope decision rather than an
+extension -- both still hold. Nothing in this phase messages a visitor, and
+nothing sends a campaign.
+
+The birthday greeting is the seam where that would give way, and it is in only
+because the PRD names it.
+
+Two things the PRD did not ask for and that ship anyway, because sending
+automated messages without them is not defensible:
+
+- `members.notifications_opt_out`. Nothing in this repository recorded whether a
+  member wants to be contacted, because nothing had ever contacted them.
+- The delivery log is the outbox. `notification_messages` is one table, so there
+  is exactly one answer to "was this member told, and what did the gateway say".
+
+**Where sending lives, and why it is not an Edge Function.** A Supabase project
+secret can only be set from the dashboard or a logged-in CLI, neither of which
+this project's tooling has. That gap left the `qr-token` function answering 503
+until its key moved into Vault, and it still leaves `push-fanout`'s FCM path
+unverified. So Phase 5 sends from Postgres: `pg_net` for the request, `pg_cron`
+for the schedule, and the gateway token in `supabase_vault` per org, written by
+an owner through `set_notification_credential` and readable only by the sender.
+Nothing has to be provisioned by hand, which is what let the whole path be
+proven against live HTTPS traffic before it was committed.
+
+Per-org rather than platform-wide because it is not one account: each chain buys
+its own credits and registers its own sender ID with the NTA.
+
+The gateway abstraction is two pure functions -- `notification_request` builds
+`{method, url, params, headers, body}` and `notification_response_ok` reads
+`{ok, message_id, error}`. No network and no writes, so both are asserted
+directly in the gate against real provider payloads, and adding a gateway is two
+`case` arms. Adapters exist for Sparrow SMS, Aakash SMS, Viber Business, Resend
+and a generic `custom_http`; only the plumbing is proven, not any provider's
+acceptance of it. Gate: `supabase/tests/notifications.sql`. Cost and provider
+detail: `docs/notifications.md`.
+
 ## 5. Data model
 
 ```
@@ -318,3 +359,11 @@ Do not build these without an explicit decision to change scope.
   (shipped early, in Phase 0-2); what is missing is the timetable UI, the
   `pg_cron` session materializer, `pt_sessions`, and trainer utilization.
   See `TASKS.md`.
+- Phase 5 shipped (2026-09-09): notifications. Four tables
+  (`notification_providers`, `notification_rules`, `notification_templates`,
+  `notification_messages`), gateway tokens in Vault, nightly enqueue at 02:30
+  Kathmandu, a one-minute reap-then-send worker on `pg_net`, `/notifications`
+  as the delivery log and `/settings/notifications` as the owner's controls.
+  The staff invitation is now an email rather than a verbal instruction.
+  Gate: `supabase/tests/notifications.sql`.
+- Next task: the rest of Phase 3's reports and Phase 4's class UI. See `TASKS.md`.

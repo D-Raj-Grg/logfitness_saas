@@ -17,6 +17,69 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-09-09 — The reminder that goes out on its own
+
+### Added
+
+- **Notifications**. Renewal reminders at T-7 and T-1, a dues chase, and a
+  birthday greeting, worked out once a night and sent over SMS, Viber or email.
+  Every number the console already computed — expiring in seven days, arrears
+  with age buckets — was a screen somebody had to remember to open. Now it
+  leaves on its own.
+- **`/notifications`**, the delivery log: what was sent, to whom, why, and what
+  the gateway said back, with filters and a resend. The outbox and the log are
+  one table, so there is exactly one answer to "was this member told".
+- **`/settings/notifications`** (owner only): connect a gateway, choose when
+  reminders go out, and edit what they say. The wording editor previews the
+  message and counts SMS segments rather than characters, because a Nepali
+  reminder is UCS-2 and bills two to three times an English one.
+- **A member can say no.** `members.notifications_opt_out`, on the member edit
+  form, checked by every sweep. The PRD does not mention consent; sending
+  automated SMS with no way to stop is not shippable.
+- **Staff invitations are emailed.** Previously an invited person was told, by
+  whoever invited them, to go and sign up — nothing was sent. With no email
+  gateway configured the message lands as `skipped` and the invite behaves
+  exactly as before.
+
+### Database
+
+- Four tables — `notification_providers`, `notification_rules`,
+  `notification_templates`, `notification_messages` — all RLS-enabled with
+  cross-tenant negative tests, plus `members.notifications_opt_out` and an
+  expression index for the birthday sweep. Gate:
+  `supabase/tests/notifications.sql`.
+- **Sending lives in Postgres**, on `pg_net` and `pg_cron`, not in an Edge
+  Function. An Edge Function needs a Supabase project secret, and a project
+  secret can only be set from the dashboard or a logged-in CLI — the wall that
+  left `qr-token` answering 503 and still leaves `push-fanout`'s FCM path
+  unverified. Gateway tokens live per-org in `supabase_vault`, written by an
+  owner and readable only by the sender. Nothing is provisioned by hand, which
+  is what let the whole path be proven against live HTTPS traffic before it was
+  committed: a 200 marked sent, a 500 retried with backoff, a DNS failure
+  recorded, a missing gateway skipped rather than failed.
+- The gateway abstraction is two pure functions, `notification_request` and
+  `notification_response_ok`. Adding a provider is two `case` arms.
+
+### Security
+
+- `get_advisors(security)` caught `resolve_notification_template` shipping as a
+  SECURITY DEFINER that took an org id — any signed-in user could have read any
+  gym's message wording through `/rest/v1/rpc`. The gate had tested the table's
+  RLS and missed the RPC that stepped around it. Fixed to SECURITY INVOKER with
+  an explicit org check, and the gate now covers it.
+- Two trigger functions were `anon`-callable SECURITY DEFINER functions, a new
+  advisory category for this project rather than one of the standing accepted
+  ones. EXECUTE revoked.
+
+### Known limits
+
+- The Sparrow, Aakash, Viber and Resend adapters are written from published
+  documentation and have never been run against a real account. The
+  echo-endpoint test proves the plumbing, not the provider's acceptance.
+- Delivery is at-least-once: pg_net's queue and response tables are UNLOGGED,
+  so a crash can lose a response and force a retry. A member may, rarely,
+  receive the same message twice.
+
 ## 2026-09-07 — The chain layer
 
 Phase 3. The console could only ever show one branch at a time; it now shows a
