@@ -655,6 +655,7 @@ export type Database = {
           left_reason: string | null
           member_code: string
           notes: string | null
+          notifications_opt_out: boolean
           org_id: string
           phone: string
           photo_path: string | null
@@ -685,6 +686,7 @@ export type Database = {
           left_reason?: string | null
           member_code?: string
           notes?: string | null
+          notifications_opt_out?: boolean
           org_id: string
           phone: string
           photo_path?: string | null
@@ -715,6 +717,7 @@ export type Database = {
           left_reason?: string | null
           member_code?: string
           notes?: string | null
+          notifications_opt_out?: boolean
           org_id?: string
           phone?: string
           photo_path?: string | null
@@ -953,6 +956,315 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "staff"
             referencedColumns: ["id", "org_id"]
+          },
+        ]
+      }
+      notification_messages: {
+        Row: {
+          attempts: number
+          body: string
+          branch_id: string | null
+          channel: Database["public"]["Enums"]["notification_channel"]
+          created_at: string
+          dedupe_key: string
+          event: Database["public"]["Enums"]["notification_event"]
+          id: string
+          last_error: string | null
+          member_id: string | null
+          next_attempt_at: string
+          org_id: string
+          provider: Database["public"]["Enums"]["notification_provider"] | null
+          provider_message_id: string | null
+          provider_status: number | null
+          request_id: number | null
+          scheduled_for: string
+          sent_at: string | null
+          staff_id: string | null
+          status: Database["public"]["Enums"]["notification_status"]
+          subject: string | null
+          to_address: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          body: string
+          branch_id?: string | null
+          channel: Database["public"]["Enums"]["notification_channel"]
+          created_at?: string
+          dedupe_key: string
+          event: Database["public"]["Enums"]["notification_event"]
+          id?: string
+          last_error?: string | null
+          member_id?: string | null
+          next_attempt_at?: string
+          org_id: string
+          provider?: Database["public"]["Enums"]["notification_provider"] | null
+          provider_message_id?: string | null
+          provider_status?: number | null
+          request_id?: number | null
+          scheduled_for?: string
+          sent_at?: string | null
+          staff_id?: string | null
+          status?: Database["public"]["Enums"]["notification_status"]
+          subject?: string | null
+          to_address: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          body?: string
+          branch_id?: string | null
+          channel?: Database["public"]["Enums"]["notification_channel"]
+          created_at?: string
+          dedupe_key?: string
+          event?: Database["public"]["Enums"]["notification_event"]
+          id?: string
+          last_error?: string | null
+          member_id?: string | null
+          next_attempt_at?: string
+          org_id?: string
+          provider?: Database["public"]["Enums"]["notification_provider"] | null
+          provider_message_id?: string | null
+          provider_status?: number | null
+          request_id?: number | null
+          scheduled_for?: string
+          sent_at?: string | null
+          staff_id?: string | null
+          status?: Database["public"]["Enums"]["notification_status"]
+          subject?: string | null
+          to_address?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_messages_branch_fk"
+            columns: ["branch_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "notification_messages_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_messages_member_fk"
+            columns: ["member_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "member_overview"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "notification_messages_member_fk"
+            columns: ["member_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "notification_messages_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "member_overview"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_messages_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_messages_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_messages_staff_fk"
+            columns: ["staff_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "notification_messages_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_providers: {
+        Row: {
+          channel: Database["public"]["Enums"]["notification_channel"]
+          config: Json
+          created_at: string
+          created_by: string | null
+          endpoint_url: string | null
+          id: string
+          is_active: boolean
+          org_id: string
+          provider: Database["public"]["Enums"]["notification_provider"]
+          secret_name: string | null
+          sender_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          channel: Database["public"]["Enums"]["notification_channel"]
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          endpoint_url?: string | null
+          id?: string
+          is_active?: boolean
+          org_id: string
+          provider: Database["public"]["Enums"]["notification_provider"]
+          secret_name?: string | null
+          sender_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["notification_channel"]
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          endpoint_url?: string | null
+          id?: string
+          is_active?: boolean
+          org_id?: string
+          provider?: Database["public"]["Enums"]["notification_provider"]
+          secret_name?: string | null
+          sender_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_providers_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_providers_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_rules: {
+        Row: {
+          channel: Database["public"]["Enums"]["notification_channel"]
+          created_at: string
+          enabled: boolean
+          event: Database["public"]["Enums"]["notification_event"]
+          id: string
+          min_amount_paisa: number
+          offset_days: number
+          org_id: string
+          repeat_after_days: number
+          send_at_local: string
+          updated_at: string
+        }
+        Insert: {
+          channel: Database["public"]["Enums"]["notification_channel"]
+          created_at?: string
+          enabled?: boolean
+          event: Database["public"]["Enums"]["notification_event"]
+          id?: string
+          min_amount_paisa?: number
+          offset_days?: number
+          org_id: string
+          repeat_after_days?: number
+          send_at_local?: string
+          updated_at?: string
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["notification_channel"]
+          created_at?: string
+          enabled?: boolean
+          event?: Database["public"]["Enums"]["notification_event"]
+          id?: string
+          min_amount_paisa?: number
+          offset_days?: number
+          org_id?: string
+          repeat_after_days?: number
+          send_at_local?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_rules_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_templates: {
+        Row: {
+          body: string
+          channel: Database["public"]["Enums"]["notification_channel"]
+          created_at: string
+          event: Database["public"]["Enums"]["notification_event"]
+          id: string
+          is_active: boolean
+          locale: string
+          org_id: string
+          subject: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          body: string
+          channel: Database["public"]["Enums"]["notification_channel"]
+          created_at?: string
+          event: Database["public"]["Enums"]["notification_event"]
+          id?: string
+          is_active?: boolean
+          locale?: string
+          org_id: string
+          subject?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          body?: string
+          channel?: Database["public"]["Enums"]["notification_channel"]
+          created_at?: string
+          event?: Database["public"]["Enums"]["notification_event"]
+          id?: string
+          is_active?: boolean
+          locale?: string
+          org_id?: string
+          subject?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_templates_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_templates_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1607,6 +1919,7 @@ export type Database = {
         Args: { p_membership_id: string; p_reason: string }
         Returns: Json
       }
+      cancel_notification: { Args: { p_id: string }; Returns: undefined }
       check_in_member: {
         Args: {
           p_branch_id: string
@@ -1622,6 +1935,10 @@ export type Database = {
       class_cancellation_window_minutes: {
         Args: { p_org_id: string }
         Returns: number
+      }
+      clear_notification_credential: {
+        Args: { p_provider_id: string }
+        Returns: undefined
       }
       convert_visitor: {
         Args: { p_member_id: string; p_visitor_id: string }
@@ -1677,6 +1994,28 @@ export type Database = {
           staff_name: string
           txn_count: number
         }[]
+      }
+      enqueue_birthday_greetings: { Args: never; Returns: number }
+      enqueue_dues_reminders: { Args: never; Returns: number }
+      enqueue_notification: {
+        Args: {
+          p_body: string
+          p_branch_id?: string
+          p_channel: Database["public"]["Enums"]["notification_channel"]
+          p_dedupe_key?: string
+          p_event: Database["public"]["Enums"]["notification_event"]
+          p_member_id?: string
+          p_staff_id?: string
+          p_subject?: string
+          p_to: string
+        }
+        Returns: string
+      }
+      enqueue_notifications: { Args: never; Returns: Json }
+      enqueue_renewal_reminders: { Args: never; Returns: number }
+      format_paisa: {
+        Args: { p_currency?: string; p_paisa: number }
+        Returns: string
       }
       freeze_membership: {
         Args: { p_membership_id: string; p_notes?: string }
@@ -1753,12 +2092,75 @@ export type Database = {
         Args: { p_counter: string; p_org_id: string }
         Returns: number
       }
+      normalise_msisdn: { Args: { p_phone: string }; Returns: string }
+      notification_credential: {
+        Args: { p_provider_id: string }
+        Returns: string
+      }
+      notification_default_template: {
+        Args: {
+          p_channel: Database["public"]["Enums"]["notification_channel"]
+          p_event: Database["public"]["Enums"]["notification_event"]
+          p_locale?: string
+        }
+        Returns: {
+          body: string
+          subject: string
+        }[]
+      }
+      notification_has_credential: {
+        Args: { p_provider_id: string }
+        Returns: boolean
+      }
+      notification_interpolate: {
+        Args: { p_obj: Json; p_vars: Json }
+        Returns: Json
+      }
+      notification_request: {
+        Args: {
+          p_body: string
+          p_config: Json
+          p_endpoint: string
+          p_provider: Database["public"]["Enums"]["notification_provider"]
+          p_secret: string
+          p_sender: string
+          p_subject: string
+          p_to: string
+        }
+        Returns: Json
+      }
+      notification_response_ok: {
+        Args: {
+          p_body: string
+          p_provider: Database["public"]["Enums"]["notification_provider"]
+          p_status: number
+        }
+        Returns: Json
+      }
+      notification_secret_name: {
+        Args: { p_provider_id: string }
+        Returns: string
+      }
+      notification_template_preview: {
+        Args: {
+          p_channel: Database["public"]["Enums"]["notification_channel"]
+          p_event: Database["public"]["Enums"]["notification_event"]
+          p_locale?: string
+          p_org_id: string
+        }
+        Returns: {
+          body: string
+          subject: string
+          template_id: string
+        }[]
+      }
+      org_notification_locale: { Args: { p_org_id: string }; Returns: string }
       org_snapshot: {
         Args: { p_branch_ids?: string[] }
         Returns: {
           active_members: number
-          branch_id: string | null
-          branch_name: string | null
+          branch_id: string
+          branch_name: string
           check_ins_today: number
           collected_today_paisa: number
           dues_paisa: number
@@ -1786,6 +2188,10 @@ export type Database = {
       qr_sign: { Args: { p_key: string; p_payload: string }; Returns: string }
       qr_signing_key: { Args: never; Returns: string }
       reactivate_member: { Args: { p_member_id: string }; Returns: Json }
+      reap_notification_responses: {
+        Args: { p_limit?: number }
+        Returns: number
+      }
       record_payment: {
         Args: {
           p_amount_paisa: number
@@ -1831,6 +2237,10 @@ export type Database = {
         }
         Returns: Json
       }
+      render_notification_template: {
+        Args: { p_body: string; p_vars: Json }
+        Returns: string
+      }
       renew_membership: {
         Args: {
           p_amount_paid_paisa?: number
@@ -1849,7 +2259,21 @@ export type Database = {
         Args: { p_group_by: string; p_on: string }
         Returns: string
       }
+      resolve_notification_template: {
+        Args: {
+          p_channel: Database["public"]["Enums"]["notification_channel"]
+          p_event: Database["public"]["Enums"]["notification_event"]
+          p_locale?: string
+          p_org_id: string
+        }
+        Returns: {
+          body: string
+          subject: string
+          template_id: string
+        }[]
+      }
       restore_member: { Args: { p_member_id: string }; Returns: Json }
+      retry_notification: { Args: { p_id: string }; Returns: undefined }
       revenue_report: {
         Args: {
           p_branch_ids?: string[]
@@ -1878,9 +2302,18 @@ export type Database = {
         Returns: Json
       }
       revoke_device_token: { Args: { p_token: string }; Returns: undefined }
+      seed_notification_rules: {
+        Args: { p_org_id: string }
+        Returns: undefined
+      }
+      send_notification_batch: { Args: { p_limit?: number }; Returns: number }
       set_member_left: {
         Args: { p_left_on?: string; p_member_id: string; p_reason?: string }
         Returns: Json
+      }
+      set_notification_credential: {
+        Args: { p_provider_id: string; p_secret: string }
+        Returns: undefined
       }
       storage_object_member: { Args: { object_name: string }; Returns: string }
       storage_object_org: { Args: { object_name: string }; Returns: string }
@@ -1892,6 +2325,7 @@ export type Database = {
           started: number
         }[]
       }
+      try_jsonb: { Args: { p_text: string }; Returns: Json }
       unfreeze_membership: { Args: { p_membership_id: string }; Returns: Json }
       validate_class_recurrence: {
         Args: { p_recurrence: Json }
@@ -1919,6 +2353,27 @@ export type Database = {
         | "frozen"
         | "expired"
         | "cancelled"
+      notification_channel: "sms" | "viber" | "email"
+      notification_event:
+        | "renewal_reminder"
+        | "dues_reminder"
+        | "birthday_greeting"
+        | "staff_invite"
+        | "test_message"
+      notification_provider:
+        | "sparrow_sms"
+        | "aakash_sms"
+        | "viber_business"
+        | "resend_email"
+        | "custom_http"
+        | "log_only"
+      notification_status:
+        | "queued"
+        | "sending"
+        | "sent"
+        | "failed"
+        | "cancelled"
+        | "skipped"
       org_status: "active" | "suspended" | "cancelled"
       payment_kind: "payment" | "refund" | "reversal"
       payment_method: "cash" | "esewa" | "khalti" | "fonepay" | "bank" | "card"
@@ -2074,6 +2529,30 @@ export const Constants = {
         "frozen",
         "expired",
         "cancelled",
+      ],
+      notification_channel: ["sms", "viber", "email"],
+      notification_event: [
+        "renewal_reminder",
+        "dues_reminder",
+        "birthday_greeting",
+        "staff_invite",
+        "test_message",
+      ],
+      notification_provider: [
+        "sparrow_sms",
+        "aakash_sms",
+        "viber_business",
+        "resend_email",
+        "custom_http",
+        "log_only",
+      ],
+      notification_status: [
+        "queued",
+        "sending",
+        "sent",
+        "failed",
+        "cancelled",
+        "skipped",
       ],
       org_status: ["active", "suspended", "cancelled"],
       payment_kind: ["payment", "refund", "reversal"],
