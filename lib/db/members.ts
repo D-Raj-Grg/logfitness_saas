@@ -305,7 +305,7 @@ export async function deleteMember(memberId: string) {
 }
 
 /** Counts for the dashboard tiles: expiring within 7 days, expired, frozen. */
-export async function memberStatusCounts(branchId?: string) {
+export async function memberStatusCounts(branchIds?: string[] | null) {
   const supabase = await createClient()
 
   const base = () => {
@@ -313,7 +313,7 @@ export async function memberStatusCounts(branchId?: string) {
       .from('member_overview')
       .select('id', { count: 'exact', head: true })
       .is('archived_at', null)
-    if (branchId) request = request.eq('home_branch_id', branchId)
+    if (branchIds) request = request.in('home_branch_id', branchIds)
     return request
   }
 

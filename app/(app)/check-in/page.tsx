@@ -56,9 +56,11 @@ export default async function CheckInPage({
     requested && branches.some((branch) => branch.id === requested) ? requested : undefined
   const branchId = isOwner ? scoped : (scoped ?? branches[0]?.id)
 
+  const branchIds = branchId ? [branchId] : null
+
   const [inGym, summary, log] = await Promise.all([
-    inGymNow(branchId),
-    attendanceDaySummary({ branchId }),
+    inGymNow(branchIds),
+    attendanceDaySummary({ branchIds }),
     listAttendance({ branchId, page: 1, pageSize: 25 }),
   ])
 

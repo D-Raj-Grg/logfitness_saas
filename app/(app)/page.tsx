@@ -6,12 +6,8 @@ import { dailyCollection } from '@/lib/db/payments'
 
 /** Net paisa collected today across the branches the caller can see. */
 async function todaysCollection(branchIds: string[] | null) {
-  const sheets =
-    branchIds === null
-      ? [await dailyCollection()]
-      : await Promise.all(branchIds.map((branchId) => dailyCollection({ branchId })))
-
-  return sheets.flat().reduce((sum, row) => sum + row.amount_paisa, 0)
+  const rows = await dailyCollection({ branchIds })
+  return rows.reduce((sum, row) => sum + row.amount_paisa, 0)
 }
 
 export default async function DashboardPage() {
@@ -21,12 +17,13 @@ export default async function DashboardPage() {
   const isTrainer = staff.role === 'trainer'
   // Managers may run several branches; the tiles show the first until the
   // chain-layer phase adds a branch picker.
+  const scopeBranchIds = isOwner ? null : staff.branchIds
   const scopeBranchId = isOwner ? undefined : staff.branchIds[0]
 
   const [branches, counts, collectionPaisa] = await Promise.all([
     listBranches(),
-    memberStatusCounts(scopeBranchId),
-    isTrainer ? Promise.resolve(undefined) : todaysCollection(isOwner ? null : staff.branchIds),
+    memberStatusCounts(scopeBranchIds),
+    isTrainer ? Promise.resolve(undefined) : todaysCollection(scopeBranchIds),
   ])
 
   const scopeName = scopeBranchId

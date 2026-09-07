@@ -124,34 +124,38 @@ export async function checkOutMember(attendanceId: string) {
 }
 
 /** Who is in the building right now, newest arrival first. */
-export async function inGymNow(branchId?: string) {
+export async function inGymNow(branchIds?: string[] | null) {
   const supabase = await createClient()
 
   const { data, error } = await supabase.rpc('in_gym_now', {
-    p_branch_id: branchId ?? undefined,
+    p_branch_ids: branchIds ?? undefined,
   })
 
   if (error) throw error
   return data ?? []
 }
 
-export async function attendanceDaySummary(args: { on?: string; branchId?: string } = {}) {
+export async function attendanceDaySummary(
+  args: { on?: string; branchIds?: string[] | null } = {}
+) {
   const supabase = await createClient()
 
   const { data, error } = await supabase.rpc('attendance_day_summary', {
     p_on: args.on ?? undefined,
-    p_branch_id: args.branchId ?? undefined,
+    p_branch_ids: args.branchIds ?? undefined,
   })
 
   if (error) throw error
   return data ?? []
 }
 
-export async function absentMembers(args: { branchId?: string; minDays?: number } = {}) {
+export async function absentMembers(
+  args: { branchIds?: string[] | null; minDays?: number } = {}
+) {
   const supabase = await createClient()
 
   const { data, error } = await supabase.rpc('absent_members', {
-    p_branch_id: args.branchId ?? undefined,
+    p_branch_ids: args.branchIds ?? undefined,
     p_min_days: args.minDays ?? 14,
   })
 

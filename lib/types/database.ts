@@ -1418,7 +1418,7 @@ export type Database = {
     }
     Functions: {
       absent_members: {
-        Args: { p_branch_id?: string; p_min_days?: number }
+        Args: { p_branch_ids?: string[]; p_min_days?: number }
         Returns: {
           band: string
           days_absent: number
@@ -1449,7 +1449,7 @@ export type Database = {
         Returns: Json
       }
       arrears_report: {
-        Args: { p_branch_id?: string }
+        Args: { p_branch_ids?: string[] }
         Returns: {
           age_days: number
           bucket: string
@@ -1473,7 +1473,7 @@ export type Database = {
         Returns: string
       }
       attendance_day_summary: {
-        Args: { p_branch_id?: string; p_on?: string }
+        Args: { p_branch_ids?: string[]; p_on?: string }
         Returns: {
           attended_on: string
           branch_id: string
@@ -1550,7 +1550,7 @@ export type Database = {
       }
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
       daily_collection: {
-        Args: { p_branch_id?: string; p_on?: string }
+        Args: { p_branch_ids?: string[]; p_on?: string }
         Returns: {
           amount_paisa: number
           branch_id: string
@@ -1571,7 +1571,7 @@ export type Database = {
         Returns: boolean
       }
       in_gym_now: {
-        Args: { p_branch_id?: string }
+        Args: { p_branch_ids?: string[] }
         Returns: {
           attendance_id: string
           branch_id: string

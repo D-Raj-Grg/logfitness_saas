@@ -50,7 +50,7 @@ export default async function PaymentsPage({
     })
     const bucket = query.success ? (query.data.bucket ?? null) : null
 
-    const allRows = await arrearsReport(branchId)
+    const allRows = await arrearsReport(branchId ? [branchId] : null)
     const rows = bucket ? allRows.filter((row) => row.bucket === bucket) : allRows
 
     return (
@@ -77,7 +77,7 @@ export default async function PaymentsPage({
   const query = collectionQuerySchema.safeParse({ on: first(params.on), branchId })
   const on = (query.success && query.data.on) || todayInKathmandu()
 
-  const rows = await dailyCollection({ on, branchId })
+  const rows = await dailyCollection({ on, branchIds: branchId ? [branchId] : null })
 
   return (
     <div className="flex flex-col gap-6">

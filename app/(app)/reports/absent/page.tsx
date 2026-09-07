@@ -45,7 +45,10 @@ export default async function AbsentMembersPage({
   const query = parsed.success ? parsed.data : absentQuerySchema.parse({})
 
   // Fetched once, unfiltered by band, so the tiles can count the whole set.
-  const allRows = await absentMembers({ branchId, minDays: query.minDays })
+  const allRows = await absentMembers({
+    branchIds: branchId ? [branchId] : null,
+    minDays: query.minDays,
+  })
   const band = query.band ?? null
   const rows = band ? allRows.filter((row) => row.band === band) : allRows
 

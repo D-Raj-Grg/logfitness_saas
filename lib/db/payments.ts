@@ -95,23 +95,25 @@ export async function reversePayment(args: { paymentId: string; reason: string }
 }
 
 /** The drawer sheet: one row per branch, collector, method, and kind. */
-export async function dailyCollection(args: { on?: string; branchId?: string } = {}) {
+export async function dailyCollection(
+  args: { on?: string; branchIds?: string[] | null } = {}
+) {
   const supabase = await createClient()
 
   const { data, error } = await supabase.rpc('daily_collection', {
     p_on: args.on ?? undefined,
-    p_branch_id: args.branchId ?? undefined,
+    p_branch_ids: args.branchIds ?? undefined,
   })
 
   if (error) throw error
   return data
 }
 
-export async function arrearsReport(branchId?: string) {
+export async function arrearsReport(branchIds?: string[] | null) {
   const supabase = await createClient()
 
   const { data, error } = await supabase.rpc('arrears_report', {
-    p_branch_id: branchId ?? undefined,
+    p_branch_ids: branchIds ?? undefined,
   })
 
   if (error) throw error
