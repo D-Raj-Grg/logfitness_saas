@@ -75,7 +75,12 @@ export async function refundPayment(args: {
  * own kind, so the collection sheet can tell money given back from money that
  * never arrived. Owner and manager only; the RPC enforces that.
  */
-export async function reversePayment(args: { paymentId: string; reason: string }) {
+export async function reversePayment(args: {
+  paymentId: string
+  reason: string
+  /** What never arrived. Null takes the whole entry back. */
+  amountPaisa?: number | null
+}) {
   const supabase = await createClient()
 
   return unwrap<{
@@ -90,6 +95,7 @@ export async function reversePayment(args: { paymentId: string; reason: string }
     await supabase.rpc('reverse_payment', {
       p_payment_id: args.paymentId,
       p_reason: args.reason,
+      p_amount_paisa: args.amountPaisa ?? undefined,
     })
   )
 }

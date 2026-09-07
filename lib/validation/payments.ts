@@ -89,14 +89,22 @@ export const refundPaymentSchema = z.object({
 })
 
 /**
- * Reversing a payment that never arrived. No amount: a reversal is the whole
- * entry or nothing -- a part payment that was only partly received is two facts,
- * and the honest record of it is a reversal plus a fresh payment for what did
- * come in.
+ * Reversing a payment that never arrived. The amount is what did NOT come in,
+ * not what was kept: an entry rung up at 2,500 against 1,000 in hand is
+ * corrected by taking 1,500 back, and the invoice falls to part paid on its
+ * own. Left empty, the whole entry goes back, which is the old behaviour and
+ * still the common one.
  */
 export const reversePaymentSchema = z.object({
   paymentId: z.uuid(),
   reason: z.string().trim().min(3, 'Say why it is being reversed').max(500),
+  amountPaisa: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => value ?? '')
+    .pipe(z.union([z.literal(''), rupeesSchema]))
+    .transform((value) => (value === '' ? null : value)),
 })
 
 export const membershipIdSchema = z.object({ membershipId: z.uuid() })

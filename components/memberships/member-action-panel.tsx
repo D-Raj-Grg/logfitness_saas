@@ -490,7 +490,8 @@ export function MemberActionPanel({
                 <DialogTitle>Payment never received</DialogTitle>
                 <DialogDescription>
                   For an entry recorded in error -- the member said they would pay
-                  and did not. Nothing left the drawer, so this is not a refund.
+                  and did not, or handed over less than was rung up. Nothing left
+                  the drawer, so this is not a refund.
                 </DialogDescription>
               </DialogHeader>
               {reverseTarget ? (

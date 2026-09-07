@@ -445,6 +445,15 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       fill the box rather than replacing it, and tapping the active chip clears
       it; nothing is hidden behind an "Other" option, because these sentences
       are read back months later during a reconciliation.
+- [x] **2026-09-08** `reverse_payment()` takes an amount, so part of an entry
+      can come back. The sale rung up at the full price against less in hand is
+      one negative row for the difference, not a full undo plus a fresh payment.
+      Null keeps the old whole-entry behaviour. What the invoice still holds is
+      the ceiling on any correction, so repeated part reversals cannot run past
+      the original; a payment with no invoice still goes back whole or not at
+      all. The dialog asks what the member actually gave and subtracts it
+      itself. Gate: `supabase/tests/reverse_payment.sql`.
+
 - [ ] **2026-09-07** A reversal prints as a "Payment correction" through the
       existing receipt route. Fine as a record, but it is not a receipt -- if
       members are ever handed one, it deserves its own wording rather than a

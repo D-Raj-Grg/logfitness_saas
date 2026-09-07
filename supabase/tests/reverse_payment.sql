@@ -18,6 +18,10 @@ declare
   invoice_1 uuid;
   payment_1 uuid;
   reversal_1 uuid;
+  member_2 uuid;
+  invoice_2 uuid;
+  payment_2 uuid;
+  reversal_2 uuid;
   reverser uuid;
   n integer;
   txt text;
@@ -142,16 +146,16 @@ begin
 
   -- The day nets to nothing, and the two lines are told apart by kind.
   select coalesce(sum(d.amount_paisa), 0) into amount
-  from public.daily_collection(null, br_a1) d;
+  from public.daily_collection(null, array[br_a1]) d;
   assert amount = 0, format('the drawer netted %s after a reversal', amount);
 
   select count(*) into n
-  from public.daily_collection(null, br_a1) d where d.kind = 'reversal';
+  from public.daily_collection(null, array[br_a1]) d where d.kind = 'reversal';
   assert n = 1, format('the sheet showed %s reversal lines', n);
 
   -- The member owes it again, so they turn up in arrears.
   select count(*) into n
-  from public.arrears_report(br_a1) a where a.due_paisa = 250000;
+  from public.arrears_report(array[br_a1]) a where a.due_paisa = 250000;
   assert n = 1, 'the reversed sale did not come back as arrears';
 
   -- A reversal is not itself reversible, and the invoice cannot be emptied twice.
@@ -168,6 +172,76 @@ begin
   exception when check_violation then failed := true;
   end;
   assert failed, 'the same payment was reversed twice';
+
+  -- A part of an entry that never arrived -------------------------------------
+  -- Rung up as 2,500 in cash when only 1,000 was handed over. The correction is
+  -- one negative row for the 1,500, not a full undo and a fresh payment.
+  res := public.register_member(
+    'Anil Parajuli', '9870000002', br_a1,
+    p_plan_id => plan_month, p_amount_paid_paisa => 250000
+  );
+  member_2 := (res ->> 'member_id')::uuid;
+  invoice_2 := (res ->> 'invoice_id')::uuid;
+  payment_2 := (res ->> 'payment_id')::uuid;
+
+  failed := false;
+  begin
+    perform public.reverse_payment(payment_2, 'Too much', 250001);
+  exception when check_violation then failed := true;
+  end;
+  assert failed, 'more was taken back than the entry ever held';
+
+  failed := false;
+  begin
+    perform public.reverse_payment(payment_2, 'Nothing', 0);
+  exception when check_violation then failed := true;
+  end;
+  assert failed, 'a reversal of nothing was accepted';
+
+  res := public.reverse_payment(payment_2, 'Only 1,000 was handed over', 150000);
+  reversal_2 := (res ->> 'reversal_id')::uuid;
+
+  assert (res ->> 'due_paisa')::bigint = 150000,
+    format('the invoice owed %s after a part reversal', res ->> 'due_paisa');
+  assert res ->> 'status' = 'partial',
+    format('the part-paid invoice read as %L', res ->> 'status');
+
+  select p.amount_paisa, p.kind::text into amount, txt
+  from public.payments p where p.id = reversal_2;
+  assert amount = -150000, format('the part reversal was %s', amount);
+  assert txt = 'reversal', format('the part correction was booked as %L', txt);
+
+  select i.paid_paisa into amount from public.invoices i where i.id = invoice_2;
+  assert amount = 100000, format('the invoice was left holding %s', amount);
+
+  -- What is left standing is the ceiling on any further correction.
+  failed := false;
+  begin
+    perform public.reverse_payment(payment_2, 'The rest and then some', 150000);
+  exception when check_violation then failed := true;
+  end;
+  assert failed, 'a second part reversal went past what the invoice still held';
+
+  -- The member owes the balance, so they show up in arrears for it.
+  select count(*) into n
+  from public.arrears_report(array[br_a1]) a
+  where a.member_id = member_2 and a.due_paisa = 150000;
+  assert n = 1, 'the part-paid sale did not come back as arrears for the balance';
+
+  -- Nor can the whole entry go back once part of it already has: what is left
+  -- standing on the invoice is the ceiling, whatever the original said.
+  failed := false;
+  begin
+    perform public.reverse_payment(payment_2, 'The rest never came either');
+  exception when check_violation then failed := true;
+  end;
+  assert failed, 'a full reversal ran past what the invoice still held';
+
+  res := public.reverse_payment(payment_2, 'The rest never came either', 100000);
+  assert (res ->> 'due_paisa')::bigint = 250000,
+    format('the invoice owed %s once the balance went back too', res ->> 'due_paisa');
+  assert res ->> 'status' = 'unpaid',
+    format('the emptied invoice read as %L', res ->> 'status');
 
   -- teardown ----------------------------------------------------------------------
   execute 'reset role';

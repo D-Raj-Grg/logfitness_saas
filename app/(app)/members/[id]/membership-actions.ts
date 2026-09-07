@@ -393,6 +393,7 @@ export async function reversePayment(
   const parsed = reversePaymentSchema.safeParse({
     paymentId: formData.get('paymentId'),
     reason: formData.get('reason'),
+    amountPaisa: optional(formData, 'amountPaisa'),
   })
 
   if (!parsed.success) {
@@ -408,10 +409,13 @@ export async function reversePayment(
 
   if (memberId.success) revalidateMember(memberId.data)
 
+  // The amount comes back negative from the RPC; the desk reads it as money.
+  const takenBack = formatMoney(Math.abs(result.amount_paisa))
+
   return {
     success:
       result.invoice_no && result.due_paisa !== null
-        ? `Reversed. Invoice ${result.invoice_no} owes ${formatMoney(result.due_paisa)} again.`
-        : 'Reversed. The payment no longer counts against the drawer.',
+        ? `${takenBack} taken back. Invoice ${result.invoice_no} owes ${formatMoney(result.due_paisa)}.`
+        : `${takenBack} taken back. It no longer counts against the drawer.`,
   }
 }
