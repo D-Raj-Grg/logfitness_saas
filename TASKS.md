@@ -38,6 +38,10 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 - [x] Member list: server-side search by phone/name/ID, pagination, filters, empty state
 - [x] Member registration form (zod-validated Server Action, photo upload)
 - [x] Member profile: memberships, payments, attendance, outstanding dues on one screen (attendance is a Phase 2 placeholder tab)
+- [x] Member edit screen (`/members/[id]/edit`) — same zod-validated form as
+      registration, minus the sale. A manager or the desk keeps the member's
+      current home branch selectable even when they could not register into it,
+      so an unrelated edit never forces a branch move.
 - [x] Plan catalogue CRUD (owner/manager only)
 - [x] Assign plan / renew / upgrade flow using the RPC
 - [x] Freeze and unfreeze with automatic expiry extension (RPC; UI in member action panel)
@@ -64,12 +68,19 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 - [ ] HQ dashboard: active members, today's collection, today's check-ins, expiring — all branches
 - [ ] Per-branch drill-down from every HQ metric
 - [ ] Branch CRUD (owner only)
-- [ ] Staff management: role and branch assignment, deactivate
+- [x] Staff management — invite, role and branch assignment, deactivate/reactivate
+      (`/staff`, `inviteStaff` / `setStaffStatus`). Role and branches are set at
+      invite time.
+- [ ] Edit an *existing* staff row's role or branch list. Not built: the only
+      way to change either today is to deactivate and re-invite.
 - [ ] Revenue report by branch / period / payment method
 - [ ] New members, renewals, and churn per period
 - [ ] Attendance trend report
 - [ ] Plan mix report
 - [ ] CSV export on every report
+- [x] `/reports` index page — a thin catalogue so the nav item resolves, listing
+      the reports that exist today (absent members, daily collection, arrears).
+      Phase 3 fills it out with the chain-layer reports.
 
 ## Phase 4 — Classes
 
@@ -446,6 +457,21 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       through the Supabase MCP rather than psql (no CLI login on this machine),
       so it is not wired into any CI step yet. Neither are the older spine
       tests.
+
+- [ ] **2026-09-07** `npm run db:test` runs only four of the nine SQL gates:
+      `tenant_isolation`, `member_spine`, `front_desk`, `register_member`.
+      `classes.sql`, `member_app.sql`, `push.sql`,
+      `member_archive_and_dates.sql` and `reverse_payment.sql` exist and have
+      been run by hand through the Supabase MCP, but nothing runs them as a
+      set. Add them to the `db:test` script so a regression in the member
+      principal, the booking RPCs, the push substrate or the archive/date work
+      is caught the same way a member-spine regression is. (Blocked on the same
+      missing `psql` / `SUPABASE_DB_URL` noted above, but the script should be
+      right regardless.)
+- [ ] **2026-09-07** `/payments` carries three screens behind `?view=`
+      (register, collection sheet, arrears) and `/reports` links into two of
+      them. Fine today; if a fourth view lands, it wants its own route rather
+      than another query-string branch.
 
 - [ ] **2026-09-07** `README.md` is still the create-next-app boilerplate. It
       tells a new contributor to edit `app/page.tsx` and nothing about the
