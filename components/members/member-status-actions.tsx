@@ -18,9 +18,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { ReasonField } from '@/components/forms/reason-field'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 
 /**
  * Mark-as-left and Reactivate for the profile header. Both are destructive
@@ -70,15 +69,15 @@ export function MemberStatusActions({
           </AlertDialogHeader>
 
           {left ? null : (
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="leave-reason">Reason (optional)</Label>
-              <Textarea
-                id="leave-reason"
-                name="reason"
-                placeholder="Moved away, joined another gym..."
-                maxLength={500}
-              />
-            </div>
+            <ReasonField
+              id="leave-reason"
+              presets={[
+                'Moved away',
+                'Joined another gym',
+                'Too expensive',
+                'Injury or illness',
+              ]}
+            />
           )}
 
           {state.error ? <p className="text-sm text-destructive">{state.error}</p> : null}

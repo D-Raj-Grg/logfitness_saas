@@ -7,11 +7,11 @@ import {
   type MembershipActionState,
 } from '@/app/(app)/members/[id]/membership-actions'
 import { AuthFormMessage, FieldError } from '@/components/auth/auth-form-message'
+import { ReasonField } from '@/components/forms/reason-field'
 import { PaymentMethodFields } from '@/components/memberships/payment-method-fields'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { formatDateTime, formatMoney } from '@/lib/format'
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from '@/lib/members'
 
@@ -78,18 +78,19 @@ export function RefundForm({
           fieldErrors={state.fieldErrors}
         />
 
-        <div className="flex flex-col gap-2 sm:col-span-2">
-          <Label htmlFor="refund-reason">Reason</Label>
-          <Textarea
+        <div className="sm:col-span-2">
+          <ReasonField
             id="refund-reason"
-            name="reason"
-            rows={2}
             required
-            minLength={3}
-            maxLength={500}
             placeholder="Why the money is going back"
+            presets={[
+              'Member left the gym',
+              'Paid twice',
+              'Charged the wrong amount',
+              'Membership cancelled',
+            ]}
+            messages={state.fieldErrors?.reason}
           />
-          <FieldError messages={state.fieldErrors?.reason} />
         </div>
       </div>
 
