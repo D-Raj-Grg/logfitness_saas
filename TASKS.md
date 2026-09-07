@@ -447,6 +447,11 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       so it is not wired into any CI step yet. Neither are the older spine
       tests.
 
+- [ ] **2026-09-07** `README.md` is still the create-next-app boilerplate. It
+      tells a new contributor to edit `app/page.tsx` and nothing about the
+      tenancy model, the seed, or the SQL gates. `CHANGELOG.md` now exists and
+      should be linked from it once it is rewritten.
+
 ## Open questions (from the PRD)
 
 - [ ] Which SMS/Viber gateway for Nepal, and cost per message at chain volume?
