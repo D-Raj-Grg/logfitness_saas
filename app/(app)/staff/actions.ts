@@ -166,17 +166,49 @@ export async function updateStaffAssignment(
 
   const supabase = await createClient()
 
-  const { error } = await supabase
+  // Read the target first, same as setStaffStatus: none of the checks above
+  // inspect the target's *current* role, so without this a manager aiming at
+  // an owner or a peer manager would sail past every one of them, RLS would
+  // then filter the update to zero rows, and -- with no .select() chained --
+  // PostgREST reports that as success. Reading first turns that silent no-op
+  // into a message.
+  const { data: target } = await supabase
+    .from('staff')
+    .select('id, role')
+    .eq('id', parsed.data.staffId)
+    .maybeSingle()
+
+  if (!target) {
+    return { error: 'That staff member could not be found.' }
+  }
+
+  if (target.role === 'owner' && actor.role !== 'owner') {
+    return { error: 'Only an owner can change another owner.' }
+  }
+
+  if (target.role === 'manager' && actor.role !== 'owner') {
+    return { error: 'You cannot reassign another manager.' }
+  }
+
+  const { data: updated, error } = await supabase
     .from('staff')
     .update({
       role: parsed.data.role,
       branch_ids: parsed.data.role === 'owner' ? [] : parsed.data.branchIds,
     })
     .eq('id', parsed.data.staffId)
+    // Without this, a zero-row RLS-filtered update returns no error and no
+    // data, and the two checks above are the only things standing between
+    // that and a false "Saved."
+    .select('id')
 
   if (error) {
     // The guard trigger raises check_violation with a sentence worth showing.
     return { error: error.message }
+  }
+
+  if (!updated || updated.length === 0) {
+    return { error: 'That staff member could not be updated.' }
   }
 
   revalidatePath('/staff')
