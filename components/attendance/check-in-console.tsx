@@ -20,6 +20,13 @@ type Candidate = Awaited<ReturnType<typeof searchMembers>>['members'][number]
 const MIN_TERM = 2
 const DEBOUNCE_MS = 200
 
+// Hoisted deliberately. React's streaming server renderer hands `useActionState`
+// back the initial value it was passed on *every* render pass, so an inline
+// `{}` is a new object each time -- the render-phase `handledState !== state`
+// check below would then never settle and the page 500s with "Too many
+// re-renders". One stable reference makes the check mean what it says.
+const INITIAL_STATE: CheckInActionState = {}
+
 /**
  * The whole screen in one box. Type a phone, name, or code; arrow to the right
  * person; press Enter. Nothing else stands between the desk and a check-in,
@@ -35,7 +42,7 @@ export function CheckInConsole({
 }) {
   const [state, formAction, pending] = useActionState<CheckInActionState, FormData>(
     checkIn,
-    {}
+    INITIAL_STATE
   )
 
   const [term, setTerm] = useState('')

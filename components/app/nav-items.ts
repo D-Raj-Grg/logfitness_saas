@@ -2,7 +2,6 @@ import {
   BarChart3,
   Bell,
   Building2,
-  CalendarDays,
   CreditCard,
   DoorOpen,
   LayoutDashboard,
@@ -51,7 +50,6 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ['owner', 'manager', 'front_desk'],
   },
   { title: 'Plans', href: '/plans', icon: Tags, roles: ['owner', 'manager'] },
-  { title: 'Classes', href: '/classes', icon: CalendarDays, roles: ALL_ROLES },
   {
     title: 'Branches',
     href: '/branches',

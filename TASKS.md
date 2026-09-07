@@ -132,7 +132,9 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       class/session/booking schema was in scope)
 - [ ] `pg_cron` job materializing `class_sessions` 60 days ahead from recurrence rules
 - [ ] Class CRUD: trainer, capacity, room, recurrence (Next.js UI; the underlying
-      owner/manager write policies on `classes` already exist)
+      owner/manager write policies on `classes` already exist). **Restore the
+      `Classes` entry in `components/app/nav-items.ts` when `/classes` exists** --
+      it was removed on 2026-09-07 because the link 404'd on every prefetch.
 - [ ] Timetable calendar view (dnd-kit for reschedule)
 - [ ] Front-desk booking into a session, with waitlist at capacity (Next.js UI;
       the backend RPC it will call -- `book_class_session` with the staff
@@ -208,6 +210,19 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 - [ ] iOS App Store and Google Play release pipeline
 
 ## Discovered
+
+- [x] **2026-09-07** Two render-time faults found by rendering the app as a
+      signed-in owner (`npm run smoke`), neither of which `next build` catches:
+      - `/check-in` returned 500, "Too many re-renders", from
+        `components/attendance/check-in-console.tsx`. `useActionState` was given
+        an inline `{}` as its initial state. The streaming server renderer
+        returns that initial value on every render pass rather than persisting
+        it, so the render-phase `handledState !== state` reset never converged.
+        The initial state is now a hoisted module constant.
+      - Every app page logged a client error: the sidebar's `Classes` item
+        pointed at `/classes`, a route that does not exist, so each prefetch
+        404'd and surfaced as React error #441 in the console. The item is
+        removed until the Phase 4 UI ships.
 
 - [x] **2026-09-08** Visitor log shipped (`/visitors`): `visitors` table with
       RLS, `set_visitor_defaults` filling the org's today and the author,
