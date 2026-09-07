@@ -17,6 +17,67 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-09-08 — The walk-in who is not a member yet
+
+### Added
+
+- **Visitors** (`008fb45`). A log for everyone who walked in without a
+  membership: the enquiry who asked what a month costs, and the guest who
+  trained for a day. Name, mobile, the org's own today, branch, kind, one note,
+  the plan they asked about, and a status of new / contacted / converted / lost.
+  It replaces the paper pad the callback used to die on. Every role can log one,
+  trainers included — a walk-in asks whoever is standing there.
+- **Register a visitor as a member** (`008fb45`). The row's Register button
+  opens the registration form with the name and mobile already filled, and marks
+  the visitor converted once the member exists. `converted` is not a status
+  anyone can pick: `convert_visitor()` sets it after `register_member()` has
+  returned a member, the check constraint refuses it without one, and it cannot
+  happen twice.
+- **Rows per page on the member and visitor lists** (`008fb45`). 10, 25, 50 or
+  100, in the URL like every other filter. `/members` had accepted a `pageSize`
+  parameter since it was built with no way to set one.
+
+### Changed
+
+- `Pagination` moved from `components/members/` to `components/app/` and takes a
+  `basePath`, because two lists now use it (`008fb45`).
+- The visitor list is paged rather than capped. It briefly returned the newest
+  200 rows and silently dropped the rest (`008fb45`).
+
+### Fixed
+
+- **A page boundary that moved under the desk** (`4a97afe`). The member list
+  sorted by name and the attendance log by check-in time, and neither is unique
+  — names repeat, and two people can be checked in at the same instant. Postgres
+  guarantees nothing about tied rows across separate `LIMIT`/`OFFSET` queries,
+  so a member could appear on page one and page two while another appeared on
+  neither, which reads at the desk as a record that has gone missing. Both lists
+  now end on `id`, as the visitor list does.
+- Following up a visitor logged at another branch (`008fb45`). Reads are
+  org-wide but the update policy was not, so a desk could see an out-of-branch
+  enquiry, register the member, and then fail to mark the row — silently,
+  because the Server Action swallows a failed link rather than throwing away a
+  completed registration. Logging stays branch-scoped; following up does not.
+
+### Database
+
+- `visitors`, the `visitor_kind` and `visitor_status` enums, RLS, an audit
+  trigger, and `set_visitor_defaults()` filling `visited_on` from
+  `org_today(org_id)` and `created_by` from the JWT (`20260908110100`).
+- Visitor phone length raised to 32 to match every other phone in the product
+  (`20260908110150`).
+- Visitor follow-up widened from branch-scoped to org-wide for staff
+  (`20260908110200`), and `convert_visitor()`'s refusal message reworded to
+  match (`20260908110300`).
+
+### Tests
+
+- `supabase/tests/visitors.sql` (`008fb45`). Branch rules per role, the auto
+  date, cross-tenant reads, a member's token reading nothing, and conversion
+  happening exactly once. Run through the Supabase MCP, like the rest.
+
+---
+
 ## 2026-09-08 — Part of an entry can come back
 
 ### Added
