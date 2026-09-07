@@ -116,3 +116,89 @@ begin
   delete from public.branches where org_id in (v_org_a, v_org_b);
   delete from public.orgs where id in (v_org_a, v_org_b);
 end $$;
+
+-- Task 4 (/branches): an owner can create and edit branches in their own org
+-- only, a manager cannot create one at all, and nobody can delete one -- the
+-- policy was dropped in 20260908100200_branch_write_policies.sql, so this now
+-- falls back to RLS default-deny.
+do $$
+declare
+  v_org_a uuid;
+  v_org_b uuid;
+  v_staff_a_owner uuid;
+  v_staff_a_mgr uuid;
+  v_branch_a1 uuid;
+  v_failed boolean;
+  v_n bigint;
+begin
+  insert into public.orgs (name, slug, timezone) values ('Gate4 Org A', 'gate4-org-a-test', 'Asia/Kathmandu')
+    returning id into v_org_a;
+  insert into public.orgs (name, slug, timezone) values ('Gate4 Org B', 'gate4-org-b-test', 'Asia/Kathmandu')
+    returning id into v_org_b;
+
+  insert into public.branches (org_id, name) values (v_org_a, 'A1') returning id into v_branch_a1;
+
+  insert into public.staff (org_id, full_name, email, role, branch_ids, status)
+  values (v_org_a, 'Gate4 Owner', 'owner@gate4-org-a-test.example', 'owner', '{}', 'active')
+  returning id into v_staff_a_owner;
+
+  insert into public.staff (org_id, full_name, email, role, branch_ids, status)
+  values (v_org_a, 'Gate4 Manager', 'mgr@gate4-org-a-test.example', 'manager', array[v_branch_a1], 'active')
+  returning id into v_staff_a_mgr;
+
+  -- persona: org A owner, trying to insert a branch into org B
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', v_org_a::text, 'staff_id', v_staff_a_owner::text,
+    'staff_role', 'owner', 'branch_ids', json_build_array()
+  )::text, true);
+  execute 'set local role authenticated';
+
+  v_failed := false;
+  begin
+    insert into public.branches (org_id, name) values (v_org_b, 'Cross Org Branch');
+  exception when insufficient_privilege or check_violation then v_failed := true;
+  end;
+  if not v_failed then
+    raise exception 'org A owner was able to insert a branch into org B';
+  end if;
+
+  -- an owner still cannot delete a branch -- there is no delete policy at all
+  v_failed := false;
+  begin
+    delete from public.branches where id = v_branch_a1;
+  exception when insufficient_privilege then v_failed := true;
+  end;
+  select count(*) into v_n from public.branches where id = v_branch_a1;
+  if v_n <> 1 then
+    raise exception 'org A owner deleted a branch (no delete policy should exist)';
+  end if;
+
+  execute 'reset role';
+
+  -- persona: org A manager, trying to insert a branch into their own org
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', v_org_a::text, 'staff_id', v_staff_a_mgr::text,
+    'staff_role', 'manager', 'branch_ids', json_build_array(v_branch_a1::text)
+  )::text, true);
+  execute 'set local role authenticated';
+
+  v_failed := false;
+  begin
+    insert into public.branches (org_id, name) values (v_org_a, 'Manager Branch');
+  exception when insufficient_privilege or check_violation then v_failed := true;
+  end;
+  if not v_failed then
+    raise exception 'org A manager was able to insert a branch';
+  end if;
+
+  execute 'reset role';
+  perform set_config('request.jwt.claims', null, true);
+
+  -- org_id fkey on staff cascades from orgs, so deleting the orgs tears down
+  -- their staff and branches in one step without tripping the last-owner guard.
+  delete from public.orgs where id in (v_org_a, v_org_b);
+
+  raise notice 'chain_layer: branch write policy assertions OK';
+end $$;
