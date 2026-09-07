@@ -251,6 +251,9 @@ export async function listAttendance(
 
   const { data, error, count } = await request
     .order('checked_in_at', { ascending: false })
+    // Two people can be checked in at the same instant, and a paged list needs
+    // a unique last sort key or the boundary between pages is undefined.
+    .order('id', { ascending: false })
     .range(from, to)
 
   if (error) throw error

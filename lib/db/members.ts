@@ -96,6 +96,10 @@ export async function listMembers(
 
   const { data, error, count } = await request
     .order('full_name')
+    // Names repeat -- duplicates, and common names in this market. Without a
+    // unique final sort key the page boundary is undefined, so a member can
+    // show up on two pages while another shows up on none.
+    .order('id')
     .range(from, to)
 
   if (error) throw error
