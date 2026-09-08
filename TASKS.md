@@ -801,6 +801,21 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       was finished by hand. The static verification above stands in for that
       review; a whole-branch review has still not run over them.
 
+- [ ] **2026-09-09** The Flutter app is now being built to full staff parity
+      with this console, which makes a set of RPC signatures a **published
+      contract with a second consumer** rather than an internal detail. The
+      mobile staff app calls `register_member`, `convert_visitor`,
+      `renew_membership`, `record_payment`, `refund_payment`, `reverse_payment`,
+      `freeze_membership`, `unfreeze_membership`, `cancel_membership`,
+      `set_member_left`, `reactivate_member`, `adjust_membership_dates`,
+      `archive_member`, `restore_member`, `invite_member`, `daily_collection`
+      and `arrears_report`. Changing an argument list or a returned shape on any
+      of these now breaks a shipped app that updates on the store's schedule,
+      not on deploy. `register_member` has already been re-declared once
+      (`20260907120100_register_member_start_date.sql` added `p_start_date`);
+      adding an argument with a default is safe, reordering or renaming is not.
+      Worth deciding whether these get a versioning rule before the app ships.
+
 ## Open questions (from the PRD)
 
 - [x] Which SMS/Viber gateway for Nepal, and cost per message at chain volume?
