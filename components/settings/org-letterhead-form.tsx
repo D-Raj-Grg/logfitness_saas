@@ -179,6 +179,24 @@ export function OrgLetterheadForm({
             <FieldError messages={state.fieldErrors?.taxNote} />
           </div>
 
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="standardSignupFee">Registration fee (NPR)</Label>
+            <Input
+              id="standardSignupFee"
+              name="standardSignupFee"
+              inputMode="decimal"
+              defaultValue={String(org.standard_signup_fee_paisa / 100)}
+              placeholder="0"
+            />
+            <p className="text-xs text-muted-foreground">
+              Your list joining fee. It is never charged on its own: the fee on
+              the plan is what the member pays. This is the amount an invoice
+              strikes out when the fee is waived, on a renewal or on a plan
+              priced without one. Leave it at 0 to print no waiver line.
+            </p>
+            <FieldError messages={state.fieldErrors?.standardSignupFeePaisa} />
+          </div>
+
           <div className="flex flex-col gap-2 sm:col-span-2">
             <Label htmlFor="invoiceTerms">Terms and footer (optional)</Label>
             <Textarea

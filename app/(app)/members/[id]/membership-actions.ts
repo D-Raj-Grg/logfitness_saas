@@ -16,6 +16,7 @@ import {
   refundPayment as refundPaymentRow,
   reversePayment as reversePaymentRow,
 } from '@/lib/db/payments'
+import { getOrgStandardSignupFee } from '@/lib/db/orgs'
 import { listPlansForBranch } from '@/lib/db/plans'
 import { formatDate, formatMoney } from '@/lib/format'
 import {
@@ -73,14 +74,22 @@ export async function loadPlansForBranch(branchId: string) {
   const staff = await requireRole(...CASHIER_ROLES)
 
   const parsed = z.uuid().safeParse(branchId)
-  if (!parsed.success) return { plans: [] }
+  if (!parsed.success) return { plans: [], standardSignupFeePaisa: 0 }
 
   if (staff.role !== 'owner' && !staff.branchIds.includes(parsed.data)) {
-    return { plans: [] }
+    return { plans: [], standardSignupFeePaisa: 0 }
   }
 
-  const plans = await listPlansForBranch(parsed.data)
+  // The list fee travels with the plans because the counter has to show the
+  // same waiver the invoice will print, and a plan priced without a fee of its
+  // own has no other source for the amount.
+  const [plans, standardSignupFeePaisa] = await Promise.all([
+    listPlansForBranch(parsed.data),
+    getOrgStandardSignupFee(staff.orgId),
+  ])
+
   return {
+    standardSignupFeePaisa,
     plans: plans.map((plan) => ({
       id: plan.id,
       name: plan.name,

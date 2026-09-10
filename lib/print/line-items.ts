@@ -11,6 +11,16 @@ import { orgFormatters } from '@/lib/format'
  * a single line. Do not try to recover the split for them from
  * membership_plans.signup_fee_paisa -- the plan may have been repriced since,
  * and a wrong number on a tax document is worse than a missing one.
+ *
+ * A waived fee (20260910120000_waived_signup_fee.sql) is the same story told
+ * the other way: the member should see that a fee applied and was not taken.
+ * It prints as a pair -- the fee, then the same amount back off -- so the
+ * lines still add up to the subtotal the invoice actually charges. Rows
+ * written before that migration carry 0 and print no pair, which is right:
+ * the fact was never recorded for them, and it is not inferable now.
+ *
+ * The two are mutually exclusive by construction: a fee that was charged was
+ * not waived, and renew_membership derives one from the other.
  */
 export type DocumentLine = {
   description: string
@@ -22,6 +32,7 @@ export function invoiceLines(invoice: InvoiceForPrint): DocumentLine[] {
   const fmt = orgFormatters(invoice.org)
   const membership = invoice.membership
   const signupFee = membership?.signup_fee_paisa ?? 0
+  const waivedFee = membership?.signup_fee_waived_paisa ?? 0
 
   const detail = !membership
     ? null
@@ -50,6 +61,21 @@ export function invoiceLines(invoice: InvoiceForPrint): DocumentLine[] {
       detail: 'Charged once, on the first membership',
       amountPaisa: signupFee,
     })
+  }
+
+  if (waivedFee > 0) {
+    lines.push(
+      {
+        description: 'Joining fee',
+        detail: 'Charged once, on the first membership',
+        amountPaisa: waivedFee,
+      },
+      {
+        description: 'Joining fee waived',
+        detail: 'Not charged on this membership',
+        amountPaisa: -waivedFee,
+      }
+    )
   }
 
   return lines

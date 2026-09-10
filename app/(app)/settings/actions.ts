@@ -58,6 +58,7 @@ export async function updateOrgLetterhead(
     panNo: formData.get('panNo'),
     taxNote: formData.get('taxNote'),
     invoiceTerms: formData.get('invoiceTerms'),
+    standardSignupFeePaisa: formData.get('standardSignupFee'),
   })
 
   if (!parsed.success) {
@@ -95,6 +96,7 @@ export async function updateOrgLetterhead(
       pan_no: parsed.data.panNo,
       tax_note: parsed.data.taxNote,
       invoice_terms: parsed.data.invoiceTerms,
+      standard_signup_fee_paisa: parsed.data.standardSignupFeePaisa,
       logo_path: logoPath,
     })
 

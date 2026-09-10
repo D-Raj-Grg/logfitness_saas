@@ -39,7 +39,11 @@ export function LineItemsTable({
               ) : null}
             </td>
             <td className="py-2.5 text-right align-top tabular-nums text-[#111827]">
-              {formatAmount(line.amountPaisa)}
+              {/* A credit reads as "- NPR 500", not "NPR -500" -- the same
+                  shape the Discount total uses. */}
+              {line.amountPaisa < 0
+                ? `- ${formatAmount(Math.abs(line.amountPaisa))}`
+                : formatAmount(line.amountPaisa)}
             </td>
           </tr>
         ))}

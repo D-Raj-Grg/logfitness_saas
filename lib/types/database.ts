@@ -843,6 +843,7 @@ export type Database = {
           sessions_remaining: number | null
           sessions_total: number | null
           signup_fee_paisa: number
+          signup_fee_waived_paisa: number
           sold_by: string | null
           start_date: string
           status: Database["public"]["Enums"]["membership_status"]
@@ -869,6 +870,7 @@ export type Database = {
           sessions_remaining?: number | null
           sessions_total?: number | null
           signup_fee_paisa?: number
+          signup_fee_waived_paisa?: number
           sold_by?: string | null
           start_date: string
           status?: Database["public"]["Enums"]["membership_status"]
@@ -895,6 +897,7 @@ export type Database = {
           sessions_remaining?: number | null
           sessions_total?: number | null
           signup_fee_paisa?: number
+          signup_fee_waived_paisa?: number
           sold_by?: string | null
           start_date?: string
           status?: Database["public"]["Enums"]["membership_status"]
@@ -1310,6 +1313,7 @@ export type Database = {
           phone: string | null
           settings: Json
           slug: string
+          standard_signup_fee_paisa: number
           status: Database["public"]["Enums"]["org_status"]
           subscription_tier: string
           tax_note: string | null
@@ -1331,6 +1335,7 @@ export type Database = {
           phone?: string | null
           settings?: Json
           slug: string
+          standard_signup_fee_paisa?: number
           status?: Database["public"]["Enums"]["org_status"]
           subscription_tier?: string
           tax_note?: string | null
@@ -1352,6 +1357,7 @@ export type Database = {
           phone?: string | null
           settings?: Json
           slug?: string
+          standard_signup_fee_paisa?: number
           status?: Database["public"]["Enums"]["org_status"]
           subscription_tier?: string
           tax_note?: string | null

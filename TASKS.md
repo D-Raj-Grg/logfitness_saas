@@ -211,6 +211,14 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
+- [x] **2026-09-10** Waived registration fee now prints. `renew_membership`
+      records `memberships.signup_fee_waived_paisa` and `orgs` gained
+      `standard_signup_fee_paisa` (owner-editable on `/settings`), so the
+      invoice, the receipt, and both counter sale summaries show the fee and
+      the same amount taken back off. Money is untouched: the waiver is outside
+      the subtotal, and the gate asserts it.
+      Gate: `supabase/tests/waived_signup_fee.sql`.
+
 - [x] **2026-09-07** Two render-time faults found by rendering the app as a
       signed-in owner (`npm run smoke`), neither of which `next build` catches:
       - `/check-in` returned 500, "Too many re-renders", from

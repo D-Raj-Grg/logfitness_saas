@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { formatDate, formatMoney } from '@/lib/format'
-import { paisaOrZero, planTerm, rupees } from '@/lib/plan-pricing'
+import { paisaOrZero, planTerm, rupees, signupFeeSplit } from '@/lib/plan-pricing'
 import type { PaymentMethod } from '@/lib/members'
 
 type Branch = { id: string; name: string }
@@ -53,6 +53,7 @@ export function RenewForm({
 
   const [branchId, setBranchId] = useState(defaultBranchId)
   const [plans, setPlans] = useState<PlanOption[]>([])
+  const [standardFee, setStandardFee] = useState(0)
   const [planId, setPlanId] = useState('')
   const [loadingPlans, startLoadingPlans] = useTransition()
   const [discount, setDiscount] = useState('')
@@ -64,6 +65,7 @@ export function RenewForm({
     startLoadingPlans(async () => {
       const result = await loadPlansForBranch(branchId)
       setPlans(result.plans)
+      setStandardFee(result.standardSignupFeePaisa)
       setPlanId((current) =>
         result.plans.some((plan) => plan.id === current) ? current : ''
       )
@@ -75,7 +77,15 @@ export function RenewForm({
   }, [state.success, state.document, onSuccess])
 
   const plan = plans.find((item) => item.id === planId) ?? null
-  const signupFee = plan && isFirstMembership ? plan.signup_fee_paisa : 0
+  // A renewal is the common case for a waiver: the fee applied once and was
+  // taken then, so it is not taken again -- and the member should see that.
+  const fee = signupFeeSplit({
+    planSignupFeePaisa: plan?.signup_fee_paisa ?? 0,
+    orgStandardFeePaisa: standardFee,
+    isFirstMembership,
+  })
+  const signupFee = plan ? fee.charged : 0
+  const waivedFee = plan ? fee.waived : 0
   const subtotal = plan ? plan.price_paisa + signupFee : 0
   const discountPaisa = Math.min(paisaOrZero(discount), subtotal)
   const total = subtotal - discountPaisa
@@ -251,6 +261,9 @@ export function RenewForm({
               <span className="text-muted-foreground">
                 {plan.name}
                 {signupFee > 0 ? ` + joining fee ${formatMoney(signupFee)}` : ''}
+                {waivedFee > 0
+                  ? ` · joining fee ${formatMoney(waivedFee)} waived`
+                  : ''}
                 {discountPaisa > 0 ? ` − discount ${formatMoney(discountPaisa)}` : ''}
               </span>
               <span className="font-medium">Total {formatMoney(total)}</span>

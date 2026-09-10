@@ -344,6 +344,20 @@ Do not build these without an explicit decision to change scope.
   `memberships.signup_fee_paisa` so the joining fee can print as its own line;
   rows written earlier carry 0 and print as one line, which is correct -- the
   split does not exist for them.
+- **A waived joining fee is printed, not inferred (2026-09-10).** A member who
+  pays no registration fee should see on paper that one applied and was not
+  taken. The amount is recorded at the point of sale in
+  `memberships.signup_fee_waived_paisa`, never recomputed later, for the same
+  reason the charged fee is not: the plan may have been repriced since. It
+  prints as a pair -- the fee, then the same amount back off -- so the lines
+  still sum to the subtotal the invoice charges, and it is a memo throughout:
+  outside `price_paisa`, outside the invoice subtotal, outside every revenue
+  report. `orgs.standard_signup_fee_paisa` is the gym's list fee, set on
+  `/settings` and never charged on its own; it is the reference amount for a
+  plan priced without a fee of its own, which is how a long-term tier sold as
+  "joining fee waived" has something to strike out. A gym that leaves it at 0
+  prints no waiver line. Charged and waived are mutually exclusive by
+  construction. Gate: `supabase/tests/waived_signup_fee.sql`.
 - DNS resolved directly to Vercel (Cloudflare proxy disabled); single DMARC record in place.
 - Phase 3 shipped: the chain layer. Branch scope is resolved once, server-side
   (`lib/scope.ts`), from a `?branch=` parameter plus an `lg_branch` cookie, and

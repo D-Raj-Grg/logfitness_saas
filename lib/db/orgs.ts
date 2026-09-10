@@ -39,6 +39,24 @@ export async function getOrgProfile(orgId: string) {
   return data
 }
 
+/**
+ * The gym's list registration fee. Read on its own because the sale forms need
+ * it on every plan lookup and have no business pulling the whole org row --
+ * letterhead, logo path and settings included -- to get one integer.
+ */
+export async function getOrgStandardSignupFee(orgId: string) {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from('orgs')
+    .select('standard_signup_fee_paisa')
+    .eq('id', orgId)
+    .maybeSingle()
+
+  if (error) throw error
+  return data?.standard_signup_fee_paisa ?? 0
+}
+
 /** Writes are owner-only; "owners update their own org" is what enforces it. */
 export async function updateOrgProfile(orgId: string, values: OrgUpdate) {
   const supabase = await createClient()

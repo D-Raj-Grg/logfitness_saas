@@ -20,6 +20,7 @@ export function ReceiptDocument({ payment }: { payment: PaymentForPrint }) {
   const isRefund = payment.kind === 'refund'
   const isReversal = payment.kind === 'reversal'
   const amount = Math.abs(payment.amount_paisa)
+  const waivedFee = payment.membership?.signup_fee_waived_paisa ?? 0
 
   return (
     <>
@@ -78,6 +79,16 @@ export function ReceiptDocument({ payment }: { payment: PaymentForPrint }) {
                   payment.membership.end_date
                 )}`
               : ''}
+          </p>
+        ) : null}
+
+        {/* Say the fee was waived on the receipt too. A refund or a reversal
+            is money going the other way and has nothing to do with the sale's
+            joining fee, so it stays off those. */}
+        {!isRefund && !isReversal && waivedFee > 0 ? (
+          <p className="mt-2 text-[9.5pt] text-[#4b5563]">
+            Joining fee <span className="line-through">{fmt.money(waivedFee)}</span>{' '}
+            waived · not charged on this membership
           </p>
         ) : null}
       </section>

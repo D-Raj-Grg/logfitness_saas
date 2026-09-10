@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/select'
 import { formatMoney } from '@/lib/format'
 import type { PaymentMethod } from '@/lib/members'
-import { paisaOrZero, planTerm, rupees } from '@/lib/plan-pricing'
+import { paisaOrZero, planTerm, rupees, signupFeeSplit } from '@/lib/plan-pricing'
 
 type PlanOption = Awaited<ReturnType<typeof loadPlansForBranch>>['plans'][number]
 
@@ -55,6 +55,7 @@ export function MemberSaleFields({
 }) {
   const [selling, setSelling] = useState(false)
   const [plans, setPlans] = useState<PlanOption[]>([])
+  const [standardFee, setStandardFee] = useState(0)
   const [planId, setPlanId] = useState('')
   const [discount, setDiscount] = useState('')
   const [paid, setPaid] = useState('')
@@ -84,6 +85,7 @@ export function MemberSaleFields({
       pendingPlanId.current = null
 
       setPlans(result.plans)
+      setStandardFee(result.standardSignupFeePaisa)
       setPlanId((current) => {
         // A plan just created in the dialog wins; otherwise keep the current
         // one, unless the branch changed and it is not sold here any more.
@@ -111,6 +113,11 @@ export function MemberSaleFields({
 
   // A member being registered has never paid a joining fee, so it always
   // applies -- no need for the renew form's isFirstMembership flag.
+  const fee = signupFeeSplit({
+    planSignupFeePaisa: plan?.signup_fee_paisa ?? 0,
+    orgStandardFeePaisa: standardFee,
+    isFirstMembership: true,
+  })
   const subtotal = plan ? plan.price_paisa + plan.signup_fee_paisa : 0
   const discountPaisa = Math.min(paisaOrZero(discount), subtotal)
   const total = subtotal - discountPaisa
@@ -295,11 +302,26 @@ export function MemberSaleFields({
                 <dt>{plan.name}</dt>
                 <dd className="tabular-nums">{formatMoney(plan.price_paisa)}</dd>
               </div>
-              {plan.signup_fee_paisa > 0 ? (
+              {fee.charged > 0 ? (
                 <div className="flex justify-between text-muted-foreground">
                   <dt>Joining fee</dt>
-                  <dd className="tabular-nums">{formatMoney(plan.signup_fee_paisa)}</dd>
+                  <dd className="tabular-nums">{formatMoney(fee.charged)}</dd>
                 </div>
+              ) : null}
+              {/* The waiver is a memo, not a discount: it nets to nothing and
+                  leaves the total alone. It is shown so the desk can say out
+                  loud what the invoice will print. */}
+              {fee.waived > 0 ? (
+                <>
+                  <div className="flex justify-between text-muted-foreground">
+                    <dt>Joining fee</dt>
+                    <dd className="tabular-nums">{formatMoney(fee.waived)}</dd>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <dt>Joining fee waived</dt>
+                    <dd className="tabular-nums">-{formatMoney(fee.waived)}</dd>
+                  </div>
+                </>
               ) : null}
               {discountPaisa > 0 ? (
                 <div className="flex justify-between text-muted-foreground">
