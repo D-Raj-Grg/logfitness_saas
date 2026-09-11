@@ -836,6 +836,21 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       adding an argument with a default is safe, reordering or renaming is not.
       Worth deciding whether these get a versioning rule before the app ships.
 
+- [ ] **2026-09-11** A member registered through `register_member` always
+      starts **opted in** to automated messages, on both surfaces, and nothing
+      at the point of registration can change it. `members.notifications_opt_out`
+      exists and every enqueue job checks it, but the RPC has no
+      `p_notifications_opt_out` argument, and `components/members/member-form.tsx`
+      renders the consent checkbox inside a `{member ? ...}` branch — so it is
+      shown when editing and not when registering. The Flutter app matches this
+      exactly, deliberately, rather than diverging.
+      Consent is the one setting where defaulting quietly is least defensible:
+      `docs/notifications.md` treats opt-out as a shipping requirement, and a
+      member who says "do not text me" while signing up currently has to be
+      edited afterwards for it to take. Adding the argument with a `default
+      false` is backwards-compatible for both callers (and the mobile app is
+      now a second consumer of this signature — see the note above).
+
 ## Open questions (from the PRD)
 
 - [x] Which SMS/Viber gateway for Nepal, and cost per message at chain volume?
