@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import type { Database } from '@/lib/types/database'
 
+type DiscountReason = Database['public']['Enums']['discount_reason']
+
 export type MembershipRow = Database['public']['Tables']['memberships']['Row']
 export type InvoiceRow = Database['public']['Tables']['invoices']['Row']
 export type PaymentMethod = Database['public']['Enums']['payment_method']
@@ -51,6 +53,8 @@ export async function renewMembership(args: {
   branchId: string
   startDate?: string | null
   discountPaisa?: number
+  discountReason?: DiscountReason | null
+  discountNote?: string | null
   amountPaidPaisa?: number
   method?: PaymentMethod
   referenceNo?: string | null
@@ -74,6 +78,8 @@ export async function renewMembership(args: {
       p_branch_id: args.branchId,
       p_start_date: args.startDate ?? undefined,
       p_discount_paisa: args.discountPaisa ?? 0,
+    p_discount_reason: args.discountReason ?? undefined,
+    p_discount_note: args.discountNote ?? undefined,
       p_amount_paid_paisa: args.amountPaidPaisa ?? 0,
       p_method: args.method ?? 'cash',
       p_reference_no: args.referenceNo ?? undefined,

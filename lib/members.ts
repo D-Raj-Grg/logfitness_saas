@@ -16,6 +16,28 @@ export const PAYMENT_KIND_LABELS: Record<PaymentKind, string> = {
   refund: 'Refund',
   reversal: 'Never received',
 }
+export type DiscountReason = Database['public']['Enums']['discount_reason']
+
+/**
+ * Why money came off. A fixed list rather than free text so the same discount
+ * reads the same on every invoice and can be totalled later -- "dashain",
+ * "Dashain offer" and "festival discount" were three reasons in a text box.
+ * 'other' carries a note, so the desk is never blocked by a case nobody
+ * anticipated.
+ */
+export const DISCOUNT_REASON_LABELS: Record<DiscountReason, string> = {
+  festival: 'Festival offer',
+  student: 'Student',
+  staff_referral: 'Staff referral',
+  friend_referral: 'Friend referral',
+  corporate: 'Corporate',
+  other: 'Other',
+}
+
+export const DISCOUNT_REASONS = Object.keys(
+  DISCOUNT_REASON_LABELS
+) as DiscountReason[]
+
 export type InvoiceStatus = Database['public']['Enums']['invoice_status']
 export type MemberGender = Database['public']['Enums']['member_gender']
 

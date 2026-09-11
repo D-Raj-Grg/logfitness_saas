@@ -22,7 +22,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { formatMoney } from '@/lib/format'
-import type { PaymentMethod } from '@/lib/members'
+import {
+  DISCOUNT_REASONS,
+  DISCOUNT_REASON_LABELS,
+  type DiscountReason,
+  type PaymentMethod,
+} from '@/lib/members'
 import { paisaOrZero, planTerm, rupees, signupFeeSplit } from '@/lib/plan-pricing'
 
 type PlanOption = Awaited<ReturnType<typeof loadPlansForBranch>>['plans'][number]
@@ -58,6 +63,8 @@ export function MemberSaleFields({
   const [standardFee, setStandardFee] = useState(0)
   const [planId, setPlanId] = useState('')
   const [discount, setDiscount] = useState('')
+  const [discountReason, setDiscountReason] = useState<DiscountReason | ''>('')
+  const [discountNote, setDiscountNote] = useState('')
   const [paid, setPaid] = useState('')
   const [payment, setPayment] = useState<PaymentStatus>('full')
   const [startDate, setStartDate] = useState('')
@@ -251,6 +258,50 @@ export function MemberSaleFields({
             />
             <FieldError messages={fieldErrors?.discountPaisa} />
           </div>
+
+          {/* Only once money is actually coming off. An empty reason select
+              sitting beside an empty amount is a question nobody asked. */}
+          {discountPaisa > 0 ? (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="saleDiscountReason">Reason for the discount</Label>
+              <Select
+                name="saleDiscountReason"
+                value={discountReason}
+                onValueChange={(value) => setDiscountReason(value as DiscountReason)}
+              >
+                <SelectTrigger id="saleDiscountReason" className="w-full">
+                  <SelectValue>
+                    {discountReason
+                      ? DISCOUNT_REASON_LABELS[discountReason]
+                      : 'Pick a reason'}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {DISCOUNT_REASONS.map((reason) => (
+                    <SelectItem key={reason} value={reason}>
+                      {DISCOUNT_REASON_LABELS[reason]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldError messages={fieldErrors?.discountReason} />
+            </div>
+          ) : null}
+
+          {discountPaisa > 0 && discountReason === 'other' ? (
+            <div className="flex flex-col gap-2 sm:col-span-2">
+              <Label htmlFor="saleDiscountNote">Describe the reason</Label>
+              <Input
+                id="saleDiscountNote"
+                name="saleDiscountNote"
+                maxLength={120}
+                placeholder="Prints on the invoice"
+                value={discountNote}
+                onChange={(event) => setDiscountNote(event.target.value)}
+              />
+              <FieldError messages={fieldErrors?.discountNote} />
+            </div>
+          ) : null}
 
           <div className="flex flex-col gap-2 sm:col-span-2">
             <Label>Payment</Label>

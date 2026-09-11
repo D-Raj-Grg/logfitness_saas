@@ -211,6 +211,18 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
+- [x] **2026-09-11** Printed invoice and receipt redesigned, after INV000031
+      printed a self-contradiction: "Joining fee / charged once on the first
+      membership" immediately above "Joining fee waived". The fee now shows and
+      comes off with a minus, the way a discount reads, with the reason derived
+      from whether the membership follows another. Adds a savings banner, a
+      black balance-due block, a three-cell meta band (the dead gap under
+      "Billed to" is gone), one palette and one type scale, `lib/print/strings.ts`,
+      and `app/(preview)/documents` as a dev-only harness for every state.
+- [x] **2026-09-11** Discount reason captured at the counter and printed.
+      `discount_reason` enum + `discount_note`, both sale RPCs, both forms,
+      both zod schemas. Gate: `supabase/tests/discount_reason.sql`.
+
 - [x] **2026-09-10** Waived registration fee now prints. `renew_membership`
       records `memberships.signup_fee_waived_paisa` and `orgs` gained
       `standard_signup_fee_paisa` (owner-editable on `/settings`), so the

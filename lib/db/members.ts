@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import type { Database } from '@/lib/types/database'
+
+type DiscountReason = Database['public']['Enums']['discount_reason']
 import type { MemberListQuery } from '@/lib/validation/members'
 
 export type MemberRow = Database['public']['Tables']['members']['Row']
@@ -199,6 +201,8 @@ export async function registerMember(args: {
   notes?: string | null
   planId?: string | null
   discountPaisa?: number
+  discountReason?: DiscountReason | null
+  discountNote?: string | null
   amountPaidPaisa?: number
   method?: Database['public']['Enums']['payment_method']
   referenceNo?: string | null
@@ -220,6 +224,8 @@ export async function registerMember(args: {
     p_notes: args.notes ?? undefined,
     p_plan_id: args.planId ?? undefined,
     p_discount_paisa: args.discountPaisa ?? 0,
+    p_discount_reason: args.discountReason ?? undefined,
+    p_discount_note: args.discountNote ?? undefined,
     p_amount_paid_paisa: args.amountPaidPaisa ?? 0,
     p_method: args.method ?? 'cash',
     p_reference_no: args.referenceNo ?? undefined,

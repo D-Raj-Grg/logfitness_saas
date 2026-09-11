@@ -114,6 +114,8 @@ export async function renewMembership(
     branchId: formData.get('branchId'),
     startDate: optional(formData, 'startDate'),
     discountPaisa: optional(formData, 'discountPaisa'),
+    discountReason: optional(formData, 'discountReason'),
+    discountNote: optional(formData, 'discountNote'),
     amountPaidPaisa: optional(formData, 'amountPaidPaisa'),
     method: formData.get('method') ?? undefined,
     referenceNo: optional(formData, 'referenceNo'),
@@ -138,6 +140,8 @@ export async function renewMembership(
       branchId: parsed.data.branchId,
       startDate: parsed.data.startDate,
       discountPaisa: parsed.data.discountPaisa,
+      discountReason: parsed.data.discountReason,
+      discountNote: parsed.data.discountNote,
       amountPaidPaisa: parsed.data.amountPaidPaisa,
       method: parsed.data.method,
       referenceNo: parsed.data.referenceNo,
@@ -426,5 +430,12 @@ export async function reversePayment(
       result.invoice_no && result.due_paisa !== null
         ? `${takenBack} taken back. Invoice ${result.invoice_no} owes ${formatMoney(result.due_paisa)}.`
         : `${takenBack} taken back. It no longer counts against the drawer.`,
+    // A correction is the one document the member is most likely to argue
+    // about, so offer it on the spot like every other outcome here rather
+    // than making the desk hunt for it in the history table.
+    document: {
+      href: `/receipts/${result.reversal_id}/print`,
+      label: 'Print correction note',
+    },
   }
 }

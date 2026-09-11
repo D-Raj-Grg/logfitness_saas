@@ -107,6 +107,9 @@ const routes = [
   // The seed has no attendance, so everyone active is absent by definition.
   ['/reports/absent', ['Raj Bahadur Thapa', 'Never']],
   ['/reports/absent?minDays=90', ['Absent']],
+  // The printed documents. They render outside the console shell, so nothing
+  // else here would notice if a change broke them.
+  ['/documents', ['BALANCE DUE', 'Registration fee off', 'YOU SAVED']],
 ]
 
 let failures = 0

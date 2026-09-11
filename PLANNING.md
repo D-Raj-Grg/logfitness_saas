@@ -358,6 +358,28 @@ Do not build these without an explicit decision to change scope.
   "joining fee waived" has something to strike out. A gym that leaves it at 0
   prints no waiver line. Charged and waived are mutually exclusive by
   construction. Gate: `supabase/tests/waived_signup_fee.sql`.
+- **The documents were redesigned around what a member reads (2026-09-11).**
+  The sheet's palette and type scale live in `.doc-a4` as custom properties;
+  a literal hex or an ad-hoc pt size in `components/print/` is now a bug. Three
+  things carry rank, in this order: what was bought, what was saved, what is
+  owed. `BalanceBlock` is the only fill on the page -- a black chip carrying
+  `.print-exact` -- and the amount always sits outside it in black, because a
+  browser that drops the fill must not drop the number. `SavingsBanner` adds
+  the two credits together (registration fee off + discount) and renders
+  nothing when there are none. Customer-facing wording lives in
+  `lib/print/strings.ts`, keyed by the same `'en' | 'ne'` the notification
+  templates use; Nepali needs a Devanagari face, which Figtree is not.
+  `app/(preview)/documents` renders every document state from fixtures and
+  404s outside development.
+- **A discount has to be explainable (2026-09-11).** `discount_reason` is an
+  enum with an `other` escape carrying `discount_note`, stored on both
+  `memberships` and `invoices`, immutable once sold, and refused by
+  `renew_membership` if money comes off without one. The table constraints are
+  `NOT VALID`: discounted rows predate the column, and inventing a reason for
+  them would be fabricating a financial record. On paper the totals row stays
+  the plain word "Discount" -- it is arithmetic -- and the reason is named in
+  the savings banner, which is where it means something.
+  Gate: `supabase/tests/discount_reason.sql`.
 - DNS resolved directly to Vercel (Cloudflare proxy disabled); single DMARC record in place.
 - Phase 3 shipped: the chain layer. Branch scope is resolved once, server-side
   (`lib/scope.ts`), from a `?branch=` parameter plus an `lg_branch` cookie, and

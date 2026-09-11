@@ -541,7 +541,9 @@ export type Database = {
         Row: {
           branch_id: string
           created_at: string
+          discount_note: string | null
           discount_paisa: number
+          discount_reason: Database["public"]["Enums"]["discount_reason"] | null
           due_paisa: number | null
           id: string
           invoice_no: string
@@ -559,7 +561,9 @@ export type Database = {
         Insert: {
           branch_id: string
           created_at?: string
+          discount_note?: string | null
           discount_paisa?: number
+          discount_reason?: Database["public"]["Enums"]["discount_reason"] | null
           due_paisa?: number | null
           id?: string
           invoice_no?: string
@@ -577,7 +581,9 @@ export type Database = {
         Update: {
           branch_id?: string
           created_at?: string
+          discount_note?: string | null
           discount_paisa?: number
+          discount_reason?: Database["public"]["Enums"]["discount_reason"] | null
           due_paisa?: number | null
           id?: string
           invoice_no?: string
@@ -827,7 +833,9 @@ export type Database = {
           cancel_reason: string | null
           cancelled_at: string | null
           created_at: string
+          discount_note: string | null
           discount_paisa: number
+          discount_reason: Database["public"]["Enums"]["discount_reason"] | null
           end_date: string | null
           frozen_days: number
           frozen_on: string | null
@@ -854,7 +862,9 @@ export type Database = {
           cancel_reason?: string | null
           cancelled_at?: string | null
           created_at?: string
+          discount_note?: string | null
           discount_paisa?: number
+          discount_reason?: Database["public"]["Enums"]["discount_reason"] | null
           end_date?: string | null
           frozen_days?: number
           frozen_on?: string | null
@@ -881,7 +891,9 @@ export type Database = {
           cancel_reason?: string | null
           cancelled_at?: string | null
           created_at?: string
+          discount_note?: string | null
           discount_paisa?: number
+          discount_reason?: Database["public"]["Enums"]["discount_reason"] | null
           end_date?: string | null
           frozen_days?: number
           frozen_on?: string | null
@@ -2227,7 +2239,9 @@ export type Database = {
           p_address?: string
           p_amount_paid_paisa?: number
           p_date_of_birth?: string
+          p_discount_note?: string
           p_discount_paisa?: number
+          p_discount_reason?: Database["public"]["Enums"]["discount_reason"]
           p_email?: string
           p_emergency_contact_name?: string
           p_emergency_contact_phone?: string
@@ -2251,7 +2265,9 @@ export type Database = {
         Args: {
           p_amount_paid_paisa?: number
           p_branch_id: string
+          p_discount_note?: string
           p_discount_paisa?: number
+          p_discount_reason?: Database["public"]["Enums"]["discount_reason"]
           p_member_id: string
           p_method?: Database["public"]["Enums"]["payment_method"]
           p_notes?: string
@@ -2350,6 +2366,13 @@ export type Database = {
         | "no_show"
       class_session_status: "scheduled" | "cancelled"
       device_platform: "ios" | "android"
+      discount_reason:
+        | "festival"
+        | "student"
+        | "staff_referral"
+        | "friend_referral"
+        | "corporate"
+        | "other"
       invoice_status: "unpaid" | "partial" | "paid" | "void"
       member_gender: "male" | "female" | "other"
       member_status: "active" | "expired" | "frozen" | "left"
@@ -2526,6 +2549,14 @@ export const Constants = {
       ],
       class_session_status: ["scheduled", "cancelled"],
       device_platform: ["ios", "android"],
+      discount_reason: [
+        "festival",
+        "student",
+        "staff_referral",
+        "friend_referral",
+        "corporate",
+        "other",
+      ],
       invoice_status: ["unpaid", "partial", "paid", "void"],
       member_gender: ["male", "female", "other"],
       member_status: ["active", "expired", "frozen", "left"],

@@ -43,6 +43,7 @@ export async function getInvoiceForPrint(invoiceId: string) {
       membership:memberships!invoices_membership_fkey(
         plan_name, plan_type, start_date, end_date, sessions_total,
         price_paisa, signup_fee_paisa, signup_fee_waived_paisa, discount_paisa,
+        previous_membership_id,
         seller:staff!memberships_sold_by_fkey(full_name)
       ),
       branch:branches!invoices_branch_fkey(${BRANCH_FIELDS}),
@@ -81,7 +82,8 @@ export async function getPaymentForPrint(paymentId: string) {
         plan_name, plan_type, start_date, end_date, signup_fee_waived_paisa
       ),
       invoice:invoices!payments_invoice_fkey(
-        invoice_no, total_paisa, paid_paisa, due_paisa, status
+        invoice_no, total_paisa, paid_paisa, due_paisa, status,
+        discount_paisa, discount_reason, discount_note
       ),
       branch:branches!payments_branch_fkey(${BRANCH_FIELDS}),
       org:orgs!payments_org_id_fkey(${ORG_LETTERHEAD})

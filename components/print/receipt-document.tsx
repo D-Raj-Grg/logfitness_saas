@@ -1,9 +1,11 @@
 import { DocumentFooter } from '@/components/print/document-footer'
 import { DocumentMeta } from '@/components/print/document-meta'
 import { Letterhead } from '@/components/print/letterhead'
+import { SavingsBanner, type SavingsItem } from '@/components/print/savings-banner'
 import type { PaymentForPrint } from '@/lib/db/documents'
 import { orgFormatters } from '@/lib/format'
 import { INVOICE_STATUS_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/members'
+import { discountLabel, documentStrings } from '@/lib/print/strings'
 
 /**
  * A receipt is one payment row, not an invoice. Refunds and reversals are
@@ -17,42 +19,57 @@ import { INVOICE_STATUS_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/members'
  */
 export function ReceiptDocument({ payment }: { payment: PaymentForPrint }) {
   const fmt = orgFormatters(payment.org)
+  const t = documentStrings()
   const isRefund = payment.kind === 'refund'
   const isReversal = payment.kind === 'reversal'
   const amount = Math.abs(payment.amount_paisa)
-  const waivedFee = payment.membership?.signup_fee_waived_paisa ?? 0
+  const discountName = discountLabel(
+    payment.invoice?.discount_reason,
+    payment.invoice?.discount_note
+  )
+
+  const title = isReversal
+    ? t.correctionTitle
+    : isRefund
+      ? t.refundTitle
+      : t.receiptTitle
+
+  // Only a payment is a sale. A refund or a correction is money going the
+  // other way and has nothing to say about what the sale saved.
+  const savings: SavingsItem[] =
+    isRefund || isReversal
+      ? []
+      : [
+          {
+            label: t.registrationFee,
+            amountPaisa: payment.membership?.signup_fee_waived_paisa ?? 0,
+          },
+          { label: discountName, amountPaisa: payment.invoice?.discount_paisa ?? 0 },
+        ]
 
   return (
     <>
-      <Letterhead
-        org={payment.org}
-        documentTitle={
-          isReversal
-            ? 'Payment correction'
-            : isRefund
-              ? 'Refund receipt'
-              : 'Payment receipt'
-        }
-      />
+      <Letterhead org={payment.org} documentTitle={title} />
 
       <DocumentMeta
         member={payment.member}
         branch={payment.branch}
+        factsLabel={title}
         entries={[
-          { label: 'Receipt no.', value: payment.id.slice(0, 8).toUpperCase() },
-          { label: 'Date', value: fmt.dateTime(payment.paid_at) },
-          { label: 'Method', value: PAYMENT_METHOD_LABELS[payment.method] },
+          { label: t.receiptNo, value: payment.id.slice(0, 8).toUpperCase() },
+          { label: t.date, value: fmt.dateTime(payment.paid_at) },
+          { label: t.method, value: PAYMENT_METHOD_LABELS[payment.method] },
           ...(payment.reference_no
-            ? [{ label: 'Reference', value: payment.reference_no }]
+            ? [{ label: t.reference, value: payment.reference_no }]
             : []),
           ...(payment.collector
             ? [
                 {
                   label: isReversal
-                    ? 'Corrected by'
+                    ? t.correctedBy
                     : isRefund
-                      ? 'Refunded by'
-                      : 'Received by',
+                      ? t.refundedBy
+                      : t.receivedBy,
                   value: payment.collector.full_name,
                 },
               ]
@@ -60,90 +77,88 @@ export function ReceiptDocument({ payment }: { payment: PaymentForPrint }) {
         ]}
       />
 
-      <section className="avoid-break mt-8 border-y border-[#d4d4d4] py-4">
-        <p className="text-[8.5pt] font-medium uppercase tracking-wide text-[#6b7280]">
-          {isReversal
-            ? 'Amount reversed -- never received'
-            : isRefund
-              ? 'Amount refunded'
-              : 'Amount received'}
-        </p>
-        <p className="mt-1 text-[20pt] font-semibold leading-none tabular-nums text-[#111827]">
+      {/* The whole reason the member keeps this piece of paper. */}
+      <section className="avoid-break mt-[9mm] flex items-end justify-between gap-8 border-b-2 border-[color:var(--ink)] pb-[3mm]">
+        <div>
+          <p className="text-[8pt] font-medium uppercase tracking-[0.14em] text-[color:var(--muted)]">
+            {isReversal
+              ? t.amountReversed
+              : isRefund
+                ? t.amountRefunded
+                : t.amountReceived}
+          </p>
+          {payment.membership ? (
+            <p className="mt-[2mm] text-[10pt] text-[color:var(--muted)]">
+              {t.towards} {payment.membership.plan_name}
+              {payment.membership.end_date
+                ? ` · ${fmt.date(payment.membership.start_date)} – ${fmt.date(
+                    payment.membership.end_date
+                  )}`
+                : ''}
+            </p>
+          ) : null}
+        </div>
+
+        <p className="shrink-0 text-[24pt] font-semibold leading-none tabular-nums">
           {fmt.money(amount)}
         </p>
-        {payment.membership ? (
-          <p className="mt-2 text-[9.5pt] text-[#4b5563]">
-            Towards {payment.membership.plan_name}
-            {payment.membership.end_date
-              ? ` · ${fmt.date(payment.membership.start_date)} – ${fmt.date(
-                  payment.membership.end_date
-                )}`
-              : ''}
-          </p>
-        ) : null}
-
-        {/* Say the fee was waived on the receipt too. A refund or a reversal
-            is money going the other way and has nothing to do with the sale's
-            joining fee, so it stays off those. */}
-        {!isRefund && !isReversal && waivedFee > 0 ? (
-          <p className="mt-2 text-[9.5pt] text-[#4b5563]">
-            Joining fee <span className="line-through">{fmt.money(waivedFee)}</span>{' '}
-            waived · not charged on this membership
-          </p>
-        ) : null}
       </section>
 
+      <SavingsBanner items={savings} formatAmount={fmt.money} />
+
       {payment.invoice ? (
-        <section className="avoid-break mt-6 space-y-1 text-[9.5pt]">
-          <div className="flex justify-between gap-6">
-            <span className="text-[#6b7280]">Against invoice</span>
-            <span className="font-medium text-[#111827]">
-              {payment.invoice.invoice_no}
-            </span>
-          </div>
-          <div className="flex justify-between gap-6">
-            <span className="text-[#6b7280]">Invoice total</span>
-            <span className="tabular-nums text-[#111827]">
-              {fmt.money(payment.invoice.total_paisa)}
-            </span>
-          </div>
-          <div className="flex justify-between gap-6">
-            <span className="text-[#6b7280]">Paid to date</span>
-            <span className="tabular-nums text-[#111827]">
-              {fmt.money(payment.invoice.paid_paisa)}
-            </span>
-          </div>
-          <div className="flex justify-between gap-6 border-t border-[#e5e5e5] pt-1">
-            <span className="font-medium text-[#111827]">Balance due</span>
-            <span className="font-semibold tabular-nums text-[#111827]">
+        <section className="avoid-break mt-[7mm] space-y-[1mm] text-[9.5pt]">
+          <Row label={t.againstInvoice} value={payment.invoice.invoice_no} />
+          {payment.invoice.discount_paisa > 0 ? (
+            <Row
+              label={t.discount}
+              value={`- ${fmt.money(payment.invoice.discount_paisa)}`}
+            />
+          ) : null}
+          <Row label={t.invoiceTotal} value={fmt.money(payment.invoice.total_paisa)} />
+          <Row label={t.paidToDate} value={fmt.money(payment.invoice.paid_paisa)} />
+
+          <div className="flex justify-between gap-6 border-t border-[color:var(--rule)] pt-[1.5mm]">
+            <span className="font-medium">{t.balanceDue}</span>
+            <span className="font-semibold tabular-nums">
               {fmt.money(
                 payment.invoice.due_paisa ??
                   Math.max(0, payment.invoice.total_paisa - payment.invoice.paid_paisa)
               )}{' '}
-              ·{' '}
-              {INVOICE_STATUS_LABELS[payment.invoice.status]}
+              · {INVOICE_STATUS_LABELS[payment.invoice.status]}
             </span>
           </div>
         </section>
       ) : null}
 
       {payment.reason ? (
-        <p className="avoid-break mt-6 text-[9pt] text-[#4b5563]">
-          <span className="text-[#6b7280]">Reason: </span>
+        <p className="avoid-break mt-[6mm] text-[9pt] text-[color:var(--muted)]">
+          <span>{t.reason}: </span>
           {payment.reason}
         </p>
       ) : null}
 
       {payment.notes ? (
-        <p className="avoid-break mt-2 whitespace-pre-line text-[9pt] text-[#4b5563]">
+        <p className="avoid-break mt-[2mm] whitespace-pre-line text-[9pt] text-[color:var(--muted)]">
           {payment.notes}
         </p>
       ) : null}
 
       <DocumentFooter
         org={payment.org}
-        signatureLabel={isRefund ? 'Authorised signature' : 'Received by'}
+        // Nobody received a correction, and nobody signs for one as if they
+        // had. Only a plain payment is signed "Received by".
+        signatureLabel={isRefund || isReversal ? t.authorisedSignature : t.receivedBy}
       />
     </>
+  )
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-6">
+      <span className="text-[color:var(--muted)]">{label}</span>
+      <span className="tabular-nums">{value}</span>
+    </div>
   )
 }

@@ -3,7 +3,11 @@ import { z } from 'zod'
 import { emailSchema } from '@/lib/validation/auth'
 import { pageSizeSchema } from '@/lib/validation/pagination'
 import { paymentMethodSchema } from '@/lib/validation/payments'
-import { optionalRupeesSchema } from '@/lib/validation/plans'
+import {
+  discountNoteSchema,
+  discountReasonSchema,
+  optionalRupeesSchema,
+} from '@/lib/validation/plans'
 
 const optionalText = (max: number) =>
   z
@@ -119,6 +123,8 @@ export const memberSaleSchema = z
       .optional()
       .transform((value) => (value ? value : null)),
     discountPaisa: optionalRupeesSchema,
+    discountReason: discountReasonSchema,
+    discountNote: discountNoteSchema,
     amountPaidPaisa: optionalRupeesSchema,
     method: paymentMethodSchema.default('cash'),
     referenceNo: z
@@ -151,6 +157,32 @@ export const memberSaleSchema = z
         code: 'custom',
         message: 'Enter the transaction reference',
         path: ['referenceNo'],
+      })
+    }
+
+    // Money off has to be explainable. Inside the sell guard, because a
+    // registration with no sale has no discount to account for.
+    if (value.discountPaisa > 0 && !value.discountReason) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Choose a reason for the discount',
+        path: ['discountReason'],
+      })
+    }
+
+    if (value.discountPaisa === 0 && value.discountReason) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'There is no discount to give a reason for',
+        path: ['discountReason'],
+      })
+    }
+
+    if (value.discountReason === 'other' && !value.discountNote) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Describe the discount reason',
+        path: ['discountNote'],
       })
     }
   })

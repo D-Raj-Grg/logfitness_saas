@@ -1,6 +1,11 @@
 import { z } from 'zod'
 
-import { rupeesSchema } from '@/lib/validation/plans'
+import {
+  discountNoteSchema,
+  discountReasonSchema,
+  refineDiscount,
+  rupeesSchema,
+} from '@/lib/validation/plans'
 
 export const paymentMethodSchema = z.enum([
   'cash',
@@ -30,7 +35,8 @@ const requireReferenceForDigital = <T extends { method: string; referenceNo: str
   value: T
 ) => value.method === 'cash' || Boolean(value.referenceNo)
 
-export const renewMembershipSchema = z
+export const renewMembershipSchema = refineDiscount(
+  z
   .object({
     memberId: z.uuid(),
     planId: z.uuid('Pick a plan'),
@@ -51,6 +57,8 @@ export const renewMembershipSchema = z
       .transform((value) => value ?? '')
       .pipe(z.union([z.literal(''), rupeesSchema]))
       .transform((value) => (value === '' ? 0 : value)),
+    discountReason: discountReasonSchema,
+    discountNote: discountNoteSchema,
     amountPaidPaisa: z
       .string()
       .trim()
@@ -66,6 +74,7 @@ export const renewMembershipSchema = z
     (value) => value.amountPaidPaisa === 0 || requireReferenceForDigital(value),
     { message: 'Enter the transaction reference', path: ['referenceNo'] }
   )
+)
 
 export const recordPaymentSchema = z
   .object({

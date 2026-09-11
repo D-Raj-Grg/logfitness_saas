@@ -6,8 +6,17 @@ import type { Database } from '@/lib/types/database'
 /** Routes reachable without a session. Everything else requires one. */
 const PUBLIC_PREFIXES = ['/login', '/signup', '/auth', '/forgot-password']
 
+/**
+ * The printed-document design harness. It renders fixtures, touches no
+ * database, and its layout 404s outside development -- but it must also be
+ * reachable without signing in, or it cannot serve its purpose. Gated here on
+ * NODE_ENV as well, so production never even resolves the prefix.
+ */
+const DEV_ONLY_PREFIXES =
+  process.env.NODE_ENV === 'production' ? [] : ['/documents']
+
 function isPublicPath(pathname: string) {
-  return PUBLIC_PREFIXES.some(
+  return [...PUBLIC_PREFIXES, ...DEV_ONLY_PREFIXES].some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
   )
 }

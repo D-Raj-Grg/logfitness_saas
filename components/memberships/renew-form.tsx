@@ -26,7 +26,12 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { formatDate, formatMoney } from '@/lib/format'
 import { paisaOrZero, planTerm, rupees, signupFeeSplit } from '@/lib/plan-pricing'
-import type { PaymentMethod } from '@/lib/members'
+import {
+  DISCOUNT_REASONS,
+  DISCOUNT_REASON_LABELS,
+  type DiscountReason,
+  type PaymentMethod,
+} from '@/lib/members'
 
 type Branch = { id: string; name: string }
 type PlanOption = Awaited<ReturnType<typeof loadPlansForBranch>>['plans'][number]
@@ -54,6 +59,8 @@ export function RenewForm({
   const [branchId, setBranchId] = useState(defaultBranchId)
   const [plans, setPlans] = useState<PlanOption[]>([])
   const [standardFee, setStandardFee] = useState(0)
+  const [discountReason, setDiscountReason] = useState<DiscountReason | ''>('')
+  const [discountNote, setDiscountNote] = useState('')
   const [planId, setPlanId] = useState('')
   const [loadingPlans, startLoadingPlans] = useTransition()
   const [discount, setDiscount] = useState('')
@@ -201,6 +208,49 @@ export function RenewForm({
           />
           <FieldError messages={state.fieldErrors?.discountPaisa} />
         </div>
+
+        {/* Appears with the money, not before it. */}
+        {discountPaisa > 0 ? (
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="renew-discount-reason">Reason for the discount</Label>
+            <Select
+              name="discountReason"
+              value={discountReason}
+              onValueChange={(value) => setDiscountReason(value as DiscountReason)}
+            >
+              <SelectTrigger id="renew-discount-reason" className="w-full">
+                <SelectValue>
+                  {discountReason
+                    ? DISCOUNT_REASON_LABELS[discountReason]
+                    : 'Pick a reason'}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {DISCOUNT_REASONS.map((reason) => (
+                  <SelectItem key={reason} value={reason}>
+                    {DISCOUNT_REASON_LABELS[reason]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FieldError messages={state.fieldErrors?.discountReason} />
+          </div>
+        ) : null}
+
+        {discountPaisa > 0 && discountReason === 'other' ? (
+          <div className="flex flex-col gap-2 sm:col-span-2">
+            <Label htmlFor="renew-discount-note">Describe the reason</Label>
+            <Input
+              id="renew-discount-note"
+              name="discountNote"
+              maxLength={120}
+              placeholder="Prints on the invoice"
+              value={discountNote}
+              onChange={(event) => setDiscountNote(event.target.value)}
+            />
+            <FieldError messages={state.fieldErrors?.discountNote} />
+          </div>
+        ) : null}
 
         <div className="flex flex-col gap-2 sm:col-span-2">
           <Label>Payment</Label>

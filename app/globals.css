@@ -141,21 +141,34 @@
    --------------------------------------------------------------------------- */
 
 .doc-a4 {
+  /* The document palette. Four values, and every print component reads them
+     from here -- before this existed there were seven hard-coded hexes across
+     six files, with two greys used interchangeably for the same job. A literal
+     hex in components/print/ is now a bug. */
+  --ink: #14181f;
+  --muted: #5b6472;
+  --rule: #c9ced6;
+  --hairline: #e6e8ec;
+  --paper: #fff;
+
   width: 210mm;
   min-height: 297mm;
   padding: 12mm 14mm;
   margin-inline: auto;
-  background: #fff;
-  color: #111827;
+  background: var(--paper);
+  color: var(--ink);
   color-scheme: light;
-  font-size: 10.5pt;
+  font-size: 10pt;
   line-height: 1.45;
+  /* Every figure on a financial document sits in a column. Lining, fixed-width
+     digits are what make those columns readable at a glance. */
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 /* Belt and braces: a theme provider must never repaint a document. */
 .dark .doc-a4 {
-  background: #fff;
-  color: #111827;
+  background: var(--paper);
+  color: var(--ink);
 }
 
 @media print {
@@ -202,7 +215,12 @@
 
   /* Browsers drop backgrounds by default, so documents are drawn with rules
      rather than fills. This is the opt-in for the few places a fill carries
-     meaning -- a PAID stamp, say -- and nothing else should use it. */
+     meaning -- the BALANCE DUE chip -- and nothing else should use it.
+
+     Chrome honours this even with "Background graphics" unchecked, but no
+     design here may depend on that: anything inside a filled element also
+     carries its own border and weight, so it still reads if the fill is lost.
+     Never white-on-fill for a number that matters. */
   .print-exact {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;

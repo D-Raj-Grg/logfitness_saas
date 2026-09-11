@@ -15,7 +15,14 @@ export async function generateMetadata({ params }: Props) {
 
   if (!payment) return { title: 'Receipt' }
 
-  const prefix = payment.kind === 'refund' ? 'Refund' : 'Receipt'
+  // The tab title becomes the Save-as-PDF filename, so it has to agree with
+  // the heading on the sheet. A reversal is a correction, not a receipt.
+  const prefix =
+    payment.kind === 'refund'
+      ? 'Refund'
+      : payment.kind === 'reversal'
+        ? 'Correction'
+        : 'Receipt'
   return { title: `${prefix} ${payment.id.slice(0, 8).toUpperCase()}` }
 }
 
