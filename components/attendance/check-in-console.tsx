@@ -35,17 +35,23 @@ const INITIAL_STATE: CheckInActionState = {}
 export function CheckInConsole({
   branchId,
   branchName,
+  initialTerm,
 }: {
   /** Null when an owner is looking at every branch; the member's home branch is used then. */
   branchId: string | null
   branchName: string | null
+  /**
+   * A member code carried over from the member list's "Check in" action, so
+   * the search is already narrowed to the person the desk was looking at.
+   */
+  initialTerm?: string
 }) {
   const [state, formAction, pending] = useActionState<CheckInActionState, FormData>(
     checkIn,
     INITIAL_STATE
   )
 
-  const [term, setTerm] = useState('')
+  const [term, setTerm] = useState(initialTerm ?? '')
   const [results, setResults] = useState<Candidate[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
   const [searching, setSearching] = useState(false)

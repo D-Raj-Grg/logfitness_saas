@@ -851,6 +851,16 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       false` is backwards-compatible for both callers (and the mobile app is
       now a second consumer of this signature — see the note above).
 
+- [x] **2026-09-11** Member list usability pass: a serial-number column that
+      carries across pages, sortable Code / Name / Plan / Dues headers with the
+      entry feed (newest member code first) as the default order instead of
+      A-Z, and a per-row action menu with a quick-edit dialog for the four
+      fields the list shows. The membership forms in that menu are links to the
+      profile with `?action=renew|pay|freeze|unfreeze` rather than dialogs on
+      the row: they need the member's memberships, invoices, payments and the
+      branch's plans, which the profile already loads and a list row would have
+      to fetch twenty-five times over.
+
 ## Open questions (from the PRD)
 
 - [x] Which SMS/Viber gateway for Nepal, and cost per message at chain volume?

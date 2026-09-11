@@ -1,7 +1,10 @@
 import Link from 'next/link'
+import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react'
 
 import { MemberPhoto } from '@/components/members/member-photo'
+import { MemberRowActions } from '@/components/members/member-row-actions'
 import { MemberStatusBadge } from '@/components/members/member-status-badge'
+import type { QuickEditBranch } from '@/components/members/member-quick-edit'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -15,17 +18,95 @@ import {
 import type { MemberOverviewRow } from '@/lib/db/members'
 import { formatDate, formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import type { MemberSort, MemberSortDir } from '@/lib/validation/members'
+
+/** The direction each column opens on: the answer people are looking for. */
+const FIRST_DIR: Record<MemberSort, MemberSortDir> = {
+  code: 'desc',
+  name: 'asc',
+  dues: 'desc',
+  expiry: 'asc',
+}
+
+/**
+ * Sorting is URL state, so the table stays a Server Component and a sorted
+ * view is a link someone can send to the next shift.
+ */
+function sortHref(
+  column: MemberSort,
+  sort: MemberSort,
+  dir: MemberSortDir,
+  params: Record<string, string | undefined>
+) {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value) query.set(key, value)
+  }
+  // Clicking the column you are already on turns it around; a new column
+  // starts the way that column is usually read. Either way the offset goes:
+  // page 3 of the old order says nothing about the new one.
+  const next = sort === column ? (dir === 'asc' ? 'desc' : 'asc') : FIRST_DIR[column]
+  query.set('sort', column)
+  query.set('dir', next)
+  query.delete('page')
+  return `/members?${query.toString()}`
+}
+
+function SortHeader({
+  column,
+  label,
+  sort,
+  dir,
+  params,
+}: {
+  column: MemberSort
+  label: string
+  sort: MemberSort
+  dir: MemberSortDir
+  params: Record<string, string | undefined>
+}) {
+  const active = sort === column
+  const Icon = !active ? ChevronsUpDown : dir === 'asc' ? ArrowUp : ArrowDown
+  return (
+    <Link
+      href={sortHref(column, sort, dir, params)}
+      aria-label={`Sort by ${label}`}
+      className={cn(
+        'inline-flex items-center gap-1 rounded-sm underline-offset-4 hover:underline',
+        active ? 'text-foreground' : 'text-muted-foreground'
+      )}
+    >
+      {label}
+      <Icon className="size-3.5" aria-hidden />
+    </Link>
+  )
+}
 
 export function MembersTable({
   rows,
   filtered,
   photoUrls,
+  sort,
+  dir,
+  params,
+  startIndex,
+  branches,
+  isOwner,
 }: {
   rows: MemberOverviewRow[]
   /** True when a search term or filter is applied, so the empty copy fits. */
   filtered: boolean
   /** Signed URLs keyed by storage path, minted once for the whole page. */
   photoUrls: Record<string, string>
+  sort: MemberSort
+  dir: MemberSortDir
+  /** Current query, so a sort click keeps the search, filter and branch scope. */
+  params: Record<string, string | undefined>
+  /** Rows before this page, so the serial number carries across pagination. */
+  startIndex: number
+  /** Branches the viewer may move a member into; the row adds the member's own. */
+  branches: QuickEditBranch[]
+  isOwner: boolean
 }) {
   if (rows.length === 0) {
     return (
@@ -57,18 +138,30 @@ export function MembersTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-28">Code</TableHead>
-            <TableHead>Name</TableHead>
+            <TableHead className="w-12 text-right">#</TableHead>
+            <TableHead className="w-28">
+              <SortHeader column="code" label="Code" sort={sort} dir={dir} params={params} />
+            </TableHead>
+            <TableHead>
+              <SortHeader column="name" label="Name" sort={sort} dir={dir} params={params} />
+            </TableHead>
             <TableHead>Phone</TableHead>
-            <TableHead>Branch</TableHead>
-            <TableHead>Plan</TableHead>
+            <TableHead>
+              <SortHeader column="expiry" label="Plan" sort={sort} dir={dir} params={params} />
+            </TableHead>
             <TableHead>Status</TableHead>
-            <TableHead className="text-right">Dues</TableHead>
+            <TableHead className="text-right">
+              <SortHeader column="dues" label="Dues" sort={sort} dir={dir} params={params} />
+            </TableHead>
+            <TableHead className="w-12" aria-label="Actions" />
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => (
+          {rows.map((row, index) => (
             <TableRow key={row.id}>
+              <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
+                {startIndex + index + 1}
+              </TableCell>
               <TableCell className="font-mono text-xs text-muted-foreground">
                 {row.member_code}
               </TableCell>
@@ -88,7 +181,6 @@ export function MembersTable({
                 </div>
               </TableCell>
               <TableCell className="tabular-nums">{row.phone}</TableCell>
-              <TableCell className="text-muted-foreground">{row.home_branch_name}</TableCell>
               <TableCell>
                 {row.current_plan_name ? (
                   <>
@@ -125,6 +217,23 @@ export function MembersTable({
                 )}
               >
                 {row.due_paisa > 0 ? formatMoney(row.due_paisa) : '--'}
+              </TableCell>
+              <TableCell className="text-right">
+                <MemberRowActions
+                  row={row}
+                  // The member's own branch stays on the list even when the
+                  // viewer cannot register into it, so an unrelated correction
+                  // does not force a branch move.
+                  branches={
+                    branches.some((branch) => branch.id === row.home_branch_id)
+                      ? branches
+                      : [
+                          ...branches,
+                          { id: row.home_branch_id, name: row.home_branch_name },
+                        ]
+                  }
+                  isOwner={isOwner}
+                />
               </TableCell>
             </TableRow>
           ))}

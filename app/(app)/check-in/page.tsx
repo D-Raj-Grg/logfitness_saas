@@ -105,7 +105,11 @@ export default async function CheckInPage({
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           {canCheckIn ? (
-            <CheckInConsole branchId={branchId ?? null} branchName={branchName} />
+            <CheckInConsole
+              branchId={branchId ?? null}
+              branchName={branchName}
+              initialTerm={typeof params.q === 'string' ? params.q : undefined}
+            />
           ) : (
             <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-10 text-center">
               <p className="text-sm font-medium">View only</p>

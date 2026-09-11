@@ -88,17 +88,55 @@ export const inviteMemberToAppSchema = z.object({
   email: emailSchema,
 })
 
-export const memberListQuerySchema = z.object({
-  q: z.string().trim().max(120).optional().default(''),
-  status: z
-    .enum(['active', 'expired', 'frozen', 'left', 'expiring', 'dues', 'archived'])
-    .optional(),
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: pageSizeSchema,
+/**
+ * `code` is the entry feed: member codes are minted in a per-org sequence, so
+ * newest-first by code is registration order, and it is unique, which makes it
+ * the tiebreak for every other sort as well.
+ */
+export const memberSortSchema = z
+  .enum(['code', 'name', 'dues', 'expiry'])
+  .optional()
+  .default('code')
+
+export const memberSortDirSchema = z.enum(['asc', 'desc']).optional()
+
+export const memberListQuerySchema = z
+  .object({
+    q: z.string().trim().max(120).optional().default(''),
+    status: z
+      .enum(['active', 'expired', 'frozen', 'left', 'expiring', 'dues', 'archived'])
+      .optional(),
+    sort: memberSortSchema,
+    dir: memberSortDirSchema,
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: pageSizeSchema,
+  })
+  // Each column has the direction someone actually wants first: the newest
+  // members, the biggest debts, the soonest expiries, and names from A.
+  .transform((value) => ({
+    ...value,
+    dir: value.dir ?? (value.sort === 'name' ? 'asc' : 'desc'),
+  }))
+
+/** Only these four fields; the list view does not carry the rest of the record. */
+export const memberQuickEditSchema = z.object({
+  memberId: z.uuid(),
+  fullName: z.string().trim().min(1, 'Name is required').max(120, 'Name is too long'),
+  phone: phoneSchema,
+  email: z
+    .string()
+    .trim()
+    .max(254)
+    .optional()
+    .transform((value) => (value ? value.toLowerCase() : null))
+    .refine((value) => value === null || value.includes('@'), 'Enter a valid email'),
+  homeBranchId: z.uuid('Pick a home branch'),
 })
 
 export type MemberInput = z.infer<typeof memberSchema>
 export type MemberListQuery = z.infer<typeof memberListQuerySchema>
+export type MemberSort = z.infer<typeof memberSortSchema>
+export type MemberSortDir = 'asc' | 'desc'
 
 /**
  * The optional sale on the registration form. The fields ride along in the same

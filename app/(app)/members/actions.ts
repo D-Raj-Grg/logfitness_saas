@@ -35,6 +35,7 @@ import {
   memberDeleteSchema,
   memberIdSchema,
   memberLeaveSchema,
+  memberQuickEditSchema,
   memberSaleSchema,
   memberSchema,
   updateMemberSchema,
@@ -343,6 +344,67 @@ export async function updateMember(
     if (existing.photo_path && existing.photo_path !== photoPath) {
       await removeMemberPhoto(existing.photo_path).catch(() => {})
     }
+  } catch (error) {
+    return mapDbError(error)
+  }
+
+  revalidatePath('/members')
+  revalidatePath(`/members/${parsed.data.memberId}`)
+  revalidatePath(`/members/${parsed.data.memberId}/edit`)
+
+  return { success: 'Member details saved.' }
+}
+
+/**
+ * The list's quick edit. Deliberately not updateMember(): the row on the list
+ * comes from member_overview, which does not carry the address, notes, date of
+ * birth, or emergency contact, so a full-record update from here would blank
+ * every field the dialog cannot show. This writes the four it does show and
+ * leaves the rest of the record alone.
+ */
+export async function quickUpdateMember(
+  _prevState: MemberFormState,
+  formData: FormData
+): Promise<MemberFormState> {
+  const staff = await requireRole('owner', 'manager', 'front_desk')
+
+  const parsed = memberQuickEditSchema.safeParse({
+    memberId: formData.get('memberId'),
+    fullName: formData.get('fullName'),
+    phone: formData.get('phone'),
+    email: formData.get('email'),
+    homeBranchId: formData.get('homeBranchId'),
+  })
+
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+  }
+
+  const existing = await getMember(parsed.data.memberId)
+  if (!existing) {
+    return { error: 'That member could not be found.' }
+  }
+
+  // Same rule as the full edit: anyone may correct a member from another
+  // branch, but moving one into a branch needs that branch.
+  if (
+    existing.home_branch_id !== parsed.data.homeBranchId &&
+    !branchAllowed(staff, parsed.data.homeBranchId)
+  ) {
+    return {
+      fieldErrors: {
+        homeBranchId: ['You can only move members to your own branch.'],
+      },
+    }
+  }
+
+  try {
+    await updateMemberRow(parsed.data.memberId, {
+      full_name: parsed.data.fullName,
+      phone: parsed.data.phone,
+      email: parsed.data.email,
+      home_branch_id: parsed.data.homeBranchId,
+    })
   } catch (error) {
     return mapDbError(error)
   }

@@ -35,11 +35,19 @@ export default async function MemberProfilePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ invoice?: string }>
+  searchParams: Promise<{ invoice?: string; action?: string }>
 }) {
   const staff = await requireStaff()
   const { id } = await params
-  const { invoice: soldInvoiceId } = await searchParams
+  const { invoice: soldInvoiceId, action } = await searchParams
+
+  // The member list's row menu links here for the membership forms. Anything
+  // else in the parameter is ignored, and the panel re-checks the one that is
+  // left against the member's actual state.
+  const initialAction =
+    action === 'renew' || action === 'pay' || action === 'freeze' || action === 'unfreeze'
+      ? action
+      : null
 
   const [overview, member, memberships, invoices, payments, attendance, branches] =
     await Promise.all([
@@ -251,6 +259,7 @@ export default async function MemberProfilePage({
             payments={payments}
             staff={staff}
             branches={branches}
+            initialAction={initialAction}
             checkedInMembershipIds={[
               ...new Set(
                 attendance

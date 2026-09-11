@@ -96,12 +96,33 @@ export async function listMembers(
   const from = (query.page - 1) * query.pageSize
   const to = from + query.pageSize - 1
 
+  const ascending = query.dir === 'asc'
+
+  switch (query.sort) {
+    case 'name':
+      request = request.order('full_name', { ascending })
+      break
+    case 'dues':
+      request = request.order('due_paisa', { ascending })
+      break
+    case 'expiry':
+      // A member with no end date has no expiry to be sorted by, so they sit
+      // after everyone who does, whichever way the column points.
+      request = request.order('days_to_expiry', { ascending, nullsFirst: false })
+      break
+    case 'code':
+      break
+  }
+
+  // Names and amounts repeat -- duplicates, common names, a table of members
+  // who all owe nothing. Without a unique final sort key the page boundary is
+  // undefined, so a member can show up on two pages while another shows up on
+  // none. member_code is unique per org and is the entry feed in its own
+  // right, which is why the default sort needs nothing but this line. It is
+  // text, so the ordering is lexicographic -- correct while the counter is
+  // padded to five digits, which is 99,999 members in one org.
   const { data, error, count } = await request
-    .order('full_name')
-    // Names repeat -- duplicates, and common names in this market. Without a
-    // unique final sort key the page boundary is undefined, so a member can
-    // show up on two pages while another shows up on none.
-    .order('id')
+    .order('member_code', { ascending: query.sort === 'code' ? ascending : true })
     .range(from, to)
 
   if (error) throw error

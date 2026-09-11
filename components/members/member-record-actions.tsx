@@ -45,7 +45,7 @@ import { Label } from '@/components/ui/label'
  * dialog makes the owner type the member's name. It takes their invoices and
  * payments with it.
  */
-type Dialog = 'archive' | 'restore' | 'delete' | null
+export type MemberRecordDialog = 'archive' | 'restore' | 'delete' | null
 
 export function MemberRecordActions({
   memberId,
@@ -58,14 +58,96 @@ export function MemberRecordActions({
   archived: boolean
   isOwner: boolean
 }) {
-  const [dialog, setDialog] = useState<Dialog>(null)
+  const [dialog, setDialog] = useState<MemberRecordDialog>(null)
 
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={<Button variant="outline" size="sm" aria-label="More actions" />}
+        >
+          <MoreHorizontal />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52">
+          <MemberRecordMenuItems
+            archived={archived}
+            isOwner={isOwner}
+            onSelect={setDialog}
+          />
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <MemberRecordDialogs
+        memberId={memberId}
+        fullName={fullName}
+        dialog={dialog}
+        onDialogChange={setDialog}
+      />
+    </>
+  )
+}
+
+/**
+ * The menu entries on their own, so the list row's action menu can offer the
+ * same three choices inside its own dropdown rather than nesting a second one.
+ */
+export function MemberRecordMenuItems({
+  archived,
+  isOwner,
+  onSelect,
+}: {
+  archived: boolean
+  isOwner: boolean
+  onSelect: (dialog: MemberRecordDialog) => void
+}) {
+  return (
+    <>
+      {archived ? (
+        <DropdownMenuItem onClick={() => onSelect('restore')}>
+          Restore member
+        </DropdownMenuItem>
+      ) : (
+        <DropdownMenuItem onClick={() => onSelect('archive')}>
+          Archive member
+        </DropdownMenuItem>
+      )}
+      {isOwner ? (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-destructive"
+            onClick={() => onSelect('delete')}
+          >
+            Delete permanently
+          </DropdownMenuItem>
+        </>
+      ) : null}
+    </>
+  )
+}
+
+/**
+ * The three confirmations, controlled from outside. Shared by the profile
+ * page's action menu and the member list's per-row menu: the wording of an
+ * irreversible delete should not exist in two places.
+ */
+export function MemberRecordDialogs({
+  memberId,
+  fullName,
+  dialog,
+  onDialogChange,
+}: {
+  memberId: string
+  fullName: string
+  dialog: MemberRecordDialog
+  onDialogChange: (dialog: MemberRecordDialog) => void
+}) {
   const [archiveState, archiveAction, archivePending] = useActionState<
     MemberFormState,
     FormData
   >(async (prev, formData) => {
     const result = await archiveMember(prev, formData)
-    if (result.success) setDialog(null)
+    if (result.success) onDialogChange(null)
     return result
   }, {})
 
@@ -74,7 +156,7 @@ export function MemberRecordActions({
     FormData
   >(async (prev, formData) => {
     const result = await restoreMember(prev, formData)
-    if (result.success) setDialog(null)
+    if (result.success) onDialogChange(null)
     return result
   }, {})
 
@@ -86,41 +168,11 @@ export function MemberRecordActions({
   >(deleteMember, {})
 
   function close(open: boolean) {
-    if (!open) setDialog(null)
+    if (!open) onDialogChange(null)
   }
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={<Button variant="outline" size="sm" aria-label="More actions" />}
-        >
-          <MoreHorizontal />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          {archived ? (
-            <DropdownMenuItem onClick={() => setDialog('restore')}>
-              Restore member
-            </DropdownMenuItem>
-          ) : (
-            <DropdownMenuItem onClick={() => setDialog('archive')}>
-              Archive member
-            </DropdownMenuItem>
-          )}
-          {isOwner ? (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive"
-                onClick={() => setDialog('delete')}
-              >
-                Delete permanently
-              </DropdownMenuItem>
-            </>
-          ) : null}
-        </DropdownMenuContent>
-      </DropdownMenu>
-
       <AlertDialog open={dialog === 'archive'} onOpenChange={close}>
         <AlertDialogContent>
           <form action={archiveAction} className="flex flex-col gap-4">

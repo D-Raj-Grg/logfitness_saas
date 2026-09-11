@@ -74,6 +74,7 @@ export function MemberActionPanel({
   staff,
   branches,
   checkedInMembershipIds,
+  initialAction,
 }: {
   member: MemberOverviewRow
   memberships: Awaited<ReturnType<typeof listMembershipsForMember>>
@@ -86,19 +87,17 @@ export function MemberActionPanel({
    * behind it is a fact about attendance, not a plan, so it stops moving.
    */
   checkedInMembershipIds: string[]
+  /**
+   * A dialog the member list asked for by link (`?action=renew`). The list row
+   * cannot hold these forms itself -- they need this member's memberships,
+   * invoices, payments and plans, which is four queries a row -- so the row
+   * menu sends the request here, where the data already is.
+   */
+  initialAction?: 'renew' | 'pay' | 'freeze' | 'unfreeze' | null
 }) {
-  const [open, setOpen] = useState<OpenDialog>(null)
   const [message, setMessage] = useState<
     { text: string; document?: { href: string; label: string } } | null
   >(null)
-
-  const closeWith = useCallback(
-    (text: string, document?: { href: string; label: string }) => {
-      setMessage({ text, document })
-      setOpen(null)
-    },
-    []
-  )
 
   const canAct = staff.role !== 'trainer'
   // Free days are money: extending a membership already sold is an owner and
@@ -131,6 +130,32 @@ export function MemberActionPanel({
       ? member.home_branch_id
       : (sellableBranches[0]?.id ?? member.home_branch_id)
 
+  // Opened on the first render rather than by an effect, so the dialog the
+  // link asked for is there in the first paint. Only ever what the panel would
+  // have offered anyway: a hand-edited ?action= cannot freeze a membership
+  // that is not there, and a trainer cannot open a form their role has no
+  // button for.
+  const [open, setOpen] = useState<OpenDialog>(() => {
+    if (!initialAction || !canAct) return null
+    const allowed =
+      initialAction === 'renew'
+        ? !hasLeft
+        : initialAction === 'pay'
+          ? openInvoices.length > 0
+          : initialAction === 'freeze'
+            ? current?.status === 'active'
+            : current?.status === 'frozen'
+    return allowed ? { kind: initialAction } : null
+  })
+
+  const closeWith = useCallback(
+    (text: string, document?: { href: string; label: string }) => {
+      setMessage({ text, document })
+      setOpen(null)
+    },
+    []
+  )
+
   const pausedDays = current?.frozen_on ? Math.max(-daysUntil(current.frozen_on), 0) : 0
 
   const refundTarget =
@@ -146,6 +171,7 @@ export function MemberActionPanel({
   function dialogChange(isOpen: boolean) {
     if (!isOpen) setOpen(null)
   }
+
 
   return (
     <div className="flex flex-col gap-4">
