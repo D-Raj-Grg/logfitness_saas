@@ -362,39 +362,48 @@ export function MemberHistoryTabs({
           </EmptyTab>
         ) : (
           <div className="overflow-x-auto rounded-lg border">
-            <Table>
+            {/*
+              * A real min-width rather than a max-width on the message cell.
+              * The table is `w-full`, and a max-width on a `td` in an
+              * auto-layout table is ignored -- which is why 160 characters of
+              * SMS ran straight through the To column and pushed Status off the
+              * card. Stating a width the table cannot go below makes the
+              * container scroll instead, and the message wraps inside its own
+              * column.
+              */}
+            <Table className="min-w-[860px]">
               <TableHeader>
                 <TableRow>
-                  <TableHead>When</TableHead>
-                  <TableHead>Reason</TableHead>
-                  <TableHead>Message</TableHead>
-                  <TableHead>To</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead className="whitespace-nowrap">When</TableHead>
+                  <TableHead className="whitespace-nowrap">Reason</TableHead>
+                  <TableHead className="w-[420px]">Message</TableHead>
+                  <TableHead className="whitespace-nowrap">To</TableHead>
+                  <TableHead className="whitespace-nowrap">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {messages.map((row) => (
                   <TableRow key={row.id}>
-                    <TableCell className="whitespace-nowrap align-top text-sm text-muted-foreground">
+                    <TableCell className="align-top text-sm whitespace-nowrap text-muted-foreground">
                       {formatDateTime(row.created_at)}
                     </TableCell>
-                    <TableCell className="align-top text-sm">
+                    <TableCell className="align-top text-sm whitespace-nowrap">
                       {NOTIFICATION_EVENTS[row.event]}
                     </TableCell>
-                    <TableCell className="max-w-md align-top text-sm text-muted-foreground">
+                    <TableCell className="w-[420px] align-top text-sm break-words whitespace-normal text-muted-foreground">
                       {row.body}
                     </TableCell>
-                    <TableCell className="align-top text-sm tabular-nums">
+                    <TableCell className="align-top text-sm whitespace-nowrap tabular-nums">
                       {row.to_address}
                     </TableCell>
-                    <TableCell className="align-top">
+                    <TableCell className="align-top whitespace-nowrap">
                       <Badge variant={MESSAGE_TONE[row.status]}>
                         {NOTIFICATION_STATUS_SHORT[row.status]}
                       </Badge>
                       {/* The gateway's own words. Without them a failed row is
-                          just a red badge nobody can act on. */}
+                          just a badge nobody can act on. */}
                       {row.last_error ? (
-                        <div className="mt-1 max-w-56 text-xs text-muted-foreground">
+                        <div className="mt-1 max-w-56 text-xs break-words whitespace-normal text-muted-foreground">
                           {row.last_error}
                         </div>
                       ) : null}

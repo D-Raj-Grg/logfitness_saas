@@ -1,6 +1,8 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useActionState, useEffect, useState, useTransition } from 'react'
+import { toast } from 'sonner'
 
 import {
   previewMemberMessage,
@@ -84,6 +86,7 @@ function MemberMessageForm({
   memberId: string
   onSent: () => void
 }) {
+  const router = useRouter()
   const [state, formAction, pending] = useActionState<MemberMessageState, FormData>(
     sendMemberMessage,
     {}
@@ -95,9 +98,22 @@ function MemberMessageForm({
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loading, startLoading] = useTransition()
 
+  /**
+   * A send that closes the dialog and says nothing is indistinguishable from a
+   * send that never happened -- which is exactly how this read the first time
+   * someone used it, on a member whose Messages tab stayed at (0) because the
+   * message had gone to the row above. Success and refusal both speak now, and
+   * the refresh is what makes the Messages tab and the log show the new row
+   * without the desk reloading the page.
+   */
   useEffect(() => {
-    if (state.success) onSent()
-  }, [state.success, onSent])
+    if (state.error) toast.error(state.error)
+    if (!state.success) return
+
+    toast.success(state.success)
+    router.refresh()
+    onSent()
+  }, [state.success, state.error, router, onSent])
 
   useEffect(() => {
     let current = true
