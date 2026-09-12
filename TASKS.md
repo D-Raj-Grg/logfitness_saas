@@ -1002,10 +1002,12 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       the member dialog. `notification_messages.visitor_id` records who it was
       about; `visitor_message_target` refuses a trainer, another gym's visitor,
       a branch the sender does not cover and a visitor who has already joined.
-      Gate: `supabase/tests/visitor_messages.sql`, which caught a real bug --
+      Gate: `supabase/tests/visitor_messages.sql`, which caught two real bugs --
       a phone too short for the `to_address` CHECK made the welcome vanish
-      inside the trigger's own handler (fixed in
-      `20260912100200_visitor_message_unusable_number.sql`).
+      inside the trigger's own handler
+      (`20260912100200_visitor_message_unusable_number.sql`), and a back-dated
+      visit was thanked for coming in today, so the automatic welcome is now the
+      day's own event (`20260912100300_visitor_welcome_only_on_the_day.sql`).
 
 ## Open questions (from the PRD)
 

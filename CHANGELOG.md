@@ -17,6 +17,106 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-09-12 — The walk-in gets a text
+
+Phase 5's three sweeps are all about a member: a membership ending, money owed,
+a birthday. The person who walked in, asked what a month costs and left was the
+one contact the product held a mobile number for and never used. Two new events
+close that, and the visitor log gets the same by-hand send the member profile
+got this morning.
+
+### Added
+
+- **A welcome the moment a walk-in is logged.** Not a sweep — an `after insert`
+  trigger on `visitors`, so the message is with the outbox worker within the
+  minute. "Thanks for coming in" arriving at 02:30 the following morning is a
+  different, worse message. The trigger swallows its own errors and logs a
+  warning: the visit is the product and the SMS is a courtesy, so a null
+  template or a mangled variable cannot take the counter down.
+- **A follow-up a few days later**, as a fourth nightly sweep inside
+  `enqueue_notifications()`. Three days after the visit by default, only for
+  visitors still new or contacted — converted is a member now and gets a
+  member's messages, and "not joining" said no. Keyed on the visitor id alone,
+  so a gym that moves the offset from three days to five does not text somebody
+  who already had one.
+- **Both are switches in Settings → Reminders**, beside the renewal, dues and
+  birthday rules, with the follow-up's own send time. The welcome shows "Goes
+  out within a minute" rather than a time picker, because there is no hour to
+  choose.
+- **Both messages are editable wording**, in the same editor as the member
+  templates, with English and Nepali built-ins and `{{visitor_name}}`,
+  `{{gym_name}}`, `{{branch_name}}`, `{{plan_name}}` and `{{visited_on}}`
+  bound. Neither default mentions the plan: a walk-in who asked about nothing in
+  particular has none, and a sentence with a hole in it reads worse than one
+  that never promised the detail.
+- **Two by-hand sends on the visitor row.** **Send welcome SMS** is one click
+  with no dialog — the gym's own wording, rendered in Postgres, for a desk
+  clearing a morning's callbacks. **Send message…** opens the member dialog's
+  twin: welcome, follow-up or free text, a preview that can be edited before it
+  goes, the recipient's normalised number, and a GSM/UCS-2 segment count because
+  segments are what turn into money. Owner, manager and front desk; a trainer
+  logs a walk-in and does not text one.
+- **`notification_messages.visitor_id`**, so "has this walk-in been told
+  anything" has an answer, and the delivery log names both new reasons.
+
+### Fixed
+
+- **A phone too short to store made the welcome vanish.** `visitors.phone`
+  accepts anything from 1 to 30 characters — the desk types what it was given —
+  while `to_address` carries a CHECK of 3 to 254. A visitor logged as "12"
+  therefore raised a CHECK violation inside the trigger, which the trigger's own
+  handler swallowed: no row, no warning, and a walk-in the log claimed had never
+  been texted for a reason nobody could see. An unusable number now falls back
+  to `unknown` and lands as `skipped` with the reason on it. Caught by the new
+  gate, not in production.
+- **A back-dated visit was thanked for coming in today.** `visited_on` is
+  editable precisely so the desk can log yesterday evening's enquiry this
+  morning, and the trigger fired on those inserts too. The automatic welcome is
+  now the day's own event; a back-dated row is left alone, and the desk can
+  still send one by hand, which is a decision rather than an accident.
+
+### Database
+
+Four migrations, applied and mirrored in `supabase/migrations/`: the two enum
+values alone (Postgres refuses to use a value added by the same transaction),
+the column, trigger, sweep, templates, rules and the three RPCs, then the two
+corrections above. `enqueue_notification` was dropped and rebuilt to take
+`p_visitor_id` — a parameter cannot be added by `create or replace`, and a
+nine-argument function sitting beside a ten-argument one makes every named call
+ambiguous — so every send in the system still passes through exactly one INSERT
+into the outbox. `visitor_message_target` is internal and callable by no client
+role; it refuses a trainer, another gym's visitor, a branch the sender does not
+cover, and a visitor who has already joined. `get_advisors(security)` reports no
+new findings.
+
+Gate: `supabase/tests/visitor_messages.sql`, wired into `npm run db:test` —
+the disabled rule queueing nothing, the trigger's row and dedupe key, the
+unusable number, the back-dated skip, sweep idempotency across a changed offset,
+converted and lost excluded, the trainer, cross-branch and cross-org refusals,
+the two-minute double-click guard, and the grant assertion on
+`visitor_message_target`.
+
+### Verified
+
+Both screens walked in the browser against the live SMSPasal gateway: the row
+menu, the dialog rendering a real visitor's welcome at 143 characters and one
+segment, the two new checkboxes arriving unticked, and both template cards with
+their variables and previews. No SMS was sent to a real visitor's handset.
+
+### Known limits
+
+- **Both automatic rules ship disabled**, unlike the member rules, which seed
+  enabled. Those shipped with the feature; these arrive at gyms that already
+  have a live gateway and a full visitor log, and switching them on would spend
+  an owner's credit on a decision they never made.
+- **A visitor cannot opt out.** `members.notifications_opt_out` has no visitor
+  equivalent and this work did not add one: a walk-in gave the desk their number
+  minutes ago for exactly this. Someone who asks not to be contacted is marked
+  "not joining", which takes them out of the follow-up sweep.
+- **The follow-up's offset is not editable on screen**, only its enabled state
+  and send time — the same limit every other rule has had since Phase 5, because
+  `offset_days` is part of the rule's identity.
+
 ## 2026-09-12 — A gateway a Nepali gym can actually send from
 
 The notification pipeline shipped on 09-09 with four adapters written from
@@ -74,6 +174,29 @@ gateway unsavable since the settings screen was built.
   is the gym choosing not to send or a number nobody can deliver to, and red
   would send someone hunting a gateway fault that does not exist.
 
+- **Send one member a message, now.** Everything the pipeline did was a
+  schedule: a member standing at the desk owing Rs 3,400 was outside it
+  entirely, and a text sent from someone's own handset reached no log at all, so
+  "was this member told" had no answer for the one message that mattered most.
+  **Send SMS** now sits on the member profile beside Edit and in the member
+  list's row menu. The dialog composes nothing itself — the wording is rendered
+  in Postgres from the gym's own template and this member's real figures, the
+  same sentence the 02:30 sweep would have produced — and the desk may edit it
+  before sending, because the body stored in the log is the body that went out.
+  Dues, renewal, birthday, and a free-text `custom_message`: a new event with no
+  default wording and no slot in the template editor, exactly where
+  `test_message` stands.
+- **Every reason it would not go is on screen before the button is.** The same
+  preview call reports an opted-out member, a number that will not normalise and
+  a channel with no gateway, and Send is disabled carrying that sentence rather
+  than offered and then refused. Consent is not overridable: `notifications_opt_out`
+  stops a manual send the way it skips a sweep.
+- **The log answers "who texted this member".** `notification_messages.created_by`
+  records who pressed Send — null for anything a sweep raised — and the delivery
+  log shows the name under the reason. The member profile gains a **Messages**
+  tab reading the same rows, so the history sits where the member is rather than
+  only in the org-wide log.
+
 ### Fixed
 
 - **Every gateway save failed silently, and always had.** `formData.get()`
@@ -107,19 +230,40 @@ gateway unsavable since the settings screen was built.
 
 ### Database
 
-Four migrations, all applied and mirrored in `supabase/migrations/`: the
+Six migrations, all applied and mirrored in `supabase/migrations/`: the
 `smspasal_sms` enum value alone (Postgres refuses to use a value added by the
 same transaction), the request/response arms plus the four balance columns and
-their two RPCs, the unicode and reaper corrections, and
-`nepal_mobile_carrier()` with the carrier-aware sender. `get_advisors(security)`
-reports no new findings — both balance RPCs are SECURITY DEFINER with hand-rolled
-owner checks, standing exactly where the credential RPCs do.
+their two RPCs, the unicode and reaper corrections, `nepal_mobile_carrier()`
+with the carrier-aware sender, the `custom_message` event (alone again, for the
+same enum reason), and the manual send itself.
+
+The manual send adds three functions and one column. `member_message_target` is
+internal — callable by no client role — and holds every check in one place:
+owner, manager or front desk; the member is in this org, not archived, and at a
+branch the sender covers; plus the template variables, read from
+`member_overview` so what a reminder quotes has one source rather than two.
+`member_notification_preview` renders what would be sent and reports what would
+stop it. `send_member_notification` refuses an opted-out member, a channel with
+no gateway, a blank custom body and the two events not addressed to a member at
+all — then delegates the write to `enqueue_notification`, so there is still
+exactly one INSERT into the outbox and normalisation, the `skipped` row and the
+dedupe key are not reimplemented beside it. A manual send has no deterministic
+dedupe key, so a double click is caught by a two-minute window instead.
+`get_advisors(security)` reports no new findings — the balance RPCs and the two
+callable send RPCs are SECURITY DEFINER with hand-rolled checks, standing
+exactly where the credential RPCs do, and the guard behind them is granted to
+nobody.
 
 Gate: `supabase/tests/notifications.sql` grew the SMSPasal request shape with and
 without the account ids, the three plain-text response shapes, Devanagari
 selecting unicode, the carrier prefix table, sender selection per carrier and its
 fallback, cross-org denial on both balance RPCs, and the grant assertion on
-`notification_balance_url`.
+`notification_balance_url`. It also grew a manual-send block: the desk sends and
+the row lands rendered with its author, a trainer is refused and cannot even
+preview, the desk is refused a member at a branch it does not cover, another gym
+is refused outright, an opted-out member is refused, a blank custom message is
+refused, a second send inside the window is refused, and a member whose number
+will not normalise produces one `skipped` row that says so.
 
 ### Performance
 
