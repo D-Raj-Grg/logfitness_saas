@@ -11,17 +11,21 @@ import {
   enqueueNotification,
   insertNotificationProvider,
   listNotificationProviders,
+  readGatewayBalance,
+  requestGatewayBalance,
   setNotificationCredential,
   updateNotificationProvider,
   updateNotificationRule,
   upsertNotificationTemplate,
 } from '@/lib/db/notifications'
+import type { GatewayBalance } from '@/lib/db/notifications'
 import type { Json } from '@/lib/types/database'
 import {
   notificationProviderFormSchema,
   notificationRuleFormSchema,
   notificationTemplateFormSchema,
   notificationTestSendSchema,
+  type NotificationProviderInput,
 } from '@/lib/validation/notifications'
 
 export type NotificationSettingsState = {
@@ -45,6 +49,28 @@ function dbErrorMessage(error: unknown) {
   return 'Something went wrong. Try again.'
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  provider: 'Gateway',
+  senderId: 'Sender ID',
+  endpointUrl: 'Address',
+  apiToken: 'API token',
+  configJson: 'Request',
+  campaign: 'Campaign ID',
+  routeid: 'Route ID',
+  senderNtc: 'NTC sender ID',
+  senderNcell: 'Ncell sender ID',
+}
+
+/** One line naming what is wrong, for the banner above the form. */
+function summarise(fieldErrors: Record<string, string[] | undefined>) {
+  const lines = Object.entries(fieldErrors)
+    .filter(([, messages]) => messages?.length)
+    .map(([field, messages]) => `${FIELD_LABELS[field] ?? field}: ${messages?.[0]}`)
+
+  if (lines.length === 0) return 'That did not save. Check the form and try again.'
+  return lines.join(' · ')
+}
+
 function providerFormValues(formData: FormData) {
   return {
     providerId: formData.get('providerId'),
@@ -55,7 +81,35 @@ function providerFormValues(formData: FormData) {
     apiToken: formData.get('apiToken'),
     isActive: formData.get('isActive') === 'on',
     configJson: formData.get('configJson'),
+    campaign: formData.get('campaign'),
+    routeid: formData.get('routeid'),
+    senderNtc: formData.get('senderNtc'),
+    senderNcell: formData.get('senderNcell'),
   }
+}
+
+/**
+ * What ends up in `notification_providers.config`. A custom gateway describes
+ * its whole request there; SMSPasal only carries the two account ids, and a
+ * blank one is dropped rather than stored as an empty string -- the request
+ * builder omits the parameter entirely when the key is absent, which is what
+ * makes the gateway fall back to the account default.
+ */
+function providerConfig(input: NotificationProviderInput): Json {
+  const base =
+    input.configJson && input.provider === 'custom_http'
+      ? (JSON.parse(input.configJson) as Record<string, unknown>)
+      : {}
+
+  if (input.provider !== 'smspasal_sms') return base as Json
+
+  return {
+    ...base,
+    ...(input.campaign ? { campaign: input.campaign } : {}),
+    ...(input.routeid ? { routeid: input.routeid } : {}),
+    ...(input.senderNtc ? { sender_ntc: input.senderNtc } : {}),
+    ...(input.senderNcell ? { sender_ncell: input.senderNcell } : {}),
+  } as Json
 }
 
 /**
@@ -72,13 +126,17 @@ export async function saveNotificationProvider(
 
   const parsed = notificationProviderFormSchema.safeParse(providerFormValues(formData))
   if (!parsed.success) {
-    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+    const fieldErrors = z.flattenError(parsed.error).fieldErrors
+    // A summary as well as the per-field text. Some of these fields are only on
+    // screen for some gateways, and a complaint about an input the owner cannot
+    // see reads as a button that does nothing.
+    return { error: summarise(fieldErrors), fieldErrors }
   }
 
   const input = parsed.data
   // Already proved to be a JSON object by the schema; the generated column
   // type is Json, so it is cast rather than re-validated here.
-  const config = (input.configJson ? JSON.parse(input.configJson) : {}) as Json
+  const config = providerConfig(input)
 
   try {
     let providerId = input.providerId || null
@@ -296,5 +354,44 @@ export async function sendTestNotification(
   return {
     success:
       'Queued. It goes out within a minute — watch the Notifications log for what the gateway said.',
+  }
+}
+
+/**
+ * The two halves of a balance check. The key is in Vault, so the console cannot
+ * call the gateway itself -- the database does, with pg_net, and the answer is
+ * collected by a second call a moment later. `start` is idempotent within its
+ * throttle window, so a double click costs nothing.
+ */
+export async function startGatewayBalanceCheck(
+  providerId: string
+): Promise<{ error?: string }> {
+  await requireRole('owner')
+
+  const parsed = z.uuid().safeParse(providerId)
+  if (!parsed.success) return { error: 'That gateway does not exist.' }
+
+  try {
+    await requestGatewayBalance(parsed.data)
+  } catch (error) {
+    return { error: dbErrorMessage(error) }
+  }
+  return {}
+}
+
+export async function pollGatewayBalance(
+  providerId: string
+): Promise<GatewayBalance & { error: string | null }> {
+  await requireRole('owner')
+
+  const parsed = z.uuid().safeParse(providerId)
+  if (!parsed.success) {
+    return { pending: false, routes: null, error: 'That gateway does not exist.', checked_at: null }
+  }
+
+  try {
+    return await readGatewayBalance(parsed.data)
+  } catch (error) {
+    return { pending: false, routes: null, error: dbErrorMessage(error), checked_at: null }
   }
 }

@@ -563,7 +563,9 @@ export type Database = {
           created_at?: string
           discount_note?: string | null
           discount_paisa?: number
-          discount_reason?: Database["public"]["Enums"]["discount_reason"] | null
+          discount_reason?:
+            | Database["public"]["Enums"]["discount_reason"]
+            | null
           due_paisa?: number | null
           id?: string
           invoice_no?: string
@@ -583,7 +585,9 @@ export type Database = {
           created_at?: string
           discount_note?: string | null
           discount_paisa?: number
-          discount_reason?: Database["public"]["Enums"]["discount_reason"] | null
+          discount_reason?:
+            | Database["public"]["Enums"]["discount_reason"]
+            | null
           due_paisa?: number | null
           id?: string
           invoice_no?: string
@@ -864,7 +868,9 @@ export type Database = {
           created_at?: string
           discount_note?: string | null
           discount_paisa?: number
-          discount_reason?: Database["public"]["Enums"]["discount_reason"] | null
+          discount_reason?:
+            | Database["public"]["Enums"]["discount_reason"]
+            | null
           end_date?: string | null
           frozen_days?: number
           frozen_on?: string | null
@@ -893,7 +899,9 @@ export type Database = {
           created_at?: string
           discount_note?: string | null
           discount_paisa?: number
-          discount_reason?: Database["public"]["Enums"]["discount_reason"] | null
+          discount_reason?:
+            | Database["public"]["Enums"]["discount_reason"]
+            | null
           end_date?: string | null
           frozen_days?: number
           frozen_on?: string | null
@@ -981,6 +989,7 @@ export type Database = {
           branch_id: string | null
           channel: Database["public"]["Enums"]["notification_channel"]
           created_at: string
+          created_by: string | null
           dedupe_key: string
           event: Database["public"]["Enums"]["notification_event"]
           id: string
@@ -999,6 +1008,7 @@ export type Database = {
           subject: string | null
           to_address: string
           updated_at: string
+          visitor_id: string | null
         }
         Insert: {
           attempts?: number
@@ -1006,6 +1016,7 @@ export type Database = {
           branch_id?: string | null
           channel: Database["public"]["Enums"]["notification_channel"]
           created_at?: string
+          created_by?: string | null
           dedupe_key: string
           event: Database["public"]["Enums"]["notification_event"]
           id?: string
@@ -1024,6 +1035,7 @@ export type Database = {
           subject?: string | null
           to_address: string
           updated_at?: string
+          visitor_id?: string | null
         }
         Update: {
           attempts?: number
@@ -1031,6 +1043,7 @@ export type Database = {
           branch_id?: string | null
           channel?: Database["public"]["Enums"]["notification_channel"]
           created_at?: string
+          created_by?: string | null
           dedupe_key?: string
           event?: Database["public"]["Enums"]["notification_event"]
           id?: string
@@ -1049,6 +1062,7 @@ export type Database = {
           subject?: string | null
           to_address?: string
           updated_at?: string
+          visitor_id?: string | null
         }
         Relationships: [
           {
@@ -1063,6 +1077,13 @@ export type Database = {
             columns: ["branch_id"]
             isOneToOne: false
             referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_messages_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "staff"
             referencedColumns: ["id"]
           },
           {
@@ -1114,10 +1135,21 @@ export type Database = {
             referencedRelation: "staff"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "notification_messages_visitor_fk"
+            columns: ["visitor_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "visitors"
+            referencedColumns: ["id", "org_id"]
+          },
         ]
       }
       notification_providers: {
         Row: {
+          balance: Json | null
+          balance_checked_at: string | null
+          balance_error: string | null
+          balance_request_id: number | null
           channel: Database["public"]["Enums"]["notification_channel"]
           config: Json
           created_at: string
@@ -1132,6 +1164,10 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          balance?: Json | null
+          balance_checked_at?: string | null
+          balance_error?: string | null
+          balance_request_id?: number | null
           channel: Database["public"]["Enums"]["notification_channel"]
           config?: Json
           created_at?: string
@@ -1146,6 +1182,10 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          balance?: Json | null
+          balance_checked_at?: string | null
+          balance_error?: string | null
+          balance_request_id?: number | null
           channel?: Database["public"]["Enums"]["notification_channel"]
           config?: Json
           created_at?: string
@@ -2026,11 +2066,13 @@ export type Database = {
           p_staff_id?: string
           p_subject?: string
           p_to: string
+          p_visitor_id?: string
         }
         Returns: string
       }
       enqueue_notifications: { Args: never; Returns: Json }
       enqueue_renewal_reminders: { Args: never; Returns: number }
+      enqueue_visitor_follow_ups: { Args: never; Returns: number }
       format_paisa: {
         Args: { p_currency?: string; p_paisa: number }
         Returns: string
@@ -2085,6 +2127,38 @@ export type Database = {
         Args: { p_left_on: string; p_member_id: string }
         Returns: Database["public"]["Enums"]["member_status"]
       }
+      member_message_target: {
+        Args: {
+          p_channel?: Database["public"]["Enums"]["notification_channel"]
+          p_member_id: string
+        }
+        Returns: {
+          branch_id: string
+          full_name: string
+          locale: string
+          opt_out: boolean
+          org_id: string
+          raw_address: string
+          reachable: boolean
+          to_address: string
+          vars: Json
+        }[]
+      }
+      member_notification_preview: {
+        Args: {
+          p_channel?: Database["public"]["Enums"]["notification_channel"]
+          p_event: Database["public"]["Enums"]["notification_event"]
+          p_member_id: string
+        }
+        Returns: {
+          body: string
+          has_gateway: boolean
+          opt_out: boolean
+          reachable: boolean
+          subject: string
+          to_address: string
+        }[]
+      }
       membership_movement: {
         Args: {
           p_branch_ids?: string[]
@@ -2106,11 +2180,19 @@ export type Database = {
         Args: { p_member_id?: string; p_ttl_seconds?: number }
         Returns: Json
       }
+      nepal_mobile_carrier: { Args: { p_to: string }; Returns: string }
       next_org_counter: {
         Args: { p_counter: string; p_org_id: string }
         Returns: number
       }
       normalise_msisdn: { Args: { p_phone: string }; Returns: string }
+      notification_balance_url: {
+        Args: {
+          p_provider: Database["public"]["Enums"]["notification_provider"]
+          p_secret: string
+        }
+        Returns: string
+      }
       notification_credential: {
         Args: { p_provider_id: string }
         Returns: string
@@ -2206,6 +2288,10 @@ export type Database = {
       qr_sign: { Args: { p_key: string; p_payload: string }; Returns: string }
       qr_signing_key: { Args: never; Returns: string }
       reactivate_member: { Args: { p_member_id: string }; Returns: Json }
+      read_notification_gateway_balance: {
+        Args: { p_provider_id: string }
+        Returns: Json
+      }
       reap_notification_responses: {
         Args: { p_limit?: number }
         Returns: number
@@ -2281,6 +2367,10 @@ export type Database = {
         Args: { p_group_by: string; p_on: string }
         Returns: string
       }
+      request_notification_gateway_balance: {
+        Args: { p_provider_id: string }
+        Returns: undefined
+      }
       resolve_notification_template: {
         Args: {
           p_channel: Database["public"]["Enums"]["notification_channel"]
@@ -2328,7 +2418,27 @@ export type Database = {
         Args: { p_org_id: string }
         Returns: undefined
       }
+      send_member_notification: {
+        Args: {
+          p_body?: string
+          p_channel?: Database["public"]["Enums"]["notification_channel"]
+          p_event: Database["public"]["Enums"]["notification_event"]
+          p_member_id: string
+          p_subject?: string
+        }
+        Returns: string
+      }
       send_notification_batch: { Args: { p_limit?: number }; Returns: number }
+      send_visitor_notification: {
+        Args: {
+          p_body?: string
+          p_channel?: Database["public"]["Enums"]["notification_channel"]
+          p_event: Database["public"]["Enums"]["notification_event"]
+          p_subject?: string
+          p_visitor_id: string
+        }
+        Returns: string
+      }
       set_member_left: {
         Args: { p_left_on?: string; p_member_id: string; p_reason?: string }
         Returns: Json
@@ -2354,6 +2464,36 @@ export type Database = {
         Returns: boolean
       }
       verify_qr_token: { Args: { p_token: string }; Returns: Json }
+      visitor_message_target: {
+        Args: {
+          p_channel?: Database["public"]["Enums"]["notification_channel"]
+          p_visitor_id: string
+        }
+        Returns: {
+          branch_id: string
+          full_name: string
+          locale: string
+          org_id: string
+          raw_address: string
+          reachable: boolean
+          to_address: string
+          vars: Json
+        }[]
+      }
+      visitor_notification_preview: {
+        Args: {
+          p_channel?: Database["public"]["Enums"]["notification_channel"]
+          p_event: Database["public"]["Enums"]["notification_event"]
+          p_visitor_id: string
+        }
+        Returns: {
+          body: string
+          has_gateway: boolean
+          reachable: boolean
+          subject: string
+          to_address: string
+        }[]
+      }
     }
     Enums: {
       attendance_method: "manual" | "qr" | "card" | "biometric"
@@ -2389,6 +2529,9 @@ export type Database = {
         | "birthday_greeting"
         | "staff_invite"
         | "test_message"
+        | "custom_message"
+        | "visitor_welcome"
+        | "visitor_follow_up"
       notification_provider:
         | "sparrow_sms"
         | "aakash_sms"
@@ -2396,6 +2539,7 @@ export type Database = {
         | "resend_email"
         | "custom_http"
         | "log_only"
+        | "smspasal_sms"
       notification_status:
         | "queued"
         | "sending"
@@ -2574,6 +2718,9 @@ export const Constants = {
         "birthday_greeting",
         "staff_invite",
         "test_message",
+        "custom_message",
+        "visitor_welcome",
+        "visitor_follow_up",
       ],
       notification_provider: [
         "sparrow_sms",
@@ -2582,6 +2729,7 @@ export const Constants = {
         "resend_email",
         "custom_http",
         "log_only",
+        "smspasal_sms",
       ],
       notification_status: [
         "queued",

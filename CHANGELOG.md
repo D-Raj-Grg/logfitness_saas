@@ -17,6 +17,196 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-09-12 — A gateway a Nepali gym can actually send from
+
+The notification pipeline shipped on 09-09 with four adapters written from
+published documentation and no account behind any of them. A gym account now
+exists, and the first real SMS left the system today — which is also how three
+silent bugs surfaced, one of them a year-zero defect that had made *every*
+gateway unsavable since the settings screen was built.
+
+### Added
+
+- **SMSPasal** (sms.smspasal.com, a ThemeNepal reseller) as a fourth SMS
+  gateway. One GET with the API key as an ordinary parameter, and a plain-text
+  reply rather than JSON: `SMS-SHOOT-ID/<id>` when accepted, `ERR: <reason>`
+  when not — and the refusal arrives inside an HTTP 200, so the body is the
+  verdict and the status code is not. The account's optional `campaign` and
+  `routeid` live in `notification_providers.config` and are omitted from the
+  request entirely when blank, because `campaign=` with no value is not the same
+  request as no campaign at all.
+- **A sender ID per carrier.** Operators register sender IDs separately and a
+  reseller routinely ends up with different words on each — this account sends
+  as `smsbit` on NTC and `TN_ALERT` on Ncell — while the API takes exactly one
+  `senderid` per request. `nepal_mobile_carrier()` reads the operator off the
+  recipient's own number (digits only, last ten, so `+977 984-1234567` and
+  `9841234567` are the same number) and the adapter picks `config.sender_ntc` or
+  `config.sender_ncell`, falling back to the gateway's own sender. Smart, UTL and
+  Hello are revoked licences, not a third case: 961, 962, 988, 972 and 963 match
+  nothing and take the fallback.
+- **Remaining credits, on demand.** The API key lives in Vault and no client
+  role can read it, so the console cannot call the gateway itself: the database
+  makes the call with pg_net and a second call collects the reply, parked on the
+  provider row. A **Check balance** button fires the first and polls the second.
+  Throttled to one live request per gateway per 20 seconds, and
+  `notification_balance_url` — which builds a URL with the key inside it — is
+  callable by no client role at all, exactly where `notification_credential`
+  stands.
+- **Channel tabs** on `/settings/notifications`. Three stacked gateway cards
+  became SMS / Viber / Email tabs, each tab carrying its own state — Connected,
+  Paused, or Not set up — so the state of the other two channels is legible
+  without a click.
+- **A saved token looks saved.** The write-only token field is replaced by a
+  masked pill and a **Saved** badge once a key is stored, with **Replace** to
+  swap it back for an input, and a gateway with no key carries a **No token yet**
+  badge next to Connected. Nothing is ever echoed back — the mask is fixed-width
+  dots, not the key's length.
+- **The delivery log keeps itself current.** A message sits in `sending` for up
+  to a minute — the outbox cron hands it to the gateway on one tick and reads the
+  reply on the next — so the row that matters is precisely the one that is stale
+  by the time the page renders. While anything on screen is queued or going out,
+  the table re-fetches every eight seconds and on tab focus, stops the moment
+  nothing is in flight, and gives up after fifteen minutes with a "check again"
+  link rather than polling a stuck message all afternoon.
+- **Colour on the statuses.** Green delivered, blue going out, amber waiting, red
+  failed, grey for cancelled and not-sent — with a dot as well as a colour, so it
+  still reads without colour. Grey for those last two is deliberate: "not sent"
+  is the gym choosing not to send or a number nobody can deliver to, and red
+  would send someone hunting a gateway fault that does not exist.
+
+### Fixed
+
+- **Every gateway save failed silently, and always had.** `formData.get()`
+  returns null for an input the current gateway does not render, and the optional
+  fields were `.optional()`, which in zod v4 rejects null. So a save was refused
+  over `configJson` — a field only the custom-HTTP gateway shows — and the field
+  error had nowhere on screen to appear: the button did nothing, wrote nothing,
+  and said nothing. Sparrow and Aakash were never savable either, and the
+  template editor's `subject` had the same hole. Optional fields are now
+  `.nullish()`, a parse failure returns a readable summary as well as per-field
+  text, and every gateway action raises a toast, so a silent outcome is no longer
+  possible on that screen.
+- **The delivery log's summary chips rendered `: 2` with no word.** The label
+  maps were exported from `notification-filters.tsx`, a `'use client'` module: a
+  Server Component importing a plain constant across that boundary gets the
+  client reference rather than the object, so every lookup was undefined. The
+  filter dropdowns read them correctly, which is why it went unnoticed. Labels
+  now live in `lib/notifications/labels.ts`. This is the second time this
+  boundary has bitten — `e3c843c` moved the pagination constants for the same
+  reason — and any other constant exported from a client module and read on the
+  server will fail the same silent way.
+- **A Nepali reminder would have arrived as boxes.** `type=text` is the GSM
+  alphabet; SMSPasal has a separate `type=unicode` for Devanagari, and the
+  product ships Nepali templates. Caught in review before it sent anything: the
+  type is now derived from the message body, and the unicode endpoint — which
+  documents no campaign — is sent none.
+- **The balance reaper read a missing row as a present one.** It tested the
+  record for null, which is also true of a found row whose columns happen to be
+  null. It tests `FOUND` now, and a response carrying no status code is an error
+  rather than falling through to the body check.
+
+### Database
+
+Four migrations, all applied and mirrored in `supabase/migrations/`: the
+`smspasal_sms` enum value alone (Postgres refuses to use a value added by the
+same transaction), the request/response arms plus the four balance columns and
+their two RPCs, the unicode and reaper corrections, and
+`nepal_mobile_carrier()` with the carrier-aware sender. `get_advisors(security)`
+reports no new findings — both balance RPCs are SECURITY DEFINER with hand-rolled
+owner checks, standing exactly where the credential RPCs do.
+
+Gate: `supabase/tests/notifications.sql` grew the SMSPasal request shape with and
+without the account ids, the three plain-text response shapes, Devanagari
+selecting unicode, the carrier prefix table, sender selection per carrier and its
+fallback, cross-org denial on both balance RPCs, and the grant assertion on
+`notification_balance_url`.
+
+### Performance
+
+- **Every console screen streams** (`daf5345`). There was no `loading.tsx`,
+  `error.tsx` or `not-found.tsx` anywhere, and all twenty pages under `(app)`
+  awaited their data at the top level, so TTFB was total server work and the
+  screen stayed blank until the slowest query landed. Page bodies moved into
+  Suspense-wrapped children on the dashboard, members, payments and all five
+  reports, each boundary re-keyed on its query so changing a filter swaps in a
+  skeleton rather than stranding the previous result. Skeletons mirror the
+  components they stand in for — same grid, same column count — so nothing
+  shifts when the data arrives. `getCurrentStaff` and `listBranches` are wrapped
+  in React `cache()`: a single `/members` request was issuing `current_staff`
+  twice and `listBranches` three times.
+
+### Verified
+
+A real SMS left the system through SMSPasal and arrived on a handset. The log
+row carries `provider_status` 200 and the gateway's shoot ID, and the balance
+call answered live with the account's own route and credits. Both were driven
+through the browser, not curl.
+
+### Known limits
+
+- **Delivered means the gateway accepted it**, not that a handset received it.
+  SMSPasal publishes a DLR API keyed by the shoot ID already stored; it is not
+  wired up, so the log cannot yet distinguish accepted from delivered.
+- **The NTC sender is unproven.** The test send went to an Ncell number, and
+  `smsbit` is not selectable as a sender in the account's own panel, which
+  suggests the reseller's route substitutes it rather than accepting it on the
+  request. If NTC comes back `ERR: INVALID SENDER ID`, clearing the NTC field
+  falls back to the registered sender.
+- **SMSPasal caps a message at 720 characters** while a template may hold 1000.
+  An over-long message is refused by the gateway and lands as `ERR:` in the log
+  rather than being caught at save time.
+
+## 2026-09-11 — The list the front desk actually reads
+
+### Added
+
+- **The member list opens on the entry feed** (`33f4ca8`), newest member code
+  first, instead of A-Z — the person just registered was landing somewhere in
+  the middle. Code, Name, Plan and Dues sort from their headers, sorting is URL
+  state so a sorted view is a link, and every order tiebreaks on `member_code`
+  so a row cannot appear on two pages while another appears on none.
+- **A serial number that continues across pagination**, and a per-row action
+  menu: quick edit, full edit, the membership forms, check in, and the
+  archive/restore/delete confirmations shared with the profile.
+- Quick edit writes through a narrow `quickUpdateMember` rather than
+  `updateMember`: the list reads `member_overview`, which does not carry the
+  address, notes, date of birth or emergency contact, and a full-record update
+  from a dialog that cannot show those fields would blank them. The membership
+  items are links to the profile with `?action=`, not dialogs on the row — they
+  need that member's memberships, invoices, payments and the branch's plans,
+  which the profile already loads and a row would have to fetch twenty-five
+  times a page.
+
+## 2026-09-10 — What the member reads on the paper
+
+### Added
+
+- **A waived joining fee is visible** (`726c95c`). A member who paid no
+  registration fee had no way to see that one applied and was not taken, and the
+  amount was recorded nowhere — not recoverable afterwards, since the plan may
+  have been repriced. It is now written at the point of sale
+  (`memberships.signup_fee_waived_paisa`), with `orgs.standard_signup_fee_paisa`
+  as the gym's list fee so a tier sold as "joining fee waived" has something to
+  strike out. The waiver is a memo throughout: outside `price_paisa`, outside the
+  invoice subtotal, outside every revenue report. Gate:
+  `supabase/tests/waived_signup_fee.sql`.
+
+### Changed
+
+- **The invoice and receipt were redesigned, and a discount now explains
+  itself** (`5a00b21`). The waived-fee lines printed a contradiction — "Joining
+  fee NPR 500 / charged once, on the first membership", for a fee that was never
+  charged. The gym owner's verdict was that "waived" is a word his customers do
+  not understand: the fee now shows and comes back off with a minus, the way a
+  discount reads, with a plain line underneath saying why. The discount had the
+  opposite problem — honest but invisible, a grey row with no reason attached
+  anywhere in the system. `discount_reason` is now an enum with an `other`
+  escape carrying a note, stored on both memberships and invoices, immutable
+  once sold, and `renew_membership` refuses money coming off without one. The
+  table constraints are `NOT VALID` on purpose: discounted rows predate the
+  column, and back-filling them with a reason nobody chose would be inventing a
+  financial record.
+
 ## 2026-09-09 — The reminder that goes out on its own
 
 ### Added

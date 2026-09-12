@@ -1,21 +1,24 @@
 import Link from 'next/link'
 
 import { Pagination } from '@/components/app/pagination'
-import {
-  NOTIFICATION_CHANNELS,
-  NOTIFICATION_EVENTS,
-  NOTIFICATION_STATUSES,
-  NotificationFilters,
-} from '@/components/notifications/notification-filters'
+import { NotificationFilters } from '@/components/notifications/notification-filters'
+import { LiveRefresh } from '@/components/notifications/live-refresh'
 import { NotificationsTable } from '@/components/notifications/notifications-table'
 import { Badge } from '@/components/ui/badge'
 import { requireRole } from '@/lib/auth'
 import { listBranches } from '@/lib/db/branches'
+import { listStaff } from '@/lib/db/staff'
 import {
   listNotificationProviders,
   listNotifications,
   notificationStatusCounts,
 } from '@/lib/db/notifications'
+import {
+  NOTIFICATION_CHANNELS,
+  NOTIFICATION_EVENTS,
+  NOTIFICATION_STATUSES,
+  NOTIFICATION_STATUS_SHORT,
+} from '@/lib/notifications/labels'
 import { resolveBranchScope } from '@/lib/scope'
 import { notificationListQuerySchema } from '@/lib/validation/notifications'
 
@@ -24,6 +27,14 @@ function first(value: string | string[] | undefined) {
 }
 
 const SUMMARY_STATUSES = ['sent', 'queued', 'failed', 'skipped'] as const
+
+/** The same colours the rows use, so the tally and the table agree. */
+const SUMMARY_STYLES: Record<(typeof SUMMARY_STATUSES)[number], string> = {
+  sent: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+  queued: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  failed: 'border-destructive/30 bg-destructive/10 text-destructive',
+  skipped: 'border-border bg-muted text-muted-foreground',
+}
 
 export default async function NotificationsPage({
   searchParams,
@@ -47,7 +58,7 @@ export default async function NotificationsPage({
   })
   const query = parsed.success ? parsed.data : notificationListQuerySchema.parse({})
 
-  const [result, counts, branches, providers] = await Promise.all([
+  const [result, counts, branches, staffList, providers] = await Promise.all([
     listNotifications({
       branchIds: scope.branchIds,
       status: query.status === 'all' ? undefined : query.status,
@@ -59,12 +70,15 @@ export default async function NotificationsPage({
     }),
     notificationStatusCounts(scope.branchIds, SUMMARY_STATUSES),
     listBranches(),
+    // Names for the rows a person sent by hand rather than a sweep.
+    listStaff(),
     // Managers cannot read gateway rows -- RLS is owner-only -- so this comes
     // back empty for them, and the "set one up" banner is owner-only too.
     staff.role === 'owner' ? listNotificationProviders() : Promise.resolve([]),
   ])
 
   const branchNames = Object.fromEntries(branches.map((branch) => [branch.id, branch.name]))
+  const staffNames = Object.fromEntries(staffList.map((member) => [member.id, member.full_name]))
   const hasGateway = providers.some((provider) => provider.is_active)
 
   return (
@@ -100,12 +114,22 @@ export default async function NotificationsPage({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {SUMMARY_STATUSES.map((status) => (
-          <Badge key={status} variant="outline">
-            {NOTIFICATION_STATUSES[status]}: {counts[status] ?? 0}
+          <Badge key={status} variant="outline" className={SUMMARY_STYLES[status]}>
+            {NOTIFICATION_STATUS_SHORT[status]} {counts[status] ?? 0}
           </Badge>
         ))}
+        {/* Counted from the page being looked at, not from the whole log: what
+            the reader wants to know is whether the rows in front of them are
+            about to change. */}
+        <LiveRefresh
+          pending={
+            result.rows.filter(
+              (row) => row.status === 'queued' || row.status === 'sending'
+            ).length
+          }
+        />
       </div>
 
       <NotificationFilters
@@ -118,6 +142,7 @@ export default async function NotificationsPage({
       <NotificationsTable
         rows={result.rows}
         branchNames={branchNames}
+        staffNames={staffNames}
         canAct={staff.role === 'owner' || staff.role === 'manager'}
       />
 

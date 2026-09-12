@@ -16,6 +16,7 @@ declare
   st_a_owner   uuid := 'e1c00000-0000-0000-0000-00000000000f';
   st_a_manager uuid := 'e1c00000-0000-0000-0000-0000000000aa';
   st_a_desk    uuid := 'e1c00000-0000-0000-0000-0000000000cd';
+  st_a_coach   uuid := 'e1c00000-0000-0000-0000-0000000000c0';
   st_b_owner   uuid := 'e2c00000-0000-0000-0000-00000000000f';
 
   mem_1 uuid := 'e1d00000-0000-0000-0000-000000000001';  -- expiring, textable
@@ -26,6 +27,7 @@ declare
 
   plan_a uuid := 'e1e00000-0000-0000-0000-0000000000a1';
   prov_a uuid;
+  msg_m uuid;
   msg_1 uuid;
   msg_2 uuid;
 
@@ -49,6 +51,7 @@ begin
     (st_a_owner,   org_a, 'Nova Owner',   'owner@nova.test',   'owner',      '{}',          'active'),
     (st_a_manager, org_a, 'Nova Manager', 'manager@nova.test', 'manager',    array[br_a1],  'active'),
     (st_a_desk,    org_a, 'Nova Desk',    'desk@nova.test',    'front_desk', array[br_a1],  'active'),
+    (st_a_coach,   org_a, 'Nova Coach',   'coach@nova.test',   'trainer',    array[br_a1],  'active'),
     (st_b_owner,   org_b, 'Nyx Owner',    'owner@nyx.test',    'owner',      '{}',          'active');
 
   today_a := public.org_today(org_a);
@@ -126,6 +129,56 @@ begin
   assert j #>> '{params,auth_token}' = 'tok', 'aakash names its token auth_token';
   assert not (j -> 'params' ? 'from'), 'aakash fixes the sender on the account, so no from';
 
+  j := public.notification_request('smspasal_sms', '{}'::jsonb, null, 'tok', 'NovaGym', '9812345678', null, 'Hello');
+  assert j ->> 'url' like 'https://sms.smspasal.com/%', 'smspasal is called over TLS';
+  assert j #>> '{params,key}' = 'tok' and j #>> '{params,type}' = 'text'
+     and j #>> '{params,contacts}' = '9812345678' and j #>> '{params,senderid}' = 'NovaGym'
+     and j #>> '{params,msg}' = 'Hello',
+     'smspasal parameter names';
+  -- Absent, not blank: an empty campaign is a different request from no campaign
+  -- at all, and only the latter falls back to the account default.
+  assert not (j -> 'params' ? 'campaign') and not (j -> 'params' ? 'routeid'),
+    'smspasal omits the account ids when the gym has not set them';
+
+  j := public.notification_request('smspasal_sms',
+         '{"campaign":"9768","routeid":"10259"}'::jsonb,
+         null, 'tok', 'NovaGym', '9812345678', null, 'Hello');
+  assert j #>> '{params,campaign}' = '9768' and j #>> '{params,routeid}' = '10259',
+    'smspasal passes the account ids when they are set';
+  assert j #>> '{params,type}' = 'text', 'an ASCII message is a GSM text message';
+
+  -- Operators register sender IDs separately, so the sender is chosen from the
+  -- recipient's own prefix. Smart, UTL and Hello are revoked ranges, not a
+  -- third case.
+  assert public.nepal_mobile_carrier('9841234567') = 'ntc'
+     and public.nepal_mobile_carrier('+977 985-1234567') = 'ntc'
+     and public.nepal_mobile_carrier('9801234567') = 'ncell'
+     and public.nepal_mobile_carrier('9612345678') is null,
+     'nepali carrier prefixes';
+
+  j := public.notification_request('smspasal_sms',
+         '{"sender_ntc":"smsbit","sender_ncell":"TN_ALERT"}'::jsonb,
+         null, 'tok', 'FALLBACK', '9841234567', null, 'Hello');
+  assert j #>> '{params,senderid}' = 'smsbit', 'an NTC number sends as the NTC sender';
+
+  j := public.notification_request('smspasal_sms',
+         '{"sender_ntc":"smsbit","sender_ncell":"TN_ALERT"}'::jsonb,
+         null, 'tok', 'FALLBACK', '9801234567', null, 'Hello');
+  assert j #>> '{params,senderid}' = 'TN_ALERT', 'an Ncell number sends as the Ncell sender';
+
+  j := public.notification_request('smspasal_sms', '{}'::jsonb,
+         null, 'tok', 'FALLBACK', '9841234567', null, 'Hello');
+  assert j #>> '{params,senderid}' = 'FALLBACK',
+    'with no carrier senders registered, everyone gets the gateway sender';
+
+  -- A Nepali template is not the GSM alphabet: `text` would arrive as boxes.
+  j := public.notification_request('smspasal_sms',
+         '{"campaign":"9768","routeid":"10259"}'::jsonb,
+         null, 'tok', 'NovaGym', '9812345678', null, 'नमस्ते, तपाईंको सदस्यता सकिँदै छ।');
+  assert j #>> '{params,type}' = 'unicode', 'devanagari goes out as unicode';
+  assert not (j -> 'params' ? 'campaign'), 'the unicode endpoint documents no campaign';
+  assert j #>> '{params,routeid}' = '10259', 'it does take a route';
+
   j := public.notification_request('viber_business', '{}'::jsonb, null, 'tok', 'NovaGym', 'viber-id', null, 'Hello');
   assert j ->> 'method' = 'POST', 'viber is a JSON POST';
   assert j #>> '{headers,X-Viber-Auth-Token}' = 'tok', 'viber auth header';
@@ -154,6 +207,18 @@ begin
 
   j := public.notification_response_ok('aakash_sms', 200, '{"error":true,"message":"The provided Auth Token is not valid."}');
   assert not (j ->> 'ok')::boolean, 'aakash reports failure inside a 200';
+
+  -- SMSPasal answers in plain text, not JSON.
+  j := public.notification_response_ok('smspasal_sms', 200, 'SMS-SHOOT-ID/AB12CD34');
+  assert (j ->> 'ok')::boolean and j ->> 'message_id' = 'AB12CD34',
+    'smspasal success carries the shoot id';
+
+  j := public.notification_response_ok('smspasal_sms', 200, 'ERR: INVALID API KEY');
+  assert not (j ->> 'ok')::boolean and j ->> 'error' like 'ERR:%',
+    'smspasal reports failure inside a 200, in its own words';
+
+  j := public.notification_response_ok('smspasal_sms', 500, null);
+  assert not (j ->> 'ok')::boolean, 'an empty smspasal 500 is a failure, not a crash';
 
   j := public.notification_response_ok('custom_http', 500, 'Internal Server Error');
   assert not (j ->> 'ok')::boolean, 'a non-JSON 500 is a failure, not a crash';
@@ -358,6 +423,12 @@ begin
     'execute'),
     'the sweeps'' own resolver must not be callable by a client role';
 
+  -- It builds a URL with the API key inside it, so it stands where
+  -- notification_credential stands: callable by no client role.
+  assert not has_function_privilege('authenticated',
+    'public.notification_balance_url(public.notification_provider, text)', 'execute'),
+    'the balance URL builder must not be callable by a client role';
+
   failed := false;
   begin
     perform public.set_notification_credential(prov_a, 'stolen');
@@ -367,6 +438,20 @@ begin
 
   assert not public.notification_has_credential(prov_a),
     'org B is not even told whether org A has a token';
+
+  failed := false;
+  begin
+    perform public.request_notification_gateway_balance(prov_a);
+  exception when insufficient_privilege then failed := true;
+  end;
+  assert failed, 'org B cannot spend org A''s gateway on a balance check';
+
+  failed := false;
+  begin
+    perform public.read_notification_gateway_balance(prov_a);
+  exception when insufficient_privilege then failed := true;
+  end;
+  assert failed, 'org B cannot read org A''s balance either';
 
   execute 'reset role';
 
@@ -383,6 +468,145 @@ begin
   assert n = 0, 'and nobody else''s';
   select count(*) into n from public.notification_providers;
   assert n = 0, 'a member reads no gateway configuration';
+
+  execute 'reset role';
+
+  ------------------------------------------------- sending one by hand
+  -- The desk, on the floor, texting one member on purpose. mem_1 owes
+  -- NOTIF-INV-1 by now, which is what the dues wording must quote. Same wording the
+  -- sweep would have used, the same outbox, and a row saying who sent it.
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', org_a::text, 'staff_id', st_a_desk::text,
+    'staff_role', 'front_desk', 'branch_ids', json_build_array(br_a1::text)
+  )::text, true);
+  execute 'set local role authenticated';
+
+  assert not has_function_privilege('authenticated',
+    'public.member_message_target(uuid, public.notification_channel)', 'execute'),
+    'the guard behind the manual send is internal';
+
+  select p.body into s
+  from public.member_notification_preview(mem_1, 'dues_reminder') p;
+  assert s like '%Rs 2,000%', 'the preview carries the real outstanding amount: ' || coalesce(s, '(null)');
+  assert s !~ '\{\{', 'the preview leaves no placeholder behind: ' || s;
+
+  select count(*) into n from public.member_notification_preview(mem_1, 'dues_reminder') p
+  where p.to_address = '9800000101' and p.has_gateway and p.reachable and not p.opt_out;
+  assert n = 1, 'the preview says the number, the gateway and the consent are all fine';
+
+  select count(*) into n from public.member_notification_preview(mem_1, 'custom_message') p
+  where p.body is null;
+  assert n = 1, 'a custom message has nothing to preview -- the desk writes it';
+
+  msg_m := public.send_member_notification(mem_1, 'dues_reminder');
+  select count(*) into n from public.notification_messages nm
+  where nm.id = msg_m and nm.member_id = mem_1 and nm.event = 'dues_reminder'
+    and nm.status = 'queued' and nm.created_by = st_a_desk
+    and nm.branch_id = br_a1 and nm.to_address = '9800000101'
+    and nm.body like '%Rs 2,000%';
+  assert n = 1, 'the message lands in the outbox, rendered, with its author';
+
+  -- A double click costs a real credit and reads as the gym texting twice.
+  failed := false;
+  begin
+    perform public.send_member_notification(mem_1, 'dues_reminder');
+  exception when unique_violation then failed := true;
+  end;
+  assert failed, 'the same reminder cannot be sent twice inside the guard window';
+
+  -- Edited wording is stored as sent, not as templated.
+  msg_m := public.send_member_notification(mem_1, 'custom_message', 'sms',
+    'Ram, your trainer swapped to 6am tomorrow.');
+  select count(*) into n from public.notification_messages nm
+  where nm.id = msg_m and nm.event = 'custom_message'
+    and nm.body = 'Ram, your trainer swapped to 6am tomorrow.';
+  assert n = 1, 'a custom message is sent exactly as it was written';
+
+  failed := false;
+  begin
+    perform public.send_member_notification(mem_1, 'custom_message', 'sms', '   ');
+  exception when check_violation then failed := true;
+  end;
+  assert failed, 'a blank custom message is refused';
+
+  -- Consent is not overridable by a button.
+  failed := false;
+  begin
+    perform public.send_member_notification(mem_2, 'dues_reminder');
+  exception when check_violation then failed := true;
+  end;
+  assert failed, 'an opted-out member cannot be messaged by hand either';
+
+  failed := false;
+  begin
+    perform public.send_member_notification(mem_3, 'renewal_reminder');
+  exception when no_data_found then failed := true;
+  end;
+  assert failed, 'an archived member is off the floor';
+
+  failed := false;
+  begin
+    perform public.send_member_notification(mem_5, 'birthday_greeting');
+  exception when insufficient_privilege then failed := true;
+  end;
+  assert failed, 'the desk cannot message a member at a branch it does not cover';
+
+  -- An unusable number is a skipped row with a reason, not a failure and not
+  -- an exception: the desk is told, and the sender never touches it.
+  msg_m := public.send_member_notification(mem_4, 'renewal_reminder');
+  select count(*) into n from public.notification_messages nm
+  where nm.id = msg_m and nm.status = 'skipped' and nm.last_error like 'No usable%'
+    and nm.to_address = '01-4567890';
+  assert n = 1, 'a member with no usable number produces a skipped row that says so';
+
+  failed := false;
+  begin
+    perform public.send_member_notification(mem_1, 'test_message');
+  exception when check_violation then failed := true;
+  end;
+  assert failed, 'the gateway test is not a message the desk sends to a member';
+
+  execute 'reset role';
+
+  ------------------------------------------------ a trainer sends nothing
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', org_a::text, 'staff_id', st_a_coach::text,
+    'staff_role', 'trainer', 'branch_ids', json_build_array(br_a1::text)
+  )::text, true);
+  execute 'set local role authenticated';
+
+  failed := false;
+  begin
+    perform public.send_member_notification(mem_1, 'dues_reminder');
+  exception when insufficient_privilege then failed := true;
+  end;
+  assert failed, 'a trainer cannot text a member';
+
+  failed := false;
+  begin
+    perform public.member_notification_preview(mem_1, 'dues_reminder');
+  exception when insufficient_privilege then failed := true;
+  end;
+  assert failed, 'and cannot even see what the message would say';
+
+  execute 'reset role';
+
+  ---------------------------------------- another gym's member, by hand
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', org_b::text, 'staff_id', st_b_owner::text,
+    'staff_role', 'owner', 'branch_ids', json_build_array()
+  )::text, true);
+  execute 'set local role authenticated';
+
+  failed := false;
+  begin
+    perform public.send_member_notification(mem_1, 'dues_reminder');
+  exception when no_data_found then failed := true;
+  end;
+  assert failed, 'org B cannot text org A''s member';
 
   execute 'reset role';
 
