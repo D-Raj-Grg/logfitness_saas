@@ -1,8 +1,9 @@
 'use client'
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 
+import { Spinner } from '@/components/app/spinner'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -40,6 +41,9 @@ export function MemberSearch({
   const searchParams = useSearchParams()
   const [term, setTerm] = useState(q)
   const lastPushed = useRef(q)
+  // Without this the field goes quiet between the keystroke and the new rows:
+  // the debounce, then the server round trip, with nothing on screen saying so.
+  const [pending, startTransition] = useTransition()
 
   // Filters are URL state so the page stays a Server Component and results
   // are shareable. Every change resets to page 1 -- the old offset is
@@ -52,7 +56,9 @@ export function MemberSearch({
     }
     params.delete('page')
     const query = params.toString()
-    router.replace(query ? `${pathname}?${query}` : pathname)
+    startTransition(() => {
+      router.replace(query ? `${pathname}?${query}` : pathname)
+    })
   }
 
   useEffect(() => {
@@ -75,14 +81,23 @@ export function MemberSearch({
     <div className="flex flex-wrap items-end gap-3">
       <div className="flex min-w-64 flex-1 flex-col gap-1.5">
         <Label htmlFor="member-search">Search</Label>
-        <Input
-          id="member-search"
-          type="search"
-          placeholder="Phone, name, or member code"
-          value={term}
-          onChange={(event) => setTerm(event.target.value)}
-          autoComplete="off"
-        />
+        <div className="relative">
+          <Input
+            id="member-search"
+            type="search"
+            placeholder="Phone, name, or member code"
+            value={term}
+            onChange={(event) => setTerm(event.target.value)}
+            autoComplete="off"
+            className="pr-9"
+          />
+          {pending ? (
+            <Spinner
+              label="Searching members"
+              className="absolute top-1/2 right-3 -translate-y-1/2"
+            />
+          ) : null}
+        </div>
       </div>
 
       <div className="flex w-48 flex-col gap-1.5">

@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 
+import { TableSkeleton } from '@/components/app/skeletons'
 import { ArrearsTable } from '@/components/payments/arrears-table'
 import { CollectionSheet } from '@/components/payments/collection-sheet'
 import { PaymentsFilters, type PaymentsView } from '@/components/payments/payments-filters'
@@ -34,9 +35,6 @@ export default async function PaymentsPage({
     })
     const bucket = query.success ? (query.data.bucket ?? null) : null
 
-    const allRows = await arrearsReport(scope.branchIds)
-    const rows = bucket ? allRows.filter((row) => row.bucket === bucket) : allRows
-
     return (
       <div className="flex flex-col gap-6">
         <PageHeading
@@ -54,7 +52,12 @@ export default async function PaymentsPage({
             allowAllBranches={scope.canSwitch}
           />
         </Suspense>
-        <ArrearsTable rows={rows} allRows={allRows} />
+        <Suspense
+          key={`arrears:${bucket ?? 'all'}:${scope.label}`}
+          fallback={<TableSkeleton rows={10} columns={7} />}
+        >
+          <Arrears branchIds={scope.branchIds} bucket={bucket} />
+        </Suspense>
       </div>
     )
   }
@@ -64,8 +67,6 @@ export default async function PaymentsPage({
     branchId: branchId ?? undefined,
   })
   const on = (query.success && query.data.on) || todayInTimezone()
-
-  const rows = await dailyCollection({ on, branchIds: scope.branchIds })
 
   return (
     <div className="flex flex-col gap-6">
@@ -84,9 +85,42 @@ export default async function PaymentsPage({
           allowAllBranches={scope.canSwitch}
         />
       </Suspense>
-      <CollectionSheet rows={rows} on={on} />
+      <Suspense
+        key={`collection:${on}:${scope.label}`}
+        fallback={<TableSkeleton rows={10} columns={6} />}
+      >
+        <Collection on={on} branchIds={scope.branchIds} />
+      </Suspense>
     </div>
   )
+}
+
+/**
+ * The two report bodies. Both are a single slow query with nothing above them
+ * that depends on it, so they read it here and let the heading and the filter
+ * bar flush first -- the controls are usable while the numbers are still coming.
+ */
+async function Arrears({
+  branchIds,
+  bucket,
+}: {
+  branchIds: string[] | null
+  bucket: string | null
+}) {
+  const allRows = await arrearsReport(branchIds)
+  const rows = bucket ? allRows.filter((row) => row.bucket === bucket) : allRows
+  return <ArrearsTable rows={rows} allRows={allRows} />
+}
+
+async function Collection({
+  on,
+  branchIds,
+}: {
+  on: string
+  branchIds: string[] | null
+}) {
+  const rows = await dailyCollection({ on, branchIds })
+  return <CollectionSheet rows={rows} on={on} />
 }
 
 function PageHeading({

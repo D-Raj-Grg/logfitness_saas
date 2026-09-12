@@ -33,31 +33,44 @@ export default async function NotificationSettingsPage() {
     listNotificationTemplates(),
   ])
 
-  // A boolean per gateway, never the token. Reading one back is impossible by
-  // design -- notification_credential is callable by no client role at all.
-  const tokenFlags = await Promise.all(
-    providers.map(async (provider) => [provider.id, await notificationHasCredential(provider.id)] as const)
-  )
-  const hasToken = Object.fromEntries(tokenFlags)
-
-  // The wording shown is whatever a message would actually use: the gym's own
-  // row if it has one, and the built-in otherwise. Resolving it through the
-  // database rather than duplicating the defaults here is what stops the
-  // preview and the send from drifting apart.
-  const slots: TemplateSlot[] = await Promise.all(
-    EDITABLE_EVENTS.map(async (event) => {
-      const own = templates.find(
-        (template) => template.event === event && template.channel === 'sms' && template.is_active
+  // The credential flags and the template previews both depend on the first
+  // wave but not on each other, so they go out together rather than one after
+  // the other.
+  const [tokenFlags, slots] = await Promise.all([
+    // A boolean per gateway, never the token. Reading one back is impossible by
+    // design -- notification_credential is callable by no client role at all.
+    Promise.all(
+      providers.map(
+        async (provider) =>
+          [provider.id, await notificationHasCredential(provider.id)] as const
       )
-      const resolved = await previewNotificationTemplate(staff.orgId, event, 'sms', own?.locale ?? 'en')
-      return {
-        event,
-        templateId: own?.id ?? null,
-        body: resolved?.body ?? '',
-        locale: own?.locale ?? 'en',
-      }
-    })
-  )
+    ),
+    // The wording shown is whatever a message would actually use: the gym's own
+    // row if it has one, and the built-in otherwise. Resolving it through the
+    // database rather than duplicating the defaults here is what stops the
+    // preview and the send from drifting apart.
+    Promise.all(
+      EDITABLE_EVENTS.map(async (event): Promise<TemplateSlot> => {
+        const own = templates.find(
+          (template) =>
+            template.event === event && template.channel === 'sms' && template.is_active
+        )
+        const resolved = await previewNotificationTemplate(
+          staff.orgId,
+          event,
+          'sms',
+          own?.locale ?? 'en'
+        )
+        return {
+          event,
+          templateId: own?.id ?? null,
+          body: resolved?.body ?? '',
+          locale: own?.locale ?? 'en',
+        }
+      })
+    ),
+  ])
+  const hasToken = Object.fromEntries(tokenFlags)
 
   return (
     <div className="flex flex-col gap-6">

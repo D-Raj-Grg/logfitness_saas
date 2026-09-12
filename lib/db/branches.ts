@@ -1,3 +1,5 @@
+import { cache } from 'react'
+
 import { createClient } from '@/lib/supabase/server'
 import type { BranchInput } from '@/lib/validation/branches'
 
@@ -5,7 +7,7 @@ import type { BranchInput } from '@/lib/validation/branches'
  * Branches visible to the caller. RLS limits this to the caller's org, so no
  * org filter is applied -- or needed -- here.
  */
-export async function listBranches() {
+export const listBranches = cache(async function listBranches() {
   const supabase = await createClient()
 
   const { data, error } = await supabase
@@ -15,7 +17,7 @@ export async function listBranches() {
 
   if (error) throw error
   return data
-}
+})
 
 export async function createBranch(orgId: string, input: BranchInput) {
   const supabase = await createClient()

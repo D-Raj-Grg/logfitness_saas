@@ -1,3 +1,5 @@
+import { cache } from 'react'
+
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 
@@ -16,7 +18,7 @@ export const CLAIMS_REFRESH_COOKIE = 'lg_claims_refreshed'
  * Reads through the current_staff() RPC rather than the staff table, because at
  * this point the caller's token may not carry tenant claims yet.
  */
-export async function getCurrentStaff(): Promise<CurrentStaff | null> {
+export const getCurrentStaff = cache(async function getCurrentStaff(): Promise<CurrentStaff | null> {
   const supabase = await createClient()
 
   const { data, error } = await supabase.rpc('current_staff')
@@ -36,7 +38,7 @@ export async function getCurrentStaff(): Promise<CurrentStaff | null> {
     role: row.role,
     branchIds: row.branch_ids ?? [],
   }
-}
+})
 
 /**
  * For pages that require a staff context.
@@ -63,11 +65,11 @@ export async function requireStaff(): Promise<CurrentStaff> {
   return staff
 }
 
-async function hasTenantClaims(): Promise<boolean> {
+const hasTenantClaims = cache(async function hasTenantClaims(): Promise<boolean> {
   const supabase = await createClient()
   const { data } = await supabase.auth.getClaims()
   return Boolean(data?.claims?.org_id)
-}
+})
 
 /**
  * Breaks the redirect loop that would otherwise form if a refreshed token still

@@ -211,6 +211,52 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
+- [x] **2026-09-12** Console loading and streaming rebuilt. The app had no
+      `loading.tsx`, `error.tsx` or `not-found.tsx` anywhere, and all 20 pages
+      under `(app)` awaited their data at the top level, so TTFB equalled total
+      server work and the screen stayed blank until the slowest query landed.
+      The existing `<Suspense>` boundaries were all `useSearchParams` bailouts
+      with `fallback={null}`, never streaming. The `Skeleton` primitive existed
+      but nothing in the product used it.
+      Now: `components/app/skeletons.tsx` holds shapes that mirror the real
+      components (same grid, same border, same column count) so nothing shifts
+      when data arrives; 16 `loading.tsx` files; an `(app)/error.tsx` that keeps
+      the sidebar and surfaces `error.digest`; `global-error.tsx`; and the page
+      bodies moved into Suspense-wrapped async children on the dashboard,
+      members, payments and all five reports, each re-keyed on its query so a
+      new filter swaps in the skeleton instead of stranding the previous
+      result on screen.
+- [x] **2026-09-12** Duplicate per-request round trips removed. `getCurrentStaff`
+      and `listBranches` are wrapped in React `cache()`. A single `/members`
+      request was issuing `current_staff` twice (layout + page) and
+      `listBranches` three times (layout scope, page scope, page `allBranches`);
+      `cache()` is request-scoped, so this does not conflict with the
+      "never hoist the Supabase client" rule in `lib/supabase/server.ts`.
+      `listMembers`/`listBranches` on the members page now go out together
+      rather than one after the other, and the two independent fan-out waves in
+      settings/notifications were collapsed into one `Promise.all`.
+- [x] **2026-09-12** `(app)/layout.tsx` no longer blocks the shell on the branch
+      query. It still awaits `requireStaff` -- that is the auth gate and it may
+      redirect, which is no longer possible once streaming has begun -- but the
+      switcher's options resolve inside the existing Suspense boundary, so the
+      sidebar and header flush first.
+- [x] **2026-09-12** Search feedback and bundle trims. Typing in the member
+      search used to freeze silently through the debounce and the round trip;
+      it now runs through `useTransition` with a spinner
+      (`components/app/spinner.tsx` -- `components/ui` is CLI-generated and not
+      hand-edited). recharts is loaded through `next/dynamic` on the one screen
+      that uses it. Geist Sans was being downloaded with nothing referencing
+      `--font-geist-sans`; removed. Geist Mono stays -- `font-mono` renders
+      member codes and invoice numbers. `optimizePackageImports` names only
+      `@base-ui/react`: lucide-react and recharts are on Next's built-in list
+      already.
+- [ ] **2026-09-12** The streaming work is verified by `next build`, `eslint`
+      and unauthenticated route checks only. `npm run smoke` needs
+      `SMOKE_PASSWORD` and was not run, so the skeletons have not been seen
+      against real data. Smoke asserts literal strings in the response body;
+      streamed HTML still arrives in that body, so it should pass, but that is
+      reasoned rather than observed. Run it before shipping.
+
 - [x] **2026-09-11** Printed invoice and receipt redesigned, after INV000031
       printed a self-contradiction: "Joining fee / charged once on the first
       membership" immediately above "Joining fee waived". The fee now shows and
