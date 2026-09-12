@@ -9,6 +9,7 @@ import {
   MemberRecordMenuItems,
   type MemberRecordDialog,
 } from '@/components/members/member-record-actions'
+import { MemberMessageDialog } from '@/components/members/member-message-dialog'
 import {
   MemberQuickEdit,
   type QuickEditBranch,
@@ -44,6 +45,7 @@ export function MemberRowActions({
   isOwner: boolean
 }) {
   const [quickEdit, setQuickEdit] = useState(false)
+  const [message, setMessage] = useState(false)
   const [recordDialog, setRecordDialog] = useState<MemberRecordDialog>(null)
 
   const archived = Boolean(row.archived_at)
@@ -92,6 +94,10 @@ export function MemberRowActions({
                   Unfreeze membership
                 </DropdownMenuItem>
               ) : null}
+              {/* A dialog rather than a link, unlike the membership forms
+                  above: the wording costs one query when it opens, not four
+                  per row while the list is being drawn. */}
+              <DropdownMenuItem onClick={() => setMessage(true)}>Send SMS</DropdownMenuItem>
               <DropdownMenuItem
                 render={
                   <Link href={`/check-in?q=${encodeURIComponent(row.member_code)}`} />
@@ -123,6 +129,13 @@ export function MemberRowActions({
         branches={branches}
         open={quickEdit}
         onOpenChange={setQuickEdit}
+      />
+
+      <MemberMessageDialog
+        memberId={row.id}
+        fullName={row.full_name}
+        open={message}
+        onOpenChange={setMessage}
       />
 
       <MemberRecordDialogs

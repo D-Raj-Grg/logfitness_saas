@@ -4,6 +4,7 @@ import { Printer } from 'lucide-react'
 
 import { MemberAppAccess } from '@/components/members/member-app-access'
 import { MemberHistoryTabs } from '@/components/members/member-history-tabs'
+import { MemberMessageActions } from '@/components/members/member-message-actions'
 import { MemberRecordActions } from '@/components/members/member-record-actions'
 import { MemberStatusActions } from '@/components/members/member-status-actions'
 import { MemberPhoto } from '@/components/members/member-photo'
@@ -16,6 +17,7 @@ import { listAttendanceForMember } from '@/lib/db/attendance'
 import { listBranches } from '@/lib/db/branches'
 import { getMember, getMemberOverview } from '@/lib/db/members'
 import { listInvoicesForMember, listMembershipsForMember } from '@/lib/db/memberships'
+import { listNotificationsForMember } from '@/lib/db/notifications'
 import { listPaymentsForMember } from '@/lib/db/payments'
 import { memberPhotoUrl } from '@/lib/db/photos'
 import { formatDate, formatMoney } from '@/lib/format'
@@ -49,7 +51,7 @@ export default async function MemberProfilePage({
       ? action
       : null
 
-  const [overview, member, memberships, invoices, payments, attendance, branches] =
+  const [overview, member, memberships, invoices, payments, attendance, branches, messages] =
     await Promise.all([
       getMemberOverview(id),
       getMember(id),
@@ -58,6 +60,7 @@ export default async function MemberProfilePage({
       listPaymentsForMember(id),
       listAttendanceForMember(id),
       listBranches(),
+      listNotificationsForMember(id),
     ])
 
   if (!overview || !member) notFound()
@@ -110,6 +113,11 @@ export default async function MemberProfilePage({
             <Button variant="outline" size="sm" render={<Link href={`/members/${id}/edit`} />}>
               Edit
             </Button>
+            <MemberMessageActions
+              memberId={id}
+              fullName={overview.full_name}
+              initialOpen={action === 'sms'}
+            />
             <MemberStatusActions memberId={id} fullName={overview.full_name} left={left} />
             <MemberRecordActions
               memberId={id}
@@ -247,6 +255,7 @@ export default async function MemberProfilePage({
             invoices={invoices}
             payments={payments}
             attendance={attendance}
+            messages={messages}
             branchNames={branchNames}
           />
         </div>

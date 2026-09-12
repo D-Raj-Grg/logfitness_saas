@@ -1,0 +1,12 @@
+-- A message a staff member writes themselves, sent to one member on purpose.
+--
+-- Alone in its own migration, and for the same reason
+-- 20260912090000_smspasal_provider_enum.sql is: a new enum value cannot be used
+-- by anything in the transaction that adds it, and everything that reads this
+-- one -- send_member_notification, the preview, the console's event filter --
+-- ships in the migration after.
+--
+-- It deliberately gets no row in notification_default_template and no slot in
+-- the settings template editor. Like test_message, its body is typed rather
+-- than templated; there is no default wording to edit.
+alter type public.notification_event add value if not exists 'custom_message';
