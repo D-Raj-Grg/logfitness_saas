@@ -6,6 +6,7 @@ import {
   TemplateEditor,
   type TemplateSlot,
 } from '@/components/notifications/template-editor'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { requireRole } from '@/lib/auth'
 import {
   listNotificationProviders,
@@ -18,10 +19,17 @@ import {
 } from '@/lib/db/notifications'
 
 const CHANNELS: NotificationChannel[] = ['sms', 'viber', 'email']
+const CHANNEL_LABELS: Record<NotificationChannel, string> = {
+  sms: 'SMS',
+  viber: 'Viber',
+  email: 'Email',
+}
 const EDITABLE_EVENTS: NotificationEvent[] = [
   'renewal_reminder',
   'dues_reminder',
   'birthday_greeting',
+  'visitor_welcome',
+  'visitor_follow_up',
 ]
 
 export default async function NotificationSettingsPage() {
@@ -72,6 +80,16 @@ export default async function NotificationSettingsPage() {
   ])
   const hasToken = Object.fromEntries(tokenFlags)
 
+  // The active one wins. Only active rows are unique per channel, so a channel
+  // can hold a paused row alongside a live one, and editing the paused one while
+  // the live one keeps sending is the wrong surprise.
+  const byChannel = Object.fromEntries(
+    CHANNELS.map((channel) => {
+      const forChannel = providers.filter((row) => row.channel === channel)
+      return [channel, forChannel.find((row) => row.is_active) ?? forChannel[0] ?? null]
+    })
+  ) as Record<NotificationChannel, (typeof providers)[number] | null>
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -92,24 +110,49 @@ export default async function NotificationSettingsPage() {
         screen, only replaced or cleared.
       </div>
 
-      <div className="flex flex-col gap-4">
+      <Tabs defaultValue="sms" className="gap-4">
+        {/* The state of all three channels is on the tabs themselves. A gym that
+            has SMS working and email half-configured should not have to click
+            twice to find that out. */}
+        <TabsList>
+          {CHANNELS.map((channel) => (
+            <TabsTrigger key={channel} value={channel} className="gap-2">
+              <span
+                aria-hidden
+                className={
+                  'size-1.5 rounded-full ' +
+                  (byChannel[channel]?.is_active
+                    ? 'bg-emerald-500'
+                    : byChannel[channel]
+                      ? 'bg-amber-500'
+                      : 'bg-muted-foreground/40')
+                }
+              />
+              {CHANNEL_LABELS[channel]}
+              <span className="text-xs text-muted-foreground">
+                {byChannel[channel]?.is_active
+                  ? 'Connected'
+                  : byChannel[channel]
+                    ? 'Paused'
+                    : 'Not set up'}
+              </span>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
         {CHANNELS.map((channel) => {
-          // The active one wins. Only active rows are unique per channel, so a
-          // channel can hold a paused row alongside a live one, and editing the
-          // paused one while the live one keeps sending is the wrong surprise.
-          const forChannel = providers.filter((row) => row.channel === channel)
-          const provider =
-            forChannel.find((row) => row.is_active) ?? forChannel[0] ?? null
+          const provider = byChannel[channel] ?? null
           return (
-            <ProviderForm
-              key={channel}
-              channel={channel}
-              provider={provider}
-              hasToken={provider ? (hasToken[provider.id] ?? false) : false}
-            />
+            <TabsContent key={channel} value={channel}>
+              <ProviderForm
+                channel={channel}
+                provider={provider}
+                hasToken={provider ? (hasToken[provider.id] ?? false) : false}
+              />
+            </TabsContent>
           )
         })}
-      </div>
+      </Tabs>
 
       <RulesForm rules={rules} />
 

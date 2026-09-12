@@ -32,6 +32,12 @@ function ruleTitle(rule: NotificationRuleRow) {
         : `When money has been outstanding for ${rule.offset_days} days`
     case 'birthday_greeting':
       return 'On a member’s birthday'
+    case 'visitor_welcome':
+      return 'As soon as a visitor is logged at the desk'
+    case 'visitor_follow_up':
+      return rule.offset_days === 1
+        ? 'The day after a visit, if they have not joined'
+        : `${rule.offset_days} days after a visit, if they have not joined`
     default:
       return rule.event.replace(/_/g, ' ')
   }
@@ -44,6 +50,10 @@ function RuleRow({ rule }: { rule: NotificationRuleRow }) {
   )
 
   const isDues = rule.event === 'dues_reminder'
+  // The welcome rides the insert, so there is no hour to pick: it goes out
+  // within a minute of the walk-in being logged. Showing a time here would
+  // promise a schedule that does not exist.
+  const isImmediate = rule.event === 'visitor_welcome'
 
   return (
     <form action={formAction} className="flex flex-col gap-3 border-b py-4 last:border-b-0">
@@ -57,16 +67,25 @@ function RuleRow({ rule }: { rule: NotificationRuleRow }) {
           </Label>
         </div>
 
-        <div className="flex flex-col gap-2">
-          <Label htmlFor={`rule-time-${rule.id}`}>Send at</Label>
-          <Input
-            id={`rule-time-${rule.id}`}
-            name="sendAtLocal"
-            type="time"
-            className="w-32"
-            defaultValue={rule.send_at_local.slice(0, 5)}
-          />
-        </div>
+        {isImmediate ? (
+          <>
+            <p className="self-center text-sm text-muted-foreground">
+              Goes out within a minute
+            </p>
+            <input type="hidden" name="sendAtLocal" value={rule.send_at_local.slice(0, 5)} />
+          </>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <Label htmlFor={`rule-time-${rule.id}`}>Send at</Label>
+            <Input
+              id={`rule-time-${rule.id}`}
+              name="sendAtLocal"
+              type="time"
+              className="w-32"
+              defaultValue={rule.send_at_local.slice(0, 5)}
+            />
+          </div>
+        )}
 
         {isDues ? (
           <>

@@ -211,6 +211,15 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
+- [ ] **2026-09-12** Hydration mismatch on `/settings/notifications`, seen while
+      walking the visitor-message work in a browser and older than it. React
+      logs "some attributes of the server rendered HTML didn't match" for the
+      **Use the standard wording** button in `TemplateCard`: the server renders
+      `name="$ACTION_REF_n"` where the client renders `name="templateId"`, and
+      the button's label is missing server-side. A submit button carrying both
+      `formAction` and `name`/`value` is the cause. Harmless today -- the reset
+      still works -- but it disables hydration patching for that subtree.
+
 - [x] **2026-09-12** Console loading and streaming rebuilt. The app had no
       `loading.tsx`, `error.tsx` or `not-found.tsx` anywhere, and all 20 pages
       under `(app)` awaited their data at the top level, so TTFB equalled total
@@ -906,6 +915,99 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       the row: they need the member's memberships, invoices, payments and the
       branch's plans, which the profile already loads and a list row would have
       to fetch twenty-five times over.
+
+- [x] **2026-09-12** SMSPasal (sms.smspasal.com) added as a fourth SMS gateway:
+      `notification_request` builds its single GET (`key` / `type=text` /
+      `contacts` / `senderid` / `msg`, with the account's optional `campaign`
+      and `routeid` carried in `notification_providers.config`), and
+      `notification_response_ok` reads its plain-text reply -- `SMS-SHOOT-ID/<id>`
+      is the only success shape, and an `ERR: ...` arrives inside an HTTP 200.
+
+- [x] **2026-09-12** Gateway credit balance, for the gateways that publish one:
+      `request_notification_gateway_balance` fires the call from the database
+      (the API key is in Vault, so the console cannot make it) and
+      `read_notification_gateway_balance` collects the reply, with the result
+      parked on the provider row. "Check balance" on the gateway card polls the
+      second one for up to twelve seconds.
+
+- [x] **2026-09-12** Notification settings: the three stacked gateway cards are
+      now SMS / Viber / Email tabs, each tab carrying its own state (Connected /
+      Paused / Not set up) so the other two channels are legible without a click.
+
+- [x] **2026-09-12** A sender ID per carrier. `nepal_mobile_carrier()` reads NTC
+      or Ncell off the recipient's prefix (revoked Smart/UTL/Hello ranges match
+      neither), and the SMSPasal arm picks `config.sender_ntc` or
+      `config.sender_ncell`, falling back to the gateway's own sender when the
+      gym has only one registered.
+
+- [x] **2026-09-12** Fixed: every gateway save failed silently. `formData.get`
+      returns null for an input the current gateway does not render, and the
+      optional fields were `.optional()` rather than `.nullish()`, so zod
+      refused the form over `configJson` -- a field only the custom gateway
+      shows, whose error therefore had nowhere to appear. Optional fields are
+      now `.nullish()`, a parse failure returns a summary as well as field
+      errors, and every gateway action raises a toast.
+
+- [x] **2026-09-12** Delivery log keeps itself current: while any row on the
+      page is queued or going out, the table re-fetches every 8s (and on tab
+      focus), stopping the moment nothing is in flight and after 15 minutes of a
+      stuck message, with a "check again" link. Status badges are now coloured
+      and dotted -- green delivered, blue going out, amber waiting, red failed,
+      grey for cancelled and not-sent, which are not failures.
+
+- [x] **2026-09-12** Fixed: the delivery log's summary chips rendered ": 2" with
+      no word. The label maps were exported from `notification-filters.tsx`,
+      which is a `'use client'` module -- a Server Component importing a plain
+      constant across that boundary gets the client reference, not the object,
+      so every lookup was undefined. Labels now live in
+      `lib/notifications/labels.ts` and both sides import them from there.
+
+- [x] **2026-09-12** Sending one member a message by hand, from the profile
+      header and the member list's row menu. Phase 5 could only schedule: a
+      member at the desk owing Rs 3,400 was outside the system entirely, and a
+      text sent from someone's own handset never reached the log. `Send SMS`
+      opens a dialog whose wording is rendered in Postgres from the gym's own
+      template and this member's real figures -- the same sentence the 02:30
+      sweep would have sent -- and the desk may edit it before sending, because
+      the body stored in the log is the body that went out. Dues, renewal,
+      birthday and a free-text `custom_message` (a new event with no default
+      template, like `test_message`). Owner, manager and front desk;
+      `member_message_target` refuses a trainer, another gym's member, an
+      archived member and a branch the sender does not cover, and
+      `send_member_notification` refuses an opted-out member outright --
+      consent is not something a button overrides. The send itself delegates to
+      `enqueue_notification`, so there is still exactly one INSERT into the
+      outbox, and a two-minute guard makes a double click cost nothing.
+      `notification_messages.created_by` now records who pressed Send, shown in
+      the delivery log, and the profile has a Messages tab reading the same
+      rows. Gate: the manual-send block in `supabase/tests/notifications.sql`.
+
+- [x] **2026-09-12** Visitor messaging on `/visitors`. The walk-in was the one
+      person the product never texted: Phase 5's three sweeps are all about a
+      member, so somebody who asked what a month costs and left had no message
+      at all. Two new events, `visitor_welcome` and `visitor_follow_up`, with
+      editable templates and Nepali defaults alongside the member ones. The
+      welcome rides an `after insert` trigger on `visitors` rather than a sweep
+      -- "thanks for coming in" arriving at 02:30 the next morning is a
+      different message -- and the trigger swallows its own errors, because the
+      log is the product and the SMS is a courtesy. The follow-up joins
+      `enqueue_notifications()` as a fourth sweep, keyed on the visitor id
+      alone so changing the offset cannot text somebody twice, and skipping
+      anyone converted or marked "not joining". Both rules seed **disabled**,
+      unlike the member rules: they arrive at gyms with a live gateway and a
+      full visitor log, and switching them on would spend an owner's credit on
+      a decision they never made. Settings has the two checkboxes and the
+      offset. By hand, the row menu carries a one-click **Send welcome SMS**
+      and a **Send message…** dialog (welcome / follow-up / free text) mirroring
+      the member dialog. `notification_messages.visitor_id` records who it was
+      about; `visitor_message_target` refuses a trainer, another gym's visitor,
+      a branch the sender does not cover and a visitor who has already joined.
+      Gate: `supabase/tests/visitor_messages.sql`, which caught two real bugs --
+      a phone too short for the `to_address` CHECK made the welcome vanish
+      inside the trigger's own handler
+      (`20260912100200_visitor_message_unusable_number.sql`), and a back-dated
+      visit was thanked for coming in today, so the automatic welcome is now the
+      day's own event (`20260912100300_visitor_welcome_only_on_the_day.sql`).
 
 ## Open questions (from the PRD)
 

@@ -101,6 +101,13 @@ export default async function VisitorsPage({
         branchNames={branchNames}
         planNames={planNames}
         canDelete={staff.role === 'owner'}
+        // The desk chases callbacks; a trainer logs the walk-in and stops
+        // there. `visitor_message_target` draws the same line.
+        canMessage={
+          staff.role === 'owner' ||
+          staff.role === 'manager' ||
+          staff.role === 'front_desk'
+        }
       />
 
       <Pagination

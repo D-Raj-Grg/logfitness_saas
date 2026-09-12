@@ -3,6 +3,11 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import { Input } from '@/components/ui/input'
+import {
+  NOTIFICATION_CHANNELS,
+  NOTIFICATION_EVENTS,
+  NOTIFICATION_STATUSES,
+} from '@/lib/notifications/labels'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -14,31 +19,11 @@ import {
 
 const ALL = 'all'
 
-export const NOTIFICATION_STATUSES = {
-  all: 'Every message',
-  queued: 'Waiting to go',
-  sending: 'Going out now',
-  sent: 'Delivered to the gateway',
-  failed: 'Failed',
-  skipped: 'Not sent',
-  cancelled: 'Cancelled',
-} as const
-
-export const NOTIFICATION_EVENTS = {
-  all: 'Every reason',
-  renewal_reminder: 'Renewal reminder',
-  dues_reminder: 'Dues reminder',
-  birthday_greeting: 'Birthday greeting',
-  staff_invite: 'Staff invitation',
-  test_message: 'Test message',
-} as const
-
-export const NOTIFICATION_CHANNELS = {
-  all: 'Every channel',
-  sms: 'SMS',
-  viber: 'Viber',
-  email: 'Email',
-} as const
+export {
+  NOTIFICATION_CHANNELS,
+  NOTIFICATION_EVENTS,
+  NOTIFICATION_STATUSES,
+} from '@/lib/notifications/labels'
 
 /**
  * Filters live in the URL like every other list here: a delivery log is

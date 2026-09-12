@@ -38,12 +38,14 @@ export function VisitorsTable({
   branchNames,
   planNames,
   canDelete,
+  canMessage,
 }: {
   rows: VisitorRow[]
   branchNames: Record<string, string>
   planNames: Record<string, string>
   /** Owner-only, mirroring the RLS delete policy. */
   canDelete: boolean
+  canMessage: boolean
 }) {
   if (rows.length === 0) {
     return (
@@ -106,7 +108,11 @@ export function VisitorsTable({
                 </Badge>
               </TableCell>
               <TableCell className="text-right whitespace-nowrap">
-                <VisitorRowActions visitor={visitor} canDelete={canDelete} />
+                <VisitorRowActions
+                  visitor={visitor}
+                  canDelete={canDelete}
+                  canMessage={canMessage}
+                />
               </TableCell>
             </TableRow>
         ))}

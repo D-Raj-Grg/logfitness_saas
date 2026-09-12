@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "db:seed": "psql \"$SUPABASE_DB_URL\" -f supabase/seed.sql",
-    "db:test": "for f in supabase/tests/tenant_isolation.sql supabase/tests/member_spine.sql supabase/tests/front_desk.sql supabase/tests/register_member.sql supabase/tests/classes.sql supabase/tests/member_app.sql supabase/tests/push.sql supabase/tests/member_archive_and_dates.sql supabase/tests/reverse_payment.sql supabase/tests/chain_layer.sql supabase/tests/visitors.sql supabase/tests/notifications.sql supabase/tests/waived_signup_fee.sql supabase/tests/discount_reason.sql; do echo \"== $f\"; psql \"$SUPABASE_DB_URL\" -v ON_ERROR_STOP=1 -f \"$f\" || exit 1; done",
+    "db:test": "for f in supabase/tests/tenant_isolation.sql supabase/tests/member_spine.sql supabase/tests/front_desk.sql supabase/tests/register_member.sql supabase/tests/classes.sql supabase/tests/member_app.sql supabase/tests/push.sql supabase/tests/member_archive_and_dates.sql supabase/tests/reverse_payment.sql supabase/tests/chain_layer.sql supabase/tests/visitors.sql supabase/tests/notifications.sql supabase/tests/visitor_messages.sql supabase/tests/waived_signup_fee.sql supabase/tests/discount_reason.sql; do echo \"== $f\"; psql \"$SUPABASE_DB_URL\" -v ON_ERROR_STOP=1 -f \"$f\" || exit 1; done",
     "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {

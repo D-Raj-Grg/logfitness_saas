@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ATTENDANCE_METHOD_LABELS, formatMinutesIn } from '@/lib/attendance'
 import type { AttendanceDetailRow } from '@/lib/db/attendance'
 import type { listInvoicesForMember, listMembershipsForMember } from '@/lib/db/memberships'
+import type { listNotificationsForMember, NotificationStatus } from '@/lib/db/notifications'
 import type { listPaymentsForMember } from '@/lib/db/payments'
 import { formatDate, formatDateTime, formatMoney, formatTime } from '@/lib/format'
 import {
@@ -25,11 +26,13 @@ import {
   type InvoiceStatus,
   type MembershipStatus,
 } from '@/lib/members'
+import { NOTIFICATION_EVENTS, NOTIFICATION_STATUS_SHORT } from '@/lib/notifications/labels'
 import { cn } from '@/lib/utils'
 
 type Memberships = Awaited<ReturnType<typeof listMembershipsForMember>>
 type Invoices = Awaited<ReturnType<typeof listInvoicesForMember>>
 type Payments = Awaited<ReturnType<typeof listPaymentsForMember>>
+type Messages = Awaited<ReturnType<typeof listNotificationsForMember>>
 
 const MEMBERSHIP_TONE: Record<MembershipStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   active: 'default',
@@ -44,6 +47,20 @@ const INVOICE_TONE: Record<InvoiceStatus, 'default' | 'secondary' | 'destructive
   partial: 'outline',
   unpaid: 'destructive',
   void: 'secondary',
+}
+
+/**
+ * `skipped` is the gym deciding not to send, or a number nobody can deliver to.
+ * It must not read as a failure, so it stays grey with `cancelled` -- the same
+ * rule the notification log follows.
+ */
+const MESSAGE_TONE: Record<NotificationStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+  sent: 'default',
+  queued: 'outline',
+  sending: 'outline',
+  failed: 'destructive',
+  cancelled: 'secondary',
+  skipped: 'secondary',
 }
 
 /** Minutes between check-in and check-out; null while the visit is still open. */
@@ -69,12 +86,15 @@ export function MemberHistoryTabs({
   invoices,
   payments,
   attendance,
+  messages,
   branchNames,
 }: {
   memberships: Memberships
   invoices: Invoices
   payments: Payments
   attendance: AttendanceDetailRow[]
+  /** What this member has been told, by a sweep or by the desk. */
+  messages: Messages
   branchNames: Record<string, string>
 }) {
   return (
@@ -84,6 +104,7 @@ export function MemberHistoryTabs({
         <TabsTrigger value="payments">Payments ({payments.length})</TabsTrigger>
         <TabsTrigger value="invoices">Invoices ({invoices.length})</TabsTrigger>
         <TabsTrigger value="attendance">Attendance ({attendance.length})</TabsTrigger>
+        <TabsTrigger value="messages">Messages ({messages.length})</TabsTrigger>
       </TabsList>
 
       <TabsContent value="memberships">
@@ -328,6 +349,67 @@ export function MemberHistoryTabs({
                     </TableRow>
                   )
                 })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </TabsContent>
+      <TabsContent value="messages">
+        {messages.length === 0 ? (
+          <EmptyTab>
+            Nothing has been sent to this member yet. Reminders go out on their
+            own once a gateway is set up; Send SMS texts them now.
+          </EmptyTab>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border">
+            {/*
+              * A real min-width rather than a max-width on the message cell.
+              * The table is `w-full`, and a max-width on a `td` in an
+              * auto-layout table is ignored -- which is why 160 characters of
+              * SMS ran straight through the To column and pushed Status off the
+              * card. Stating a width the table cannot go below makes the
+              * container scroll instead, and the message wraps inside its own
+              * column.
+              */}
+            <Table className="min-w-[860px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="whitespace-nowrap">When</TableHead>
+                  <TableHead className="whitespace-nowrap">Reason</TableHead>
+                  <TableHead className="w-[420px]">Message</TableHead>
+                  <TableHead className="whitespace-nowrap">To</TableHead>
+                  <TableHead className="whitespace-nowrap">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {messages.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell className="align-top text-sm whitespace-nowrap text-muted-foreground">
+                      {formatDateTime(row.created_at)}
+                    </TableCell>
+                    <TableCell className="align-top text-sm whitespace-nowrap">
+                      {NOTIFICATION_EVENTS[row.event]}
+                    </TableCell>
+                    <TableCell className="w-[420px] align-top text-sm break-words whitespace-normal text-muted-foreground">
+                      {row.body}
+                    </TableCell>
+                    <TableCell className="align-top text-sm whitespace-nowrap tabular-nums">
+                      {row.to_address}
+                    </TableCell>
+                    <TableCell className="align-top whitespace-nowrap">
+                      <Badge variant={MESSAGE_TONE[row.status]}>
+                        {NOTIFICATION_STATUS_SHORT[row.status]}
+                      </Badge>
+                      {/* The gateway's own words. Without them a failed row is
+                          just a badge nobody can act on. */}
+                      {row.last_error ? (
+                        <div className="mt-1 max-w-56 text-xs break-words whitespace-normal text-muted-foreground">
+                          {row.last_error}
+                        </div>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>
