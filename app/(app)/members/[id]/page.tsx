@@ -25,9 +25,13 @@ import { GENDER_LABELS } from '@/lib/members'
 
 function Detail({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex min-w-0 flex-col gap-0.5">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="text-sm">{value ?? <span className="text-muted-foreground">--</span>}</dd>
+      {/* An email or a pasted address has no spaces to wrap at, and one of
+          those is enough to widen the card past the screen. */}
+      <dd className="text-sm break-words">
+        {value ?? <span className="text-muted-foreground">--</span>}
+      </dd>
     </div>
   )
 }
@@ -82,12 +86,20 @@ export default async function MemberProfilePage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-start gap-4">
-          <MemberPhoto url={photoUrl} name={overview.full_name} className="size-14 text-sm" />
-          <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-semibold">{overview.full_name}</h1>
+      {/* On a phone the identity block owns the full width and the actions sit
+          under it; side by side only once there is room for both. */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+          <MemberPhoto
+            url={photoUrl}
+            name={overview.full_name}
+            className="size-12 shrink-0 text-sm sm:size-14"
+          />
+          <div className="flex min-w-0 flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h1 className="text-xl font-semibold break-words sm:text-2xl">
+              {overview.full_name}
+            </h1>
             <MemberStatusBadge
               status={overview.status}
               daysToExpiry={overview.days_to_expiry}
@@ -95,7 +107,7 @@ export default async function MemberProfilePage({
               hasMembershipHistory={overview.has_membership_history ?? true}
             />
           </div>
-          <p className="flex flex-wrap gap-x-3 text-sm text-muted-foreground">
+          <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-muted-foreground">
             <span className="font-mono">{overview.member_code}</span>
             <span className="tabular-nums">{overview.phone}</span>
             <span>{overview.home_branch_name}</span>
@@ -109,7 +121,10 @@ export default async function MemberProfilePage({
         </div>
 
         {canManage ? (
-          <div className="flex items-center gap-2">
+          // Small buttons are a desk-and-mouse size. On a touch screen the same
+          // controls get the taller default height so they can be hit with a
+          // thumb without a second try.
+          <div className="flex flex-wrap items-center gap-2 [&_button]:h-9 sm:[&_button]:h-8">
             <Button variant="outline" size="sm" render={<Link href={`/members/${id}/edit`} />}>
               Edit
             </Button>
@@ -161,6 +176,7 @@ export default async function MemberProfilePage({
 
           <Button
             size="sm"
+            className="h-9 w-full sm:h-8 sm:w-auto"
             render={<Link href={`/invoices/${soldInvoice.id}/print`} target="_blank" />}
           >
             <Printer />
@@ -187,13 +203,17 @@ export default async function MemberProfilePage({
       ) : null}
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="flex flex-col gap-6 lg:col-span-2">
+        {/* Stacked, the action panel comes first: renewing a plan or taking a
+            payment is why the desk opened this record, and burying it under
+            five tabs of history makes it a scroll away. On a wide screen it
+            goes back to the right-hand column. */}
+        <div className="order-2 flex min-w-0 flex-col gap-6 lg:order-1 lg:col-span-2">
           <Card>
             <CardHeader>
               <CardTitle>Details</CardTitle>
             </CardHeader>
             <CardContent>
-              <dl className="grid gap-4 sm:grid-cols-3">
+              <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <Detail label="Email" value={member.email} />
                 <Detail
                   label="Date of birth"
@@ -224,7 +244,7 @@ export default async function MemberProfilePage({
                   }
                 />
                 {member.notes ? (
-                  <div className="sm:col-span-3">
+                  <div className="sm:col-span-2 lg:col-span-3">
                     <Detail
                       label="Notes"
                       value={<span className="whitespace-pre-wrap">{member.notes}</span>}
@@ -232,7 +252,7 @@ export default async function MemberProfilePage({
                   </div>
                 ) : null}
                 {left && member.left_reason ? (
-                  <div className="sm:col-span-3">
+                  <div className="sm:col-span-2 lg:col-span-3">
                     <Detail label="Reason for leaving" value={member.left_reason} />
                   </div>
                 ) : null}
@@ -260,7 +280,10 @@ export default async function MemberProfilePage({
           />
         </div>
 
-        <div className="lg:col-span-1">
+        {/* The history beside it can run to dozens of rows; the panel follows
+            the scroll on a wide screen so Renew and Record payment stay in
+            reach. It is the top of the page on a phone, so nothing to pin. */}
+        <div className="order-1 min-w-0 lg:order-2 lg:col-span-1 lg:sticky lg:top-6 lg:self-start">
           <MemberActionPanel
             member={overview}
             memberships={memberships}

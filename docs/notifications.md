@@ -109,7 +109,14 @@ through `set_notification_credential`, and readable only by the sender.
   is retried, which means a member can rarely receive the same message twice.
   The alternative — never retrying — silently drops reminders, which is worse.
 - **A member can opt out.** `members.notifications_opt_out`, on the member edit
-  form. Every enqueue job checks it, and so does the manual send below.
+  form. Every enqueue job checks it, and so does the manual send below — and
+  since `20260912110000`, so does `enqueue_notification` itself. That last one
+  matters more than it reads: until then the check lived only in
+  `send_member_notification`, so "not overridable" was a property of the
+  wrapper rather than of the outbox, and any staff caller who went one function
+  lower down skipped it. `enqueue_notification` now also refuses a role outside
+  `{owner, manager, front_desk}`, which is what `member_message_target` had
+  always enforced at the front door.
 
 ### Sending by hand
 

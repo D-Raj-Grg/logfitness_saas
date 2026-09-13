@@ -591,7 +591,55 @@ begin
   end;
   assert failed, 'and cannot even see what the message would say';
 
+  -- ...and cannot go round the wrapper to the outbox itself. Until
+  -- `20260912110000` this was the hole underneath every role gate here: the
+  -- only check in `enqueue_notification` was `jwt_is_staff()`, and every other
+  -- guard in it is conditional on an argument that defaults to null, so the
+  -- four required arguments reached the gateway untouched. A trainer refused by
+  -- `member_message_target` could simply call one function lower down.
+  failed := false;
+  begin
+    perform public.enqueue_notification(
+      'sms', 'custom_message', '9800000101', 'a trainer should not reach this');
+  exception when insufficient_privilege then failed := true;
+  end;
+  assert failed, 'a trainer cannot reach the outbox directly either';
+
   execute 'reset role';
+
+  ------------------------------------- consent holds at the outbox, not only
+  ------------------------------------- at the wrapper
+  update public.members set notifications_opt_out = true where id = mem_1;
+
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', org_a::text, 'staff_id', st_a_desk::text,
+    'staff_role', 'front_desk', 'branch_ids', json_build_array(br_a1::text)
+  )::text, true);
+  execute 'set local role authenticated';
+
+  -- The wrapper has always refused this. The point of the assertion is the
+  -- second one: `docs/notifications.md` says opt-out "is not overridable", and
+  -- that was true of `send_member_notification` and false of the outbox, so a
+  -- caller who skipped the wrapper skipped the consent check with it.
+  failed := false;
+  begin
+    perform public.send_member_notification(mem_1, 'dues_reminder');
+  exception when check_violation then failed := true;
+  end;
+  assert failed, 'the wrapper refuses an opted-out member';
+
+  failed := false;
+  begin
+    perform public.enqueue_notification(
+      'sms', 'custom_message', '9800000101', 'opt-out must hold here too',
+      null, mem_1);
+  exception when check_violation then failed := true;
+  end;
+  assert failed, 'and so does the outbox underneath it';
+
+  execute 'reset role';
+  update public.members set notifications_opt_out = false where id = mem_1;
 
   ---------------------------------------- another gym's member, by hand
   perform set_config('request.jwt.claims', json_build_object(
