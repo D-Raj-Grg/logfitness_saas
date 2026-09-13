@@ -79,18 +79,14 @@ export default async function DashboardPage({
           speeds, and the fast ones should not wait on the slow one. The
           tiles above them never wait on any of it. */}
       {charts ? (
-        <div className="grid gap-3 lg:grid-cols-2">
-          {/* Revenue is the one people read first, so it gets the full width
-              and the other two share the row underneath. */}
-          <div className="lg:col-span-2">
-            <Suspense key={`revenue-${scope.label}`} fallback={<ChartSkeleton />}>
-              <RevenuePanel branchIds={scope.branchIds} />
-            </Suspense>
-          </div>
-          <Suspense key={`attendance-${scope.label}`} fallback={<ChartSkeleton />}>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <Suspense key={`revenue-${scope.label}`} fallback={<ChartSkeleton className="[&>*:last-child]:h-[150px]" />}>
+            <RevenuePanel branchIds={scope.branchIds} />
+          </Suspense>
+          <Suspense key={`attendance-${scope.label}`} fallback={<ChartSkeleton className="[&>*:last-child]:h-[150px]" />}>
             <AttendancePanel branchIds={scope.branchIds} />
           </Suspense>
-          <Suspense key={`movement-${scope.label}`} fallback={<ChartSkeleton />}>
+          <Suspense key={`movement-${scope.label}`} fallback={<ChartSkeleton className="[&>*:last-child]:h-[150px]" />}>
             <MovementPanel branchIds={scope.branchIds} />
           </Suspense>
         </div>

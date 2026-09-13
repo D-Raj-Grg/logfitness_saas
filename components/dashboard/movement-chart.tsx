@@ -40,7 +40,7 @@ export function MovementChart({ points }: { points: MovementPoint[] }) {
   const data = points.map((point) => ({ ...point, lost: -point.expiries }))
 
   return (
-    <ChartContainer config={chartConfig} className="h-[220px] w-full">
+    <ChartContainer config={chartConfig} className="h-[150px] w-full">
       <BarChart data={data} stackOffset="sign" margin={{ left: 4, right: 8, top: 4 }}>
         <CartesianGrid vertical={false} />
         <XAxis

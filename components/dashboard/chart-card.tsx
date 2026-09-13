@@ -23,7 +23,7 @@ export function ChartCard({
 }) {
   return (
     <Card className="h-full">
-      <CardContent className="flex h-full flex-col gap-4 py-4">
+      <CardContent className="flex h-full flex-col gap-3 py-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <CardTitle className="text-base">{title}</CardTitle>
@@ -45,7 +45,7 @@ export function ChartCard({
 /** Shown in place of a plot when the window genuinely holds no rows. */
 export function ChartEmpty({ children }: { children: ReactNode }) {
   return (
-    <div className="flex h-[220px] items-center justify-center rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+    <div className="flex h-[150px] items-center justify-center rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
       {children}
     </div>
   )
