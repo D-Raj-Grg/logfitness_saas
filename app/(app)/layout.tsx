@@ -41,7 +41,7 @@ export default async function AppLayout({
     <SidebarProvider>
       <AppSidebar staff={staff} />
       <SidebarInset>
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
+        <header className="flex h-14 min-w-0 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
           <span className="text-sm font-medium">{staff.orgName}</span>
@@ -49,7 +49,11 @@ export default async function AppLayout({
             <BranchSwitcherSlot staff={staff} />
           </Suspense>
         </header>
-        <main className="flex flex-1 flex-col gap-4 p-4">{children}</main>
+        {/* min-w-0 all the way down: the inset is a flex child, and without
+            it any wide child -- a table that scrolls inside its own box, a
+            long unbroken string -- sets the minimum width of the whole page
+            and scrolls the layout sideways on a phone. */}
+        <main className="flex min-w-0 flex-1 flex-col gap-4 p-4">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   )

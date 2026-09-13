@@ -86,16 +86,19 @@ export function NotificationsTable({
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border">
-      <Table>
+    <div className="rounded-lg border">
+      {/* Fixed layout is what keeps the message from spilling over Status. With
+          the default auto layout a long body sets the column's intrinsic width
+          and max-width on a cell is ignored, so the text ran under the badge. */}
+      <Table className="table-fixed min-w-[64rem]">
         <TableHeader>
           <TableRow>
-            <TableHead>When</TableHead>
-            <TableHead>To</TableHead>
-            <TableHead>Reason</TableHead>
+            <TableHead className="w-40">When</TableHead>
+            <TableHead className="w-44">To</TableHead>
+            <TableHead className="w-32">Reason</TableHead>
             <TableHead>Message</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
+            <TableHead className="w-40">Status</TableHead>
+            <TableHead className="w-32 text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -108,8 +111,8 @@ export function NotificationsTable({
                 ) : null}
               </TableCell>
               <TableCell className="align-top">
-                <div className="font-medium">{row.to_address}</div>
-                <div className="text-xs text-muted-foreground">
+                <div className="truncate font-medium">{row.to_address}</div>
+                <div className="truncate text-xs text-muted-foreground">
                   {CHANNEL_LABELS[row.channel]}
                   {row.provider ? ` · ${row.provider.replace(/_/g, ' ')}` : ''}
                 </div>
@@ -124,14 +127,26 @@ export function NotificationsTable({
                   </div>
                 ) : null}
               </TableCell>
-              <TableCell className="max-w-md align-top text-sm">
-                {row.subject ? <div className="font-medium">{row.subject}</div> : null}
-                <div className="text-muted-foreground">{row.body}</div>
+              {/* TableCell is whitespace-nowrap by default, which is why the
+                  clamp had nothing to wrap and the line ran to the edge. */}
+              <TableCell className="align-top pr-6 text-sm whitespace-normal">
+                {row.subject ? (
+                  <div className="truncate font-medium">{row.subject}</div>
+                ) : null}
+                {/* Two lines is enough to recognise which wording went out; the
+                    full text stays reachable on hover rather than pushing every
+                    row tall. */}
+                <div
+                  className="line-clamp-2 break-words text-muted-foreground"
+                  title={row.body}
+                >
+                  {row.body}
+                </div>
               </TableCell>
-              <TableCell className="align-top">
+              <TableCell className="align-top whitespace-normal">
                 <Badge
                   variant="outline"
-                  className={`gap-1.5 ${STATUS_STYLES[row.status]}`}
+                  className={`gap-1.5 whitespace-nowrap ${STATUS_STYLES[row.status]}`}
                 >
                   <span
                     aria-hidden
@@ -140,7 +155,12 @@ export function NotificationsTable({
                   {STATUS_LABELS[row.status]}
                 </Badge>
                 {row.last_error ? (
-                  <div className="mt-1 max-w-56 text-xs text-muted-foreground">{row.last_error}</div>
+                  <div
+                    className="mt-1 line-clamp-2 break-words text-xs text-muted-foreground"
+                    title={row.last_error}
+                  >
+                    {row.last_error}
+                  </div>
                 ) : null}
                 {row.attempts > 1 ? (
                   <div className="mt-1 text-xs text-muted-foreground">

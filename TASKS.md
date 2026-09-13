@@ -1009,6 +1009,104 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       visit was thanked for coming in today, so the automatic welcome is now the
       day's own event (`20260912100300_visitor_welcome_only_on_the_day.sql`).
 
+- [x] **2026-09-12 — SECURITY, found and closed the same day.** `enqueue_notification` was the door underneath
+      every role gate on the notification surface, and it is wider than all of
+      them. Found while auditing the Flutter port; the hole is upstream and
+      predates it.
+
+      The function is `security definer`, granted to `authenticated`, and its
+      only role check is `v_org is null or v_actor is null or not
+      public.jwt_is_staff()`. Everything else is conditional on an argument
+      being non-null, and every one of those arguments defaults to null. So any
+      staff principal -- **including a trainer**, whom `member_message_target`
+      refuses by name -- can call it directly with `p_to` set to any number and
+      `p_body` set to anything, and the gym's gateway carries it on the owner's
+      credits. Passing `p_member_id` additionally logs it against that member's
+      profile, and `notifications_opt_out` is checked only inside
+      `send_member_notification`, never here -- so `docs/notifications.md` §2's
+      "opt-out is not overridable" is true of the wrapper and false of the
+      outbox. A row enqueued with no `p_branch_id` carries `branch_id is null`
+      and is then readable by every staff member in the org.
+
+      The Flutter client is not the exposure: it calls this from exactly one
+      place, the owner-only Send test. PostgREST exposes the function to
+      anyone with a staff JWT regardless of what any client calls.
+
+      Three ways to close it, cheapest first: (1) check the caller's role
+      against `{owner, manager, front_desk}` the way `member_message_target`
+      does, and check `notifications_opt_out` when `p_member_id` is not null;
+      (2) require `p_branch_id` and let `has_branch_access` do the work;
+      (3) `revoke execute ... from authenticated` and let the four wrappers
+      (`send_member_notification`, `send_visitor_notification`, the sweeps, the
+      test send) be the only doors -- which needs the console's `sendTest` and
+      the Flutter one to move to a wrapper first.
+
+      **Closed by `20260912110000_enqueue_notification_role_and_consent.sql`**
+      (remote version `20260912090124`), taking option (1): a
+      `jwt_can_serve_members()` check -- the same helper, and therefore the same
+      `{owner, manager, front_desk}` set, that `member_message_target` already
+      used -- plus an opt-out check whenever `p_member_id` is given. Option (3)
+      was not taken because both clients' Send test calls this function
+      directly; moving them onto a wrapper first is a separate change.
+
+      Nothing that worked stopped working, and that was checked rather than
+      assumed: the live catalogue says the only callers are
+      `send_member_notification` and `send_visitor_notification`, both SECURITY
+      DEFINER -- which does not change whose JWT the `jwt_*` helpers read, so a
+      front desk calling them still passes -- and the nightly sweeps insert into
+      `notification_messages` directly and never touch this function.
+
+      Verified against the live project rather than re-read: a trainer's call is
+      refused `insufficient_privilege` "Your role cannot send messages"; a send
+      naming an opted-out member is refused `check_violation` "That member has
+      asked not to receive messages", at the outbox as well as at the wrapper;
+      and a front desk's ordinary call still succeeds. The probes used an
+      unnormalisable address so nothing was dialled, and every probe row and
+      throwaway function was dropped afterwards -- the message count is
+      unchanged at 10 and no member is left opted out.
+      `get_advisors(security)` reports no new category. Both cases are now in
+      `supabase/tests/notifications.sql`, so the hole cannot reopen quietly.
+
+- [ ] **2026-09-12** `docs/notifications.md` §4 is out of date: it lists SMSPasal
+      among the gateways whose payloads are "not proven". They are now proven.
+      The live project carries an active `smspasal_sms` gateway with a
+      Vault-held token, a registered sender (`TN_ALERT`), the carrier split
+      configured (`sender_ntc` / `sender_ncell`) and a balance read back, and
+      ten `dues_reminder` / `test_message` rows have gone out with
+      `provider_status` 200 and a `provider_message_id` from the gateway. Sparrow,
+      Aakash, Viber and Resend remain unproven. Update §4 so the next reader does
+      not re-investigate something that has already happened.
+
+- [ ] **2026-09-12** The notification surface now has a **second consumer**. The
+      Flutter app ports `/notifications` and `/settings/notifications` whole
+      (`logfitness_flutter/TASKS.md`, "Notifications parity"), so the four
+      notification tables, the four notification enums and fourteen RPCs --
+      `enqueue_notification`, `retry_notification`, `cancel_notification`,
+      `member_notification_preview`, `send_member_notification`,
+      `visitor_notification_preview`, `send_visitor_notification`,
+      `notification_template_preview`, `org_notification_locale`,
+      `notification_has_credential`, `set_notification_credential`,
+      `clear_notification_credential`,
+      `request_notification_gateway_balance`,
+      `read_notification_gateway_balance` -- are now load-bearing for a binary
+      that updates on a store's schedule rather than on deploy. Adding an
+      argument with a default is safe; reordering or renaming one is not. The
+      same goes for the enums: the Dart mirrors throw on an unknown wire value
+      **by design**, so adding a value to `notification_event`,
+      `notification_status`, `notification_channel` or `notification_provider`
+      needs a client release *before* anything can emit it. Push is the only
+      half that did not port -- `device_tokens`, `register_device_token`,
+      `revoke_device_token` and `push-fanout` still have no caller anywhere.
+
+- [ ] **2026-09-12** `lib/db/notifications.ts`'s `enqueueNotification` is one
+      argument behind the function. `20260912100100_visitor_messages.sql` drops
+      the nine-argument `enqueue_notification` and recreates it with
+      `p_visitor_id uuid default null`; the TypeScript wrapper was never
+      updated, so nothing the console enqueues by that path can be attributed to
+      a visitor. The Flutter repository passes it. Harmless today -- the visitor
+      surfaces go through `send_visitor_notification`, which sets it -- but the
+      wrapper and the function should agree.
+
 ## Open questions (from the PRD)
 
 - [x] Which SMS/Viber gateway for Nepal, and cost per message at chain volume?

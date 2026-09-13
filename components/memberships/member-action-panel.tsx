@@ -253,7 +253,9 @@ export function MemberActionPanel({
           )}
 
           {canAct ? (
-            <div className="flex flex-wrap gap-2 pt-1">
+            // Touch first: the same row of small desk buttons gets a taller
+            // hit area on a phone, where this panel is the top of the page.
+            <div className="flex flex-wrap gap-2 pt-1 [&_button]:h-9 sm:[&_button]:h-8">
               {!hasLeft ? (
                 <Button size="sm" onClick={() => setOpen({ kind: 'renew' })}>
                   {current ? 'Renew' : 'Sell plan'}

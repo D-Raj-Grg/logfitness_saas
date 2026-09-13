@@ -1,10 +1,16 @@
 import { Suspense } from 'react'
 
-import { StatusTilesSkeleton, TableSkeleton } from '@/components/app/skeletons'
+import { ChartSkeleton, StatusTilesSkeleton, TableSkeleton } from '@/components/app/skeletons'
 import { BranchTable } from '@/components/dashboard/branch-table'
+import {
+  AttendancePanel,
+  MovementPanel,
+  RevenuePanel,
+} from '@/components/dashboard/panels'
 import { StatusTiles } from '@/components/dashboard/status-tiles'
 import { requireStaff } from '@/lib/auth'
 import { orgSnapshot } from '@/lib/db/reports'
+import { canViewReports } from '@/lib/roles'
 import { resolveBranchScope } from '@/lib/scope'
 
 /**
@@ -44,6 +50,9 @@ export default async function DashboardPage({
   const staff = await requireStaff()
   const scope = await resolveBranchScope(await searchParams, staff)
   const compact = staff.role === 'trainer'
+  // Trainers see who is in and who is lapsing, not the takings. Same line the
+  // tiles are drawn from, so the two never disagree.
+  const charts = canViewReports(staff)
 
   return (
     <div className="flex flex-col gap-6">
@@ -65,6 +74,27 @@ export default async function DashboardPage({
       >
         <Snapshot branchIds={scope.branchIds} compact={compact} />
       </Suspense>
+
+      {/* Each panel is its own boundary: three reports at three different
+          speeds, and the fast ones should not wait on the slow one. The
+          tiles above them never wait on any of it. */}
+      {charts ? (
+        <div className="grid gap-3 lg:grid-cols-2">
+          {/* Revenue is the one people read first, so it gets the full width
+              and the other two share the row underneath. */}
+          <div className="lg:col-span-2">
+            <Suspense key={`revenue-${scope.label}`} fallback={<ChartSkeleton />}>
+              <RevenuePanel branchIds={scope.branchIds} />
+            </Suspense>
+          </div>
+          <Suspense key={`attendance-${scope.label}`} fallback={<ChartSkeleton />}>
+            <AttendancePanel branchIds={scope.branchIds} />
+          </Suspense>
+          <Suspense key={`movement-${scope.label}`} fallback={<ChartSkeleton />}>
+            <MovementPanel branchIds={scope.branchIds} />
+          </Suspense>
+        </div>
+      ) : null}
     </div>
   )
 }

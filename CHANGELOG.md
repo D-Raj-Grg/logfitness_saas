@@ -17,6 +17,89 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-09-13 — The dashboard says something, and the phone stops scrolling sideways
+
+### Added
+
+- **Three charts under the dashboard tiles.** The tiles answer "what is true
+  right now" and nothing answered "which way is this going": revenue over the
+  last 30 days, footfall over the last 14, and membership movement over six
+  months, each linking into the report that holds the detail. Revenue plots
+  **net**, matching the tile above it, because a day with a large refund on it
+  is exactly the day the dashboard should not be showing a record. Attendance is
+  bars rather than a line — a closed day should read as a gap, not as a line
+  sagging through zero — and carries check-ins beside distinct people, since one
+  member training twice is two visits and one person. Movement stacks new and
+  renewed above the axis and expiries below it, so a month where the gym shrank
+  looks like one however good the sales number was on its own.
+- **Days with no rows are drawn as zero**, not dropped. A gap the line runs
+  straight through flatters a bad week.
+- Each panel is its own Suspense boundary — three reports at three speeds, and
+  the tiles never wait on any of them — and recharts loads on demand, as it
+  already did on `/reports/attendance`. It is the heaviest dependency in the
+  console and the dashboard is the first screen every shift opens.
+- Owners and managers only, off the same rule the reports read. A trainer's
+  dashboard is unchanged: who is in, who is about to lapse, no takings.
+
+### Fixed
+
+- **The whole console scrolled sideways on a phone.** `SidebarInset` is a flex
+  child with `w-full` and no `min-w-0`, so its automatic minimum size was its
+  content's min-content width. Every table that scrolls inside its own box was
+  therefore setting the minimum width of the page instead: the member profile's
+  message history at 860px dragged the header, the dues banner and everything
+  else off to the left with it. `min-w-0` on the inset, the shell's `main` and
+  `header`, and on the profile's two columns — the tables now scroll in their
+  own box, as they were always meant to.
+- **The delivery log's message column ran under the Status badge.** `TableCell`
+  is `whitespace-nowrap` by default, so the two-line clamp had nothing to wrap
+  and 160 characters of SMS ran straight across the column boundary. The table
+  is `table-fixed` now with stated column widths, the body wraps and clamps at
+  two lines with the full text on hover, and Status and Actions are wide enough
+  for "Not sent · Send again".
+- **The mobile menu stayed open after you chose something.** The sidebar is a
+  sheet over the page on a phone, so tapping Members left the menu covering the
+  screen that had just loaded. It closes on tap now, on touch only — the desktop
+  sidebar is permanent and stays put.
+
+### Changed
+
+- **The member profile is laid out for the phone it is opened on.** Stacked, the
+  membership panel comes first: renewing a plan or taking a payment is why the
+  desk opened the record, and it was a scroll past five tabs of history. It
+  returns to the right-hand column on a wide screen, where it now follows the
+  scroll. The header stacks, the small desk-sized buttons get a taller hit area
+  on touch, the details grid drops to two columns before three, and the five
+  history tabs scroll sideways rather than wrapping into a second row of pills.
+- **Chart colours are the brand's.** `--chart-1` through `--chart-5` were
+  greyscale placeholders from the scaffold while the product's own colour is
+  emerald. They are now five hues anchored on it and spaced around the circle
+  so neighbouring series stay apart for red-green colour blindness, with
+  lightness rather than hue shifting in the dark theme so a series keeps its
+  identity across both.
+
+### Security
+
+- **`enqueue_notification` was the widest door in the notification surface.**
+  SECURITY DEFINER, granted to `authenticated`, and its only role test was
+  `jwt_is_staff()` — every other guard in the body was conditional on an
+  argument that defaults to null. Called with its four required arguments and
+  nothing else, a trainer could send, `members.notifications_opt_out` was never
+  consulted (the opt-out `docs/notifications.md` calls "not overridable" was
+  overridable one function lower down), and the row landed with a null
+  `branch_id`, which the read policy treats as org-wide. Neither gap was
+  reachable through the console or the Flutter app, but PostgREST exposes the
+  function to any staff JWT whatever the client chooses to call, so the client's
+  restraint was never the control. Both checks are transcribed from the wrapper
+  that already had them. Nothing that worked before stops working: the nightly
+  sweeps insert into `notification_messages` directly, and the two callers are
+  themselves SECURITY DEFINER, which does not change whose JWT the `jwt_*`
+  helpers read. Migration
+  `20260912110000_enqueue_notification_role_and_consent.sql`, applied through
+  the MCP and mirrored by hand; regression tests in
+  `supabase/tests/notifications.sql` cover the trainer, the opted-out member and
+  the branch-less row.
+
 ## 2026-09-12 — The walk-in gets a text
 
 Phase 5's three sweeps are all about a member: a membership ending, money owed,

@@ -16,19 +16,35 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from '@/components/ui/sidebar'
 import type { CurrentStaff } from '@/lib/roles'
 
 export function AppSidebar({ staff }: { staff: CurrentStaff }) {
   const pathname = usePathname()
   const items = navItemsForRole(staff.role)
+  const { isMobile, setOpenMobile } = useSidebar()
+
+  /**
+   * On a phone the sidebar is a sheet over the page, so following a link
+   * leaves it covering the screen someone just asked for. Closing on tap is
+   * what makes it behave like navigation rather than a stuck overlay. On
+   * desktop the sidebar is permanent and must stay put.
+   */
+  const closeOnMobile = () => {
+    if (isMobile) setOpenMobile(false)
+  }
 
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" render={<Link href="/" />}>
+            <SidebarMenuButton
+              size="lg"
+              onClick={closeOnMobile}
+              render={<Link href="/" />}
+            >
               <span className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                 <Dumbbell className="size-4" />
               </span>
@@ -58,6 +74,7 @@ export function AppSidebar({ staff }: { staff: CurrentStaff }) {
                     <SidebarMenuButton
                       isActive={active}
                       tooltip={item.title}
+                      onClick={closeOnMobile}
                       render={<Link href={item.href} />}
                     >
                       <item.icon />

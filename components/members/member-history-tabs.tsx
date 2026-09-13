@@ -99,17 +99,22 @@ export function MemberHistoryTabs({
 }) {
   return (
     <Tabs defaultValue="memberships">
-      <TabsList>
-        <TabsTrigger value="memberships">Memberships ({memberships.length})</TabsTrigger>
-        <TabsTrigger value="payments">Payments ({payments.length})</TabsTrigger>
-        <TabsTrigger value="invoices">Invoices ({invoices.length})</TabsTrigger>
-        <TabsTrigger value="attendance">Attendance ({attendance.length})</TabsTrigger>
-        <TabsTrigger value="messages">Messages ({messages.length})</TabsTrigger>
-      </TabsList>
+      {/* Five labels with counts do not fit a phone. They scroll sideways
+          rather than wrapping into a second row of pills, which would push the
+          table down and read as two separate rows of controls. */}
+      <div className="-mx-1 overflow-x-auto px-1 pb-1">
+        <TabsList className="w-max">
+          <TabsTrigger value="memberships">Memberships ({memberships.length})</TabsTrigger>
+          <TabsTrigger value="payments">Payments ({payments.length})</TabsTrigger>
+          <TabsTrigger value="invoices">Invoices ({invoices.length})</TabsTrigger>
+          <TabsTrigger value="attendance">Attendance ({attendance.length})</TabsTrigger>
+          <TabsTrigger value="messages">Messages ({messages.length})</TabsTrigger>
+        </TabsList>
+      </div>
 
       <TabsContent value="memberships">
         {memberships.length === 0 ? (
-          <EmptyTab>No memberships yet. Assign a plan from the panel on the right.</EmptyTab>
+          <EmptyTab>No memberships yet. Assign a plan from the Current plan panel.</EmptyTab>
         ) : (
           <div className="overflow-x-auto rounded-lg border">
             <Table>
