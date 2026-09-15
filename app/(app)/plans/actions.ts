@@ -42,7 +42,8 @@ function dbErrorMessage(error: unknown) {
       ? String(error.code)
       : null
   if (code === '23505') return 'A plan with that name already exists.'
-  return error instanceof Error ? error.message : 'The plan could not be saved.'
+  const { message } = (error ?? {}) as { message?: string }
+  return message ?? 'The plan could not be saved.'
 }
 
 function revalidatePlans() {

@@ -50,7 +50,11 @@ function branchAllowed(staff: CurrentStaff, branchId: string) {
 }
 
 function dbErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'The visitor could not be saved.'
+  // Supabase raises a plain PostgrestError, not an Error, so an instanceof
+  // check alone throws the database's own account of the refusal away and
+  // leaves the dialog saying nothing.
+  const { message } = (error ?? {}) as { message?: string }
+  return message ?? 'The visitor could not be saved.'
 }
 
 export async function createVisitor(

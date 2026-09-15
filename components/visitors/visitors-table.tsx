@@ -36,12 +36,15 @@ const KIND_LABELS: Record<VisitorRow['kind'], string> = {
 export function VisitorsTable({
   rows,
   branchNames,
+  showBranch,
   planNames,
   canDelete,
   canMessage,
 }: {
   rows: VisitorRow[]
   branchNames: Record<string, string>
+  /** One branch means the column repeats the same name on every row. */
+  showBranch: boolean
   planNames: Record<string, string>
   /** Owner-only, mirroring the RLS delete policy. */
   canDelete: boolean
@@ -64,7 +67,7 @@ export function VisitorsTable({
           <TableHead>Mobile</TableHead>
           <TableHead>Visited</TableHead>
           <TableHead>Why</TableHead>
-          <TableHead>Branch</TableHead>
+          {showBranch ? <TableHead>Branch</TableHead> : null}
           <TableHead>Interested in</TableHead>
           <TableHead>Status</TableHead>
           <TableHead className="text-right">Actions</TableHead>
@@ -94,9 +97,11 @@ export function VisitorsTable({
                   {KIND_LABELS[visitor.kind]}
                 </span>
               </TableCell>
-              <TableCell className="text-sm text-muted-foreground">
-                {branchNames[visitor.branch_id] ?? 'Unknown'}
-              </TableCell>
+              {showBranch ? (
+                <TableCell className="text-sm text-muted-foreground">
+                  {branchNames[visitor.branch_id] ?? 'Unknown'}
+                </TableCell>
+              ) : null}
               <TableCell className="text-sm text-muted-foreground">
                 {visitor.interested_plan_id
                   ? (planNames[visitor.interested_plan_id] ?? 'A plan since removed')
