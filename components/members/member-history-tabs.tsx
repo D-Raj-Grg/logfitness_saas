@@ -7,6 +7,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -25,6 +26,7 @@ import {
   PAYMENT_METHOD_LABELS,
   type InvoiceStatus,
   type MembershipStatus,
+  type PaymentKind,
 } from '@/lib/members'
 import { NOTIFICATION_EVENTS, NOTIFICATION_STATUS_SHORT } from '@/lib/notifications/labels'
 import { cn } from '@/lib/utils'
@@ -47,6 +49,17 @@ const INVOICE_TONE: Record<InvoiceStatus, 'default' | 'secondary' | 'destructive
   partial: 'outline',
   unpaid: 'destructive',
   void: 'secondary',
+}
+
+/**
+ * A payment is unremarkable, so it stays quiet. Money handed back is the
+ * exception a reader scans for, and a reversal is a correction rather than a
+ * loss -- outline, not red.
+ */
+const PAYMENT_KIND_TONE: Record<PaymentKind, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+  payment: 'secondary',
+  refund: 'destructive',
+  reversal: 'outline',
 }
 
 /**
@@ -97,6 +110,10 @@ export function MemberHistoryTabs({
   messages: Messages
   branchNames: Record<string, string>
 }) {
+  // Refunds and reversals are stored negative, so the signed sum is what the
+  // drawer actually kept.
+  const netPaid = payments.reduce((sum, row) => sum + row.amount_paisa, 0)
+
   return (
     <Tabs defaultValue="memberships">
       {/* Five labels with counts do not fit a phone. They scroll sideways
@@ -171,14 +188,17 @@ export function MemberHistoryTabs({
           <EmptyTab>No payments recorded.</EmptyTab>
         ) : (
           <div className="overflow-x-auto rounded-lg border">
-            <Table>
+            {/* Note text needs room to wrap, so the table states a width it
+                cannot shrink below and the container scrolls on a phone. */}
+            <Table className="min-w-[820px]">
               <TableHeader>
                 <TableRow>
-                  <TableHead>When</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Method</TableHead>
-                  <TableHead>Reference</TableHead>
-                  <TableHead>Collected by</TableHead>
+                  <TableHead className="whitespace-nowrap">When</TableHead>
+                  <TableHead className="whitespace-nowrap">Type</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Amount</TableHead>
+                  <TableHead className="whitespace-nowrap">Method</TableHead>
+                  <TableHead className="w-[280px]">Reason / note</TableHead>
+                  <TableHead className="whitespace-nowrap">Collected by</TableHead>
                   <TableHead className="w-0" />
                 </TableRow>
               </TableHeader>
@@ -188,34 +208,46 @@ export function MemberHistoryTabs({
                   // which, because "given back" and "never arrived" are not the
                   // same event to anyone counting the drawer.
                   const refund = row.kind !== 'payment'
+                  // A refund carries its reason, a payment carries the desk's
+                  // note. One column, because a reader wants the same thing
+                  // from both: why this row is here.
+                  const note = row.reason ?? row.notes
                   return (
                     <TableRow key={row.id}>
-                      <TableCell className="whitespace-nowrap">
+                      <TableCell className="align-top whitespace-nowrap tabular-nums">
                         {formatDateTime(row.paid_at)}
+                      </TableCell>
+                      <TableCell className="align-top">
+                        <Badge variant={PAYMENT_KIND_TONE[row.kind]}>
+                          {PAYMENT_KIND_LABELS[row.kind]}
+                        </Badge>
                       </TableCell>
                       <TableCell
                         className={cn(
-                          'text-right tabular-nums',
+                          'align-top text-right whitespace-nowrap tabular-nums',
                           refund ? 'font-medium text-destructive' : ''
                         )}
                       >
-                        {refund ? '-' : ''}
+                        {/* A real minus sign, not a hyphen: it lines up with
+                            the digits in tabular figures. */}
+                        {refund ? '−' : ''}
                         {formatMoney(Math.abs(row.amount_paisa))}
-                        {refund ? (
-                          <span className="block text-xs font-normal text-muted-foreground">
-                            {PAYMENT_KIND_LABELS[row.kind]}
-                            {row.reason ? `: ${row.reason}` : ''}
+                      </TableCell>
+                      <TableCell className="align-top whitespace-nowrap">
+                        {PAYMENT_METHOD_LABELS[row.method]}
+                        {row.reference_no ? (
+                          <span className="block font-mono text-xs text-muted-foreground">
+                            {row.reference_no}
                           </span>
                         ) : null}
                       </TableCell>
-                      <TableCell>{PAYMENT_METHOD_LABELS[row.method]}</TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        {row.reference_no ?? '--'}
+                      <TableCell className="w-[280px] align-top text-sm break-words whitespace-normal text-muted-foreground">
+                        {note ?? '--'}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
+                      <TableCell className="align-top whitespace-nowrap text-muted-foreground">
                         {row.collector?.full_name ?? '--'}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="align-top text-right">
                         <PrintLink
                           href={`/receipts/${row.id}/print`}
                           label={
@@ -231,6 +263,23 @@ export function MemberHistoryTabs({
                   )
                 })}
               </TableBody>
+              {/* Rows that cancel each other out are the normal case here, so
+                  the reader should not have to add five signed numbers to find
+                  what the member actually paid. */}
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={2} className="font-medium">
+                    Net collected
+                  </TableCell>
+                  <TableCell className="text-right font-medium whitespace-nowrap tabular-nums">
+                    {netPaid < 0 ? '−' : ''}
+                    {formatMoney(Math.abs(netPaid))}
+                  </TableCell>
+                  <TableCell colSpan={4} className="text-xs text-muted-foreground">
+                    {payments.length} {payments.length === 1 ? 'entry' : 'entries'}
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
             </Table>
           </div>
         )}
