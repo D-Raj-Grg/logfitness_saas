@@ -99,6 +99,7 @@ export default async function VisitorsPage({
       <VisitorsTable
         rows={result.rows}
         branchNames={branchNames}
+        showBranch={branches.length > 1}
         planNames={planNames}
         canDelete={staff.role === 'owner'}
         // The desk chases callbacks; a trainer logs the walk-in and stops
