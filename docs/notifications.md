@@ -153,6 +153,57 @@ send_member_notification(member, event, body)
 
 ---
 
+## 2b. Announcing something to everybody
+
+`/announcements`, owner and manager only. Everything above is addressed to one
+person; this is the other direction -- the gym is closed tomorrow and four
+hundred people need to know.
+
+```
+announcement_audience_count(audience, branch, statuses, days)   what it would cost
+send_announcement(title, body, audience, ...)
+  announcement_branch_scope()     an explicit branch, or every one you cover
+  announcement_audience()         members and visitors, deduplicated by number
+  INSERT ... SELECT               one outbox row per recipient, one transaction
+cancel_announcement(id)           stops what has not left yet
+```
+
+- **It is not a second pipeline.** The rows land in `notification_messages`
+  with `announcement_id` set, so the gateway, the one-minute worker, retry and
+  backoff, the delivery log and the member's Messages tab all already handle
+  them. `event` is `announcement`.
+- **Scheduling needed no scheduler.** `send_notification_batch` claims on
+  `next_attempt_at <= now()`, so a send dated next Tuesday simply sits in the
+  outbox until Tuesday -- and is visible in the log the whole time rather than
+  appearing out of nowhere on the day.
+- **Owner and manager, not front desk.** A desk may text one member; a
+  broadcast spends the chain's credit on hundreds at once. `send_announcement`
+  refuses the other two roles, and so does the screen.
+- **One fan-out, one transaction.** Not a loop over `enqueue_notification`: 400
+  round trips would outlast the send window, and a failure halfway would leave
+  a half-announced closure. An audience that matches nobody raises rather than
+  writing an announcement addressed to no one.
+- **Consent.** An opted-out member is not in the audience at all -- not queued,
+  not skipped. Visitors marked `lost` are excluded, `converted` ones are
+  counted as members, and a visitor whose number matches an included member is
+  dropped, so "both" means both groups of people rather than two messages to
+  one phone.
+- **The count comes from the same function as the send**, which is what stops
+  the number above the button and the number of messages written from ever
+  disagreeing. It is shown in SMS credits as well as people, because a Nepali
+  message is three segments.
+- **Cancelling is not undoing.** It flips the rows that have not gone to
+  `cancelled` and returns how many, and anything already sent stays sent and
+  stays in the log saying so. Cancelling nothing changes nothing.
+- **`status` is what was asked for; `state` is what is true.** The stored
+  column records the intent at send; `announcement_overview` derives the rest
+  from the outbox, so a scheduled announcement stops claiming to be scheduled
+  once its hour has passed.
+
+Gate: `supabase/tests/announcements.sql`.
+
+---
+
 ## 3. Adding a gateway
 
 Two `case` arms and one enum value. Both functions are pure — no network, no

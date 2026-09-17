@@ -17,6 +17,44 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-09-17 — One message, everybody
+
+### Added
+
+- **Announcements** (`/announcements`, owner and manager). A gym that is
+  closing for Vishwakarma Puja tells every member and every open walk-in in one
+  send. Audience is members, visitors or both, narrowed by branch, by member
+  status, and by how recently a visitor came in. The composer counts the
+  recipients and the SMS credits *before* the button, because that is the last
+  moment the number can still be changed, and it counts segments rather than
+  characters -- a Devanagari message is three segments where an English one is
+  one. Send now, or schedule it for a date and cancel it up to the hour.
+
+### Database
+
+- `announcements` (RLS on, org-scoped, read-only to staff -- every write goes
+  through an RPC), `notification_messages.announcement_id`, and the RPCs
+  `send_announcement`, `announcement_audience_count`, `cancel_announcement`,
+  plus the `announcement_overview` view. Migrations `20260917100000`,
+  `20260917100100`, `20260917100200`, `20260917100300` — the last two close
+  defects found while writing the gate: a stored status that stopped being true
+  once a scheduled hour passed, a cancel that relabelled a finished send, a
+  branch id from another chain that reached the foreign key instead of the
+  refusal, and an email audience that addressed members by telephone and
+  included walk-ins who have no email address at all.
+- No new pipeline and no new cron. An announcement is a pile of ordinary outbox
+  rows, so it inherits the gateway, the one-minute worker, retry and backoff,
+  and the delivery log; scheduling is a future `next_attempt_at`, which
+  `send_notification_batch` already declines to claim.
+
+### Consent
+
+- Members who opted out are excluded from the audience entirely, not queued and
+  skipped. Visitors marked "not joining" are excluded, and a walk-in who has
+  since joined is texted once, as a member, rather than twice.
+
+---
+
 ## 2026-09-13 — The dashboard says something, and the phone stops scrolling sideways
 
 ### Added

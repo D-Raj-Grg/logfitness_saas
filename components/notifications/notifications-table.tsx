@@ -52,6 +52,7 @@ const EVENT_LABELS: Record<NotificationMessageRow['event'], string> = {
   custom_message: 'By hand',
   visitor_welcome: 'Visitor welcome',
   visitor_follow_up: 'Visitor follow-up',
+  announcement: 'Announcement',
 }
 
 const CHANNEL_LABELS: Record<NotificationMessageRow['channel'], string> = {

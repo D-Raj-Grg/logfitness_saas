@@ -38,6 +38,7 @@ export const NOTIFICATION_EVENTS = {
   custom_message: 'Sent by hand',
   visitor_welcome: 'Visitor welcome',
   visitor_follow_up: 'Visitor follow-up',
+  announcement: 'Announcement',
 } as const
 
 export const NOTIFICATION_CHANNELS = {

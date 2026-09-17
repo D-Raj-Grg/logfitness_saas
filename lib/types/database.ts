@@ -14,6 +14,83 @@ export type Database = {
   }
   public: {
     Tables: {
+      announcements: {
+        Row: {
+          audience: Database["public"]["Enums"]["announcement_audience"]
+          body: string
+          branch_id: string | null
+          channel: Database["public"]["Enums"]["notification_channel"]
+          created_at: string
+          created_by: string | null
+          id: string
+          member_statuses: Database["public"]["Enums"]["member_status"][] | null
+          org_id: string
+          scheduled_for: string
+          status: Database["public"]["Enums"]["announcement_status"]
+          title: string
+          updated_at: string
+          visitor_days: number | null
+        }
+        Insert: {
+          audience: Database["public"]["Enums"]["announcement_audience"]
+          body: string
+          branch_id?: string | null
+          channel?: Database["public"]["Enums"]["notification_channel"]
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          member_statuses?:
+            | Database["public"]["Enums"]["member_status"][]
+            | null
+          org_id: string
+          scheduled_for?: string
+          status?: Database["public"]["Enums"]["announcement_status"]
+          title: string
+          updated_at?: string
+          visitor_days?: number | null
+        }
+        Update: {
+          audience?: Database["public"]["Enums"]["announcement_audience"]
+          body?: string
+          branch_id?: string | null
+          channel?: Database["public"]["Enums"]["notification_channel"]
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          member_statuses?:
+            | Database["public"]["Enums"]["member_status"][]
+            | null
+          org_id?: string
+          scheduled_for?: string
+          status?: Database["public"]["Enums"]["announcement_status"]
+          title?: string
+          updated_at?: string
+          visitor_days?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcements_branch_id_fkey"
+            columns: ["branch_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "announcements_created_by_fkey"
+            columns: ["created_by", "org_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "announcements_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attendance: {
         Row: {
           attended_on: string
@@ -984,6 +1061,7 @@ export type Database = {
       }
       notification_messages: {
         Row: {
+          announcement_id: string | null
           attempts: number
           body: string
           branch_id: string | null
@@ -1011,6 +1089,7 @@ export type Database = {
           visitor_id: string | null
         }
         Insert: {
+          announcement_id?: string | null
           attempts?: number
           body: string
           branch_id?: string | null
@@ -1038,6 +1117,7 @@ export type Database = {
           visitor_id?: string | null
         }
         Update: {
+          announcement_id?: string | null
           attempts?: number
           body?: string
           branch_id?: string | null
@@ -1065,6 +1145,20 @@ export type Database = {
           visitor_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "notification_messages_announcement_fk"
+            columns: ["announcement_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "announcement_overview"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "notification_messages_announcement_fk"
+            columns: ["announcement_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "announcements"
+            referencedColumns: ["id", "org_id"]
+          },
           {
             foreignKeyName: "notification_messages_branch_fk"
             columns: ["branch_id", "org_id"]
@@ -1763,6 +1857,56 @@ export type Database = {
       }
     }
     Views: {
+      announcement_overview: {
+        Row: {
+          audience: Database["public"]["Enums"]["announcement_audience"] | null
+          body: string | null
+          branch_id: string | null
+          branch_name: string | null
+          cancelled: number | null
+          channel: Database["public"]["Enums"]["notification_channel"] | null
+          created_at: string | null
+          created_by: string | null
+          created_by_name: string | null
+          failed: number | null
+          id: string | null
+          last_sent_at: string | null
+          member_statuses: Database["public"]["Enums"]["member_status"][] | null
+          org_id: string | null
+          queued: number | null
+          scheduled_for: string | null
+          sent: number | null
+          skipped: number | null
+          state: string | null
+          status: Database["public"]["Enums"]["announcement_status"] | null
+          title: string | null
+          total: number | null
+          visitor_days: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcements_branch_id_fkey"
+            columns: ["branch_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "announcements_created_by_fkey"
+            columns: ["created_by", "org_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "announcements_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attendance_detail: {
         Row: {
           attended_on: string | null
@@ -1911,6 +2055,44 @@ export type Database = {
         }
         Returns: Json
       }
+      announcement_audience: {
+        Args: {
+          p_audience: Database["public"]["Enums"]["announcement_audience"]
+          p_branch_ids: string[]
+          p_channel?: Database["public"]["Enums"]["notification_channel"]
+          p_member_statuses: Database["public"]["Enums"]["member_status"][]
+          p_org_id: string
+          p_visitor_days: number
+        }
+        Returns: {
+          branch_id: string
+          full_name: string
+          kind: string
+          recipient_id: string
+          to_address: string
+          usable: boolean
+        }[]
+      }
+      announcement_audience_count: {
+        Args: {
+          p_audience: Database["public"]["Enums"]["announcement_audience"]
+          p_branch_id?: string
+          p_channel?: Database["public"]["Enums"]["notification_channel"]
+          p_member_statuses?: Database["public"]["Enums"]["member_status"][]
+          p_visitor_days?: number
+        }
+        Returns: {
+          members: number
+          reachable: number
+          total: number
+          unusable: number
+          visitors: number
+        }[]
+      }
+      announcement_branch_scope: {
+        Args: { p_branch_id: string }
+        Returns: string[]
+      }
       archive_member: {
         Args: { p_member_id: string; p_reason?: string }
         Returns: Json
@@ -1969,6 +2151,7 @@ export type Database = {
         Args: { p_member_id?: string; p_session_id: string }
         Returns: Json
       }
+      cancel_announcement: { Args: { p_id: string }; Returns: number }
       cancel_class_booking: {
         Args: { p_booking_id: string; p_reason?: string }
         Returns: Json
@@ -2418,6 +2601,19 @@ export type Database = {
         Args: { p_org_id: string }
         Returns: undefined
       }
+      send_announcement: {
+        Args: {
+          p_audience: Database["public"]["Enums"]["announcement_audience"]
+          p_body: string
+          p_branch_id?: string
+          p_channel?: Database["public"]["Enums"]["notification_channel"]
+          p_member_statuses?: Database["public"]["Enums"]["member_status"][]
+          p_scheduled_for?: string
+          p_title: string
+          p_visitor_days?: number
+        }
+        Returns: string
+      }
       send_member_notification: {
         Args: {
           p_body?: string
@@ -2496,6 +2692,8 @@ export type Database = {
       }
     }
     Enums: {
+      announcement_audience: "members" | "visitors" | "both"
+      announcement_status: "scheduled" | "sending" | "cancelled"
       attendance_method: "manual" | "qr" | "card" | "biometric"
       branch_status: "active" | "inactive"
       class_booking_status:
@@ -2532,6 +2730,7 @@ export type Database = {
         | "custom_message"
         | "visitor_welcome"
         | "visitor_follow_up"
+        | "announcement"
       notification_provider:
         | "sparrow_sms"
         | "aakash_sms"
@@ -2682,6 +2881,8 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      announcement_audience: ["members", "visitors", "both"],
+      announcement_status: ["scheduled", "sending", "cancelled"],
       attendance_method: ["manual", "qr", "card", "biometric"],
       branch_status: ["active", "inactive"],
       class_booking_status: [
@@ -2721,6 +2922,7 @@ export const Constants = {
         "custom_message",
         "visitor_welcome",
         "visitor_follow_up",
+        "announcement",
       ],
       notification_provider: [
         "sparrow_sms",

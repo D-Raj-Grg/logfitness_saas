@@ -211,6 +211,22 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
+- [x] **2026-09-17** Announcements. A gym closing for Vishwakarma Puja had no
+      way to say so except opening 400 row menus. New `/announcements` tab,
+      owner and manager only: one SMS to members, visitors or both, with a
+      branch filter, a member-status filter and a visitor-recency filter, a
+      live recipient and SMS-credit count before the button, and a send that is
+      either immediate or held to a date. Not a new pipeline -- an announcement
+      is ordinary `notification_messages` rows carrying `announcement_id`, so
+      the gateway, the one-minute worker, retry, the delivery log and the
+      member's Messages tab all already handle it. Scheduling needed no cron:
+      `send_notification_batch` claims on `next_attempt_at <= now()`.
+      Migrations `20260917100000`-`20260917100300`. Gate:
+      `supabase/tests/announcements.sql`. This is
+      an explicit exception to the v1 "no marketing/CRM" line in `CLAUDE.md`:
+      an operational notice is not a campaign, and segments, drip sequences and
+      open tracking are all still out.
+
 - [ ] **2026-09-12** Hydration mismatch on `/settings/notifications`, seen while
       walking the visitor-message work in a browser and older than it. React
       logs "some attributes of the server rendered HTML didn't match" for the

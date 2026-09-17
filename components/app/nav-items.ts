@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Bell,
+  Megaphone,
   Building2,
   CreditCard,
   DoorOpen,
@@ -72,6 +73,12 @@ export const NAV_ITEMS: NavItem[] = [
     title: 'Notifications',
     href: '/notifications',
     icon: Bell,
+    roles: ['owner', 'manager'],
+  },
+  {
+    title: 'Announcements',
+    href: '/announcements',
+    icon: Megaphone,
     roles: ['owner', 'manager'],
   },
   { title: 'Settings', href: '/settings', icon: Settings, roles: ['owner'] },
