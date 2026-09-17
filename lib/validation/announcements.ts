@@ -61,6 +61,17 @@ export const announcementAudienceQuerySchema = z.object({
   channel: announcementChannelSchema.default('sms'),
 })
 
+/**
+ * The test send. The number is checked in Postgres by `normalise_msisdn` --
+ * the same function the real send uses, so a number this form accepts and the
+ * gateway refuses cannot exist. This only keeps obvious nonsense off the wire.
+ */
+export const announcementTestSchema = z.object({
+  body: z.string().trim().min(1, 'Write the message first').max(1000),
+  to: z.string().trim().min(7, 'Give a mobile number').max(32),
+  title: z.string().trim().max(120).optional(),
+})
+
 export const announcementListQuerySchema = z.object({
   page: pageSchema,
   pageSize: pageSizeSchema,

@@ -29,6 +29,11 @@ Two conventions worth knowing while reading:
   moment the number can still be changed, and it counts segments rather than
   characters -- a Devanagari message is three segments where an English one is
   one. Send now, or schedule it for a date and cancel it up to the hour.
+- **Send test** in the composer. One number, typed by hand, worded exactly as
+  it will go out. The things that go wrong with a broadcast -- a variable that
+  renders empty, a Nepali sentence that arrives as three messages, a sender ID
+  the operator never registered -- are all obvious on a handset and invisible
+  in a textarea. `send_announcement_test`, migration `20260917100400`.
 
 ### Database
 

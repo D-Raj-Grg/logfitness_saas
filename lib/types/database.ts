@@ -2614,6 +2614,15 @@ export type Database = {
         }
         Returns: string
       }
+      send_announcement_test: {
+        Args: {
+          p_body: string
+          p_channel?: Database["public"]["Enums"]["notification_channel"]
+          p_title?: string
+          p_to: string
+        }
+        Returns: string
+      }
       send_member_notification: {
         Args: {
           p_body?: string

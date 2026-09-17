@@ -8,12 +8,14 @@ import {
   cancelAnnouncement,
   countAnnouncementAudience,
   sendAnnouncement,
+  sendAnnouncementTest,
   type AnnouncementAudienceCount,
   type MemberStatus,
 } from '@/lib/db/announcements'
 import {
   announcementAudienceQuerySchema,
   announcementComposeSchema,
+  announcementTestSchema,
 } from '@/lib/validation/announcements'
 
 export type AnnouncementState = {
@@ -138,6 +140,38 @@ export async function createAnnouncement(
       ? 'Scheduled. Nothing goes out until then, and you can still cancel it.'
       : 'Queued. It starts going out within a minute.',
   }
+}
+
+/**
+ * Send it to one number first. Called from a button rather than a form -- the
+ * composer is already a form and a nested one is not a thing -- so it takes
+ * its arguments directly and answers with a sentence for a toast.
+ */
+export async function testAnnouncement(input: {
+  body: string
+  to: string
+  title?: string
+}): Promise<AnnouncementState> {
+  await requireRole(...ANNOUNCE_ROLES)
+
+  const parsed = announcementTestSchema.safeParse(input)
+  if (!parsed.success) {
+    const errors = z.flattenError(parsed.error).fieldErrors
+    return { error: errors.to?.[0] ?? errors.body?.[0] ?? 'There is nothing to test.' }
+  }
+
+  try {
+    await sendAnnouncementTest({
+      body: parsed.data.body,
+      to: parsed.data.to,
+      title: parsed.data.title ?? null,
+    })
+  } catch (error) {
+    return { error: dbErrorMessage(error) }
+  }
+
+  revalidatePath('/notifications')
+  return { success: `Test queued to ${parsed.data.to}. It arrives within a minute.` }
 }
 
 /**

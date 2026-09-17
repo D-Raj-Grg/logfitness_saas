@@ -1,10 +1,12 @@
 'use client'
 
 import { useActionState, useEffect, useMemo, useState, useTransition } from 'react'
+import { toast } from 'sonner'
 
 import {
   createAnnouncement,
   previewAnnouncementAudience,
+  testAnnouncement,
   type AnnouncementState,
 } from '@/app/(app)/announcements/actions'
 import { AuthFormMessage, FieldError } from '@/components/auth/auth-form-message'
@@ -109,6 +111,8 @@ function AnnouncementForm({
   const [body, setBody] = useState('')
   const [later, setLater] = useState(false)
   const [scheduledLocal, setScheduledLocal] = useState('')
+  const [testPhone, setTestPhone] = useState('')
+  const [testing, startTesting] = useTransition()
 
   const [count, setCount] = useState<{
     total: number
@@ -379,6 +383,50 @@ function AnnouncementForm({
             </span>
           </div>
         ) : null}
+      </div>
+
+      {/* Send one to yourself before four hundred. The things that go wrong
+          with a broadcast -- a variable that renders empty, a Nepali sentence
+          that arrives as three messages, a sender ID the operator never
+          registered -- are all obvious on a handset and invisible here. Not a
+          nested form: a button that calls the action directly, because the
+          composer is already a form. */}
+      <div className="flex flex-col gap-2 rounded-md border border-dashed p-3">
+        <Label htmlFor="announcement-test">Try it on one number first</Label>
+        <div className="flex flex-wrap gap-2">
+          <Input
+            id="announcement-test"
+            type="tel"
+            inputMode="tel"
+            className="min-w-0 flex-1"
+            value={testPhone}
+            onChange={(item) => setTestPhone(item.target.value)}
+            placeholder="98XXXXXXXX"
+            aria-label="Number to send the test to"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={testing || body.trim().length === 0 || testPhone.trim().length === 0}
+            onClick={() =>
+              startTesting(async () => {
+                const result = await testAnnouncement({
+                  body,
+                  to: testPhone,
+                  title: undefined,
+                })
+                if (result.error) toast.error(result.error)
+                if (result.success) toast.success(result.success)
+              })
+            }
+          >
+            {testing ? 'Sending…' : 'Send test'}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          One SMS, worded exactly as it will go out, with your own name standing in
+          for the recipient’s. It costs a credit and is not part of the announcement.
+        </p>
       </div>
 
       <AuthFormMessage error={state.error ?? undefined} />

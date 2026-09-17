@@ -137,6 +137,28 @@ export async function sendAnnouncement(args: {
   )
 }
 
+/**
+ * One message, to a number typed by hand, rendered exactly as the real send
+ * would render it. No announcement row: nothing has been announced yet.
+ */
+export async function sendAnnouncementTest(args: {
+  body: string
+  to: string
+  title?: string | null
+  channel?: NotificationChannel
+}) {
+  const supabase = await createClient()
+
+  return unwrap<string>(
+    await supabase.rpc('send_announcement_test', {
+      p_body: args.body,
+      p_to: args.to,
+      p_channel: args.channel ?? 'sms',
+      p_title: args.title ?? undefined,
+    })
+  )
+}
+
 /** Returns how many were actually stopped. Anything already gone stays gone. */
 export async function cancelAnnouncement(id: string) {
   const supabase = await createClient()

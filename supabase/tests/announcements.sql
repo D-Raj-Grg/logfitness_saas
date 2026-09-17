@@ -42,6 +42,7 @@ declare
   ann_s   uuid;   -- scheduled for the day after tomorrow
   ann_em  uuid;   -- the email channel, where visitors have no address at all
   ann_s2  uuid;   -- scheduled, and left alone, so `state` has something to read
+  msg_t   uuid;   -- the test send, which belongs to no announcement at all
 
   c_total integer; c_reach integer; c_unusable integer;
   c_members integer; c_visitors integer;
@@ -611,6 +612,93 @@ begin
 
   execute 'reset role';
 
+  --------------------------------------------------------------- test send
+  -- One number, typed by hand, before four hundred. It renders through the
+  -- same path the real send uses, so what arrives on the handset is what the
+  -- members would have got -- and it deliberately writes no announcement row,
+  -- because nothing has been announced yet.
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', org_a::text, 'staff_id', st_a_owner::text,
+    'staff_role', 'owner', 'branch_ids', json_build_array()
+  )::text, true);
+  execute 'set local role authenticated';
+
+  -- Counted before and after rather than looked up by title: an announcement
+  -- earlier in this file is already called "Closed Friday", and a test that
+  -- passes because two strings differ is not testing anything.
+  select count(*) into c_total from public.announcements where org_id = org_a;
+
+  msg_t := public.send_announcement_test(
+    'Closed Friday, {{name}}. -- {{gym_name}}', '98-0000-9999');
+
+  execute 'reset role';
+
+  select count(*) into n from public.notification_messages
+   where id = msg_t
+     and event = 'announcement'::public.notification_event
+     and announcement_id is null
+     and member_id is null
+     and visitor_id is null
+     and to_address = '9800009999'
+     and status = 'queued'::public.notification_status;
+  assert n = 1, 'the test send did not write one unattached, queued row';
+
+  select count(*) into n from public.announcements where org_id = org_a;
+  assert n = c_total, format(
+    'a test send left %s announcement rows behind', n - c_total);
+
+  -- The sender's own name stands in, so a `{{name}}` that renders to nothing
+  -- shows up as a hole on the handset rather than as nothing at all.
+  select body into s from public.notification_messages where id = msg_t;
+  assert s not like '%{{%', format('the test send left a placeholder: %s', s);
+
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', org_a::text, 'staff_id', st_a_owner::text,
+    'staff_role', 'owner', 'branch_ids', json_build_array()
+  )::text, true);
+  execute 'set local role authenticated';
+
+  -- A number nothing can be sent to refuses here rather than logging a
+  -- `skipped` row: the whole point of a test is that a handset lights up, and
+  -- a quiet row in the log reads exactly like a gateway that is not working.
+  failed := false;
+  begin
+    perform public.send_announcement_test('Anything at all.', '01-4567890');
+  exception when check_violation then failed := true;
+  end;
+  assert failed, 'a landline was accepted as a test recipient';
+
+  -- A double click costs a credit and proves nothing.
+  failed := false;
+  begin
+    perform public.send_announcement_test(
+      'Closed Friday, {{name}}. -- {{gym_name}}', '98-0000-9999');
+  exception when unique_violation then failed := true;
+  end;
+  assert failed, 'the same test went out twice inside a minute';
+
+  execute 'reset role';
+
+  -- The desk may text one member; pricing and proofing a broadcast is a step
+  -- above that, and the test send is part of the broadcast.
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', org_a::text, 'staff_id', st_a_desk::text,
+    'staff_role', 'front_desk', 'branch_ids', json_build_array(br_a1::text)
+  )::text, true);
+  execute 'set local role authenticated';
+
+  failed := false;
+  begin
+    perform public.send_announcement_test('Not yours to send.', '9800009998');
+  exception when insufficient_privilege then failed := true;
+  end;
+  assert failed, 'the front desk sent an announcement test';
+
+  execute 'reset role';
+
   -------------------------------------------------------------- the grants
   -- The audience function reads members and visitors across a whole org with
   -- the branch scope passed in as an argument, which is only safe because the
@@ -633,6 +721,16 @@ begin
 
   assert has_function_privilege('authenticated', 'public.cancel_announcement(uuid)', 'execute'),
     'cancel is not callable by the console';
+
+  assert has_function_privilege('authenticated',
+    'public.send_announcement_test(text, text, public.notification_channel, text)',
+    'execute'),
+    'the test send is not callable by the console';
+
+  assert not has_function_privilege('anon',
+    'public.send_announcement_test(text, text, public.notification_channel, text)',
+    'execute'),
+    'a signed-out caller can send an announcement test';
 
   assert not has_function_privilege('anon',
     'public.send_announcement(text, text, public.announcement_audience,'

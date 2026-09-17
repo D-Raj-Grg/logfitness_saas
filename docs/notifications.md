@@ -200,6 +200,16 @@ cancel_announcement(id)           stops what has not left yet
   from the outbox, so a scheduled announcement stops claiming to be scheduled
   once its hour has passed.
 
+- **Send one to yourself first.** `send_announcement_test(body, to)` takes a
+  number typed by hand and renders through the same path the real send uses,
+  with the sender's own name standing in for the recipient's. It writes an
+  outbox row with `announcement_id` null -- nothing has been announced yet, and
+  a test showing in the log as a broadcast to one person would be a worse
+  record than no record. An unusable number refuses rather than logging a
+  `skipped` row: the point of a test is that a handset lights up, and a quiet
+  row reads exactly like a gateway that is not working. The same wording to the
+  same number inside a minute is one message.
+
 Gate: `supabase/tests/announcements.sql`.
 
 ---
