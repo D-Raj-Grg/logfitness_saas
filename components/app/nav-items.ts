@@ -79,7 +79,7 @@ export const NAV_ITEMS: NavItem[] = [
     title: 'Announcements',
     href: '/announcements',
     icon: Megaphone,
-    roles: ['owner', 'manager'],
+    roles: ['owner', 'manager', 'front_desk'],
   },
   { title: 'Settings', href: '/settings', icon: Settings, roles: ['owner'] },
 ]

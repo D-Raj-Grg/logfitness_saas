@@ -34,17 +34,23 @@ type DbError = { code?: string; message?: string }
 function dbErrorMessage(error: unknown) {
   const { code, message } = (error ?? {}) as DbError
   if (message) return message
-  if (code === '42501') return 'Only an owner or manager can send an announcement.'
+  if (code === '42501') return 'Only an owner, manager or front desk can send an announcement.'
   if (code === 'P0002') return 'That announcement no longer exists.'
   return 'Something went wrong. Try again.'
 }
 
 /**
- * A broadcast spends the gym's SMS credit on hundreds of messages at once, so
- * it sits one role higher than a single send: front desk may text one member,
- * not four hundred. `send_announcement` refuses the same two roles.
+ * A broadcast spends the gym's SMS credit on hundreds of messages at once, and
+ * until 2026-09-18 that put it one role above the desk. It does not any more:
+ * the person standing at the door on the morning the gym is shut is the one
+ * who knows, and `announcement_branch_scope` bounds a desk to its own branches
+ * anyway, so the role widened and the reach did not.
+ *
+ * `jwt_can_announce()` is the authority — it also refuses a desk with no branch
+ * of its own, because an empty claim would mean the whole chain. A trainer is
+ * still refused everywhere.
  */
-const ANNOUNCE_ROLES = ['owner', 'manager'] as const
+const ANNOUNCE_ROLES = ['owner', 'manager', 'front_desk'] as const
 
 export type AnnouncementAudienceResult =
   | { count: AnnouncementAudienceCount; error?: never }

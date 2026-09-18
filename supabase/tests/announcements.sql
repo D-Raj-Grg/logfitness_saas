@@ -33,6 +33,7 @@ declare
   vis_conv uuid;
   vis_dup  uuid;
 
+  ann_desk uuid;  -- sent by the front desk, their branch only
   ann_mgr uuid;   -- sent by the manager, their branch only
   ann_m   uuid;   -- audience: members
   ann_v   uuid;   -- audience: visitors
@@ -120,13 +121,51 @@ begin
   returning id into vis_dup;
 
   ------------------------------------------------------------ who may send
-  -- A broadcast is the one message in this product that cannot be taken back
-  -- one row at a time, so the floor roles do not get near it -- not even the
-  -- desk, which may text a single member by hand all day long.
+  -- A broadcast cannot be taken back one row at a time, so who may send one is
+  -- the question this block answers. Widened on 2026-09-18
+  -- (`20260918100000_announcement_front_desk.sql`): the desk announces too,
+  -- because the person standing at the door on the morning the gym is shut is
+  -- the one who knows. What did not widen is the reach --
+  -- `announcement_branch_scope` resolves a non-owner to their own branches,
+  -- and a desk with no branch of its own is refused rather than handed the
+  -- chain, which is what an empty claim would otherwise mean.
   perform set_config('request.jwt.claims', json_build_object(
     'sub', gen_random_uuid()::text, 'role', 'authenticated',
     'org_id', org_a::text, 'staff_id', st_a_desk::text,
     'staff_role', 'front_desk', 'branch_ids', json_build_array(br_a1::text)
+  )::text, true);
+  execute 'set local role authenticated';
+
+  -- The desk may price a send...
+  select reachable into n from public.announcement_audience_count('members');
+  assert n > 0, 'the front desk could not count the audience for a send it may make';
+
+  -- ...and make it. Branch one only: `mem_ok2` is at branch two and the desk
+  -- has no claim on it, so a desk announcement that reached him would be the
+  -- chain being texted by one gym's front desk.
+  ann_desk := public.send_announcement(
+    'Closed Sunday', 'We are shut on Sunday.', 'members'
+  );
+
+  assert exists (
+    select 1 from public.notification_messages
+    where announcement_id = ann_desk and member_id = mem_ok1
+  ), 'the desk announcement missed the member at its own branch';
+
+  assert not exists (
+    select 1 from public.notification_messages
+    where announcement_id = ann_desk and member_id = mem_ok2
+  ), 'the front desk announced to a branch it has no claim on';
+
+  execute 'reset role';
+
+  -- A desk with no branch of its own is the hole the old rule was guarding:
+  -- an empty `branch_ids` claim means "every branch" to
+  -- `announcement_branch_scope`, so it is refused outright.
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', org_a::text, 'staff_id', st_a_desk::text,
+    'staff_role', 'front_desk', 'branch_ids', json_build_array()
   )::text, true);
   execute 'set local role authenticated';
 
@@ -135,16 +174,14 @@ begin
     perform public.send_announcement('Closed Sunday', 'We are shut on Sunday.', 'members');
   exception when insufficient_privilege then failed := true;
   end;
-  assert failed, 'the front desk sent the whole gym an SMS';
+  assert failed, 'a front desk with no branch of its own announced to the whole chain';
 
-  -- ...and cannot price the send either: the count is what tells you how many
-  -- credits a broadcast would cost, which is the same decision.
   failed := false;
   begin
     perform public.announcement_audience_count('members');
   exception when insufficient_privilege then failed := true;
   end;
-  assert failed, 'the front desk could count the audience for a send it may not make';
+  assert failed, 'a front desk with no branch of its own could price a send it may not make';
 
   execute 'reset role';
   perform set_config('request.jwt.claims', json_build_object(
@@ -160,6 +197,20 @@ begin
   exception when insufficient_privilege then failed := true;
   end;
   assert failed, 'a trainer sent the whole gym an SMS';
+
+  failed := false;
+  begin
+    perform public.announcement_audience_count('members');
+  exception when insufficient_privilege then failed := true;
+  end;
+  assert failed, 'a trainer could price a broadcast';
+
+  failed := false;
+  begin
+    perform public.send_announcement_test('We are shut on Sunday.', '9800000201');
+  exception when insufficient_privilege then failed := true;
+  end;
+  assert failed, 'a trainer sent an announcement test';
 
   -- A manager may, and gets their own branches and no others: the scope is
   -- resolved for them rather than asked for, so "all branches" from a manager
@@ -681,8 +732,9 @@ begin
 
   execute 'reset role';
 
-  -- The desk may text one member; pricing and proofing a broadcast is a step
-  -- above that, and the test send is part of the broadcast.
+  -- The desk proofs its own broadcast before spending the gym's credit on it.
+  -- Testing is part of sending, so it moved with the send on 2026-09-18 rather
+  -- than being left behind as the one step the desk may not take.
   perform set_config('request.jwt.claims', json_build_object(
     'sub', gen_random_uuid()::text, 'role', 'authenticated',
     'org_id', org_a::text, 'staff_id', st_a_desk::text,
@@ -690,12 +742,26 @@ begin
   )::text, true);
   execute 'set local role authenticated';
 
+  assert public.send_announcement_test('Ours to send.', '9800009998') is not null,
+    'the front desk could not proof its own announcement';
+
+  execute 'reset role';
+
+  -- A desk with no branch of its own may not, for the same reason it may not
+  -- send: the guard is one predicate and the test send is behind it too.
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', org_a::text, 'staff_id', st_a_desk::text,
+    'staff_role', 'front_desk', 'branch_ids', json_build_array()
+  )::text, true);
+  execute 'set local role authenticated';
+
   failed := false;
   begin
-    perform public.send_announcement_test('Not yours to send.', '9800009998');
+    perform public.send_announcement_test('Not yours to send.', '9800009997');
   exception when insufficient_privilege then failed := true;
   end;
-  assert failed, 'the front desk sent an announcement test';
+  assert failed, 'a front desk with no branch of its own proofed a broadcast';
 
   execute 'reset role';
 

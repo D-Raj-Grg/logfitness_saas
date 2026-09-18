@@ -19,10 +19,11 @@ export default async function AnnouncementsPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  // Owners and managers. A broadcast spends the chain's SMS credit on hundreds
-  // of messages at once, which is a decision one step above the desk --
-  // `send_announcement` refuses the other two roles as well.
-  const staff = await requireRole('owner', 'manager')
+  // Owner, manager and the desk (2026-09-18). A broadcast spends the chain's
+  // SMS credit on hundreds of messages at once, but the desk is who is there
+  // when the gym has to say it is shut, and the database bounds a desk to its
+  // own branches. A trainer is still refused, by `jwt_can_announce()` and here.
+  const staff = await requireRole('owner', 'manager', 'front_desk')
   const raw = await searchParams
 
   const parsed = announcementListQuerySchema.safeParse({

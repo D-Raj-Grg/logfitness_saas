@@ -17,6 +17,31 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-09-18 — The desk may announce
+
+### Changed
+
+- **Announcements are open to the front desk** (`/announcements`, previously
+  owner and manager). Yesterday's rule read well and did not survive contact
+  with the thing the feature is for: the person standing at the door on the
+  morning the gym is shut is the one who knows. What did not widen is the
+  reach -- `announcement_branch_scope` already resolves a non-owner to their own
+  branches, so a desk announces to its own gym and not to the chain. A trainer
+  is still refused everywhere.
+
+### Database
+
+- `jwt_can_announce()` (migration `20260918100000`) is now the single authority
+  behind `send_announcement`, `send_announcement_test`,
+  `announcement_audience_count` and `cancel_announcement`. It admits owner,
+  manager and front desk, and refuses a desk whose `branch_ids` claim is empty
+  -- an empty claim means "every branch" to the scope function, which is exactly
+  the hole the old role rule was standing in front of.
+- `announcement_audience()` remains revoked from `authenticated`. It takes an
+  org id as an argument and would hand any caller another gym's phone numbers.
+
+---
+
 ## 2026-09-17 — One message, everybody
 
 ### Added

@@ -155,9 +155,15 @@ send_member_notification(member, event, body)
 
 ## 2b. Announcing something to everybody
 
-`/announcements`, owner and manager only. Everything above is addressed to one
-person; this is the other direction -- the gym is closed tomorrow and four
-hundred people need to know.
+`/announcements`, owner, manager and front desk. Everything above is addressed
+to one person; this is the other direction -- the gym is closed tomorrow and
+four hundred people need to know.
+
+The desk was let in on 2026-09-18, because it is who is standing there on the
+morning the gym has to say it is shut. Its reach did not widen with it:
+`announcement_branch_scope` resolves a non-owner to their own `branch_ids`, and
+`jwt_can_announce()` refuses a desk that has none -- an empty claim would
+otherwise read as the whole chain. A trainer is refused by all four RPCs.
 
 ```
 announcement_audience_count(audience, branch, statuses, days)   what it would cost
