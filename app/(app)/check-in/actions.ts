@@ -10,6 +10,7 @@ import {
   type CheckInResult,
 } from '@/lib/db/attendance'
 import { searchMembersForCheckIn } from '@/lib/db/members'
+import { rpcErrorMessage } from '@/lib/rpc-error'
 import { checkInSchema, checkOutSchema } from '@/lib/validation/attendance'
 
 export type CheckInActionState = {
@@ -24,16 +25,6 @@ export type CheckOutActionState = {
 }
 
 const DESK_ROLES = ['owner', 'manager', 'front_desk'] as const
-
-/**
- * The RPCs raise with a sentence meant for the person at the desk. PostgREST
- * sometimes prefixes it with the SQLSTATE ("P0001: ..."), which is noise here.
- */
-function rpcErrorMessage(error: unknown, fallback: string) {
-  const message = error instanceof Error ? error.message : null
-  if (!message) return fallback
-  return message.replace(/^[A-Z0-9]{5}:\s*/, '')
-}
 
 function revalidateDesk(memberId?: string) {
   revalidatePath('/check-in')

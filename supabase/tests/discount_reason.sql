@@ -99,6 +99,62 @@ begin
   end;
   assert failed, 'a sold discount reason was rewritten';
 
+  raise notice 'discount reason: the rule holds on everything sold from here on';
+end $$;
+
+-- 7. A discount given before reasons were captured. The rule binds the act of
+-- discounting, not the row it left behind: such an invoice is still payable,
+-- or the desk could never settle a bill the gym itself raised.
+--
+-- Fabricating that row means writing one the live rule forbids, which is what
+-- history is. The trigger comes off for a single statement, at the top level
+-- rather than inside a block: ALTER TABLE refuses while a transaction still
+-- has trigger events pending.
+alter table public.invoices disable trigger invoices_guard_discount_reason;
+
+update public.invoices i set discount_reason = null, discount_note = null
+from public.members m
+where m.id = i.member_id
+  and m.org_id = 'd1d1d1d1-1111-1111-1111-111111111111'
+  and i.discount_paisa > 0;
+
+alter table public.invoices enable trigger invoices_guard_discount_reason;
+
+do $$
+declare
+  org_d uuid := 'd1d1d1d1-1111-1111-1111-111111111111';
+  st_d  uuid := 'd1c00000-0000-0000-0000-00000000000f';
+  invoice_a uuid;
+  due bigint;
+  failed boolean;
+begin
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', org_d::text, 'staff_id', st_d::text, 'staff_role', 'owner'
+  )::text, true);
+  execute 'set local role authenticated';
+
+  select i.id, i.due_paisa into invoice_a, due
+  from public.invoices i
+  join public.members m on m.id = i.member_id
+  where m.org_id = org_d and i.discount_paisa > 0 and i.due_paisa > 0
+  limit 1;
+
+  perform public.record_payment(invoice_a, due, 'cash');
+
+  select i.due_paisa into due from public.invoices i where i.id = invoice_a;
+  assert due = 0, format('a pre-reason invoice would not take its payment; %s still due', due);
+
+  -- But the reason is still required of anything discounted from here on,
+  -- including a correction made to that same old invoice.
+  failed := false;
+  begin
+    update public.invoices set discount_paisa = discount_paisa + 1000
+    where id = invoice_a;
+  exception when check_violation then failed := true;
+  end;
+  assert failed, 'a discount was increased without a reason';
+
   -- teardown ----------------------------------------------------------------------
   execute 'reset role';
   perform set_config('request.jwt.claims', null, true);

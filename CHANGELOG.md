@@ -17,6 +17,39 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-09-20 — A discounted invoice can be paid again
+
+### Fixed
+
+- **Payments against any invoice discounted before 10 September were
+  refused.** The desk saw only "The payment could not be recorded." Behind it,
+  `invoices_discount_reason_present` -- added `NOT VALID` on the day reasons
+  were introduced, meaning to leave history alone -- was rejecting the invoice
+  row. `NOT VALID` skips the back-scan but still binds every later write to a
+  row, and recording a payment updates the invoice totals, so fifteen invoices
+  on the first gym could never be settled.
+- **Every RPC failure in the payment and check-in actions read as the generic
+  fallback.** `rpcErrorMessage` tested the thrown value with `instanceof
+  Error`, and the data layer throws PostgREST's error object, so the sentence
+  the RPC raised for the person at the desk never reached them. It now reads
+  the message off whatever shape it is given, and lives in `lib/rpc-error.ts`
+  instead of being copied into two action files.
+
+### Database
+
+- Migration `20260920110000` drops the four discount-reason check constraints
+  on `invoices` and `memberships` and replaces them with
+  `guard_discount_reason()`, fired before insert and before the update that
+  actually touches `discount_paisa`, `discount_reason` or `discount_note`. The
+  rule was always about the act of discounting, not the row it left behind:
+  nothing new can be discounted without a reason, and history stays as it was
+  sold -- and payable.
+- `supabase/tests/discount_reason.sql` gains the case that was missing: an
+  invoice discounted with no reason takes its payment to zero, while raising
+  that same invoice's discount is still refused.
+
+---
+
 ## 2026-09-20 — Three things worth saying thank you for
 
 ### Added

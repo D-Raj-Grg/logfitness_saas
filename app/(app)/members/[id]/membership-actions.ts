@@ -19,6 +19,7 @@ import {
 import { getOrgStandardSignupFee } from '@/lib/db/orgs'
 import { listPlansForBranch } from '@/lib/db/plans'
 import { formatDate, formatMoney } from '@/lib/format'
+import { rpcErrorMessage } from '@/lib/rpc-error'
 import {
   adjustMembershipDatesSchema,
   cancelMembershipSchema,
@@ -42,16 +43,6 @@ export type MembershipActionState = {
 }
 
 const CASHIER_ROLES = ['owner', 'manager', 'front_desk'] as const
-
-/**
- * The RPCs raise with a sentence meant for the person at the desk. PostgREST
- * sometimes prefixes it with the SQLSTATE ("P0001: ..."), which is noise here.
- */
-function rpcErrorMessage(error: unknown, fallback: string) {
-  const message = error instanceof Error ? error.message : null
-  if (!message) return fallback
-  return message.replace(/^[A-Z0-9]{5}:\s*/, '')
-}
 
 function revalidateMember(memberId: string) {
   revalidatePath(`/members/${memberId}`)
