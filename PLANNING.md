@@ -402,4 +402,13 @@ Do not build these without an explicit decision to change scope.
   as the delivery log and `/settings/notifications` as the owner's controls.
   The staff invitation is now an email rather than a verbal instruction.
   Gate: `supabase/tests/notifications.sql`.
+- Phase 5 extended (2026-09-20): three acknowledgements -- `member_welcome` on
+  a member's first membership, `payment_received` on every payment, and
+  `dues_cleared` when a member has nothing outstanding. Triggers rather than
+  sweeps, because an acknowledgement that arrives the next morning is a
+  different message; all three seed disabled, so enabling them is an owner's
+  decision and not a migration's. Gate:
+  `supabase/tests/membership_payment_messages.sql`. The Flutter mirrors throw
+  on an unknown `notification_event`, so the three values need a client release
+  before a gym switches them on -- see `TASKS.md`.
 - Next task: the rest of Phase 3's reports and Phase 4's class UI. See `TASKS.md`.

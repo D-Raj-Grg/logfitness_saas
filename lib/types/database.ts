@@ -2327,6 +2327,10 @@ export type Database = {
           vars: Json
         }[]
       }
+      member_is_contactable: {
+        Args: { p_member_id: string }
+        Returns: boolean
+      }
       member_notification_preview: {
         Args: {
           p_channel?: Database["public"]["Enums"]["notification_channel"]
@@ -2740,6 +2744,9 @@ export type Database = {
         | "visitor_welcome"
         | "visitor_follow_up"
         | "announcement"
+        | "member_welcome"
+        | "payment_received"
+        | "dues_cleared"
       notification_provider:
         | "sparrow_sms"
         | "aakash_sms"
@@ -2932,6 +2939,9 @@ export const Constants = {
         "visitor_welcome",
         "visitor_follow_up",
         "announcement",
+        "member_welcome",
+        "payment_received",
+        "dues_cleared",
       ],
       notification_provider: [
         "sparrow_sms",

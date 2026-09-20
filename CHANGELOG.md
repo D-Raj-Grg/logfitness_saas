@@ -17,6 +17,49 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-09-20 — Three things worth saying thank you for
+
+### Added
+
+- **Three notification rules an owner can switch on** at
+  `/settings/notifications`, all of them off by default: a **welcome** when
+  somebody buys their first membership, a **receipt** every time money is
+  handed over, and a **balance cleared** message when a member has nothing left
+  outstanding. Every event before these chased something -- a membership about
+  to end, money still owed -- and a gym that only ever texts to ask for money
+  is a gym whose members stop reading the texts.
+- Each has its own wording under the **Templates** tab, in English and Nepali,
+  with the placeholders that carry a value for it listed above the box.
+- The receipt carries a floor. **Only over (Rs)** now appears on
+  `payment_received` as well as on the dues reminder: a Rs 50 top-up need not
+  cost a message.
+
+### Database
+
+- `member_welcome`, `payment_received` and `dues_cleared` added to
+  `notification_event` (migration `20260920100000`), and wired up in
+  `20260920100100`: three rules seeded disabled for every existing org, six
+  built-in templates, and three triggers -- on `memberships`, on `payments` and
+  on `invoices` -- each wrapped whole in an exception handler, because a
+  membership sale and a cash receipt are the product and the SMS is a courtesy.
+- `payments_then_enqueue_receipt` is named to sort after
+  `payments_sync_invoice`. Postgres fires row triggers of one timing
+  alphabetically, and the receipt reads `invoices.due_paisa`: the other order
+  would quote every closing receipt the balance as it stood before the payment.
+- `dues_cleared` refuses to fire while the member has another invoice still
+  `unpaid` or `partial`. "Nothing is outstanding" has to be true.
+
+### Security
+
+- `member_is_contactable(uuid)` shipped granted to `authenticated` in
+  `20260920100100` and is revoked again in `20260920100200`. It reads any
+  member row by id, definer-rights and with no tenant check -- the triggers
+  that call it have already established the org -- so on the REST surface it
+  was a boolean oracle over every gym's members: ask it about a uuid and learn
+  whether that member exists, is archived, or has opted out.
+
+---
+
 ## 2026-09-18 — The desk may announce
 
 ### Changed

@@ -38,6 +38,12 @@ function ruleTitle(rule: NotificationRuleRow) {
       return rule.offset_days === 1
         ? 'The day after a visit, if they have not joined'
         : `${rule.offset_days} days after a visit, if they have not joined`
+    case 'member_welcome':
+      return 'When somebody buys their first membership'
+    case 'payment_received':
+      return 'Every time money is handed over'
+    case 'dues_cleared':
+      return 'When a member has nothing left outstanding'
     default:
       return rule.event.replace(/_/g, ' ')
   }
@@ -49,11 +55,21 @@ function RuleRow({ rule }: { rule: NotificationRuleRow }) {
     {}
   )
 
-  const isDues = rule.event === 'dues_reminder'
-  // The welcome rides the insert, so there is no hour to pick: it goes out
-  // within a minute of the walk-in being logged. Showing a time here would
-  // promise a schedule that does not exist.
-  const isImmediate = rule.event === 'visitor_welcome'
+  // Two rules have a floor, for the same reason and with different stakes: a
+  // gym does not want to spend a message chasing small change, nor receipting
+  // it. Everything else ignores the column.
+  const hasMinAmount = rule.event === 'dues_reminder' || rule.event === 'payment_received'
+  // Only the chase has a cadence. The rest either happen once or happen every
+  // time the thing behind them happens.
+  const hasRepeat = rule.event === 'dues_reminder'
+  // These rules ride the event itself, so there is no hour to pick: they go
+  // out within a minute of the walk-in, the sale or the payment. Showing a
+  // time here would promise a schedule that does not exist.
+  const isImmediate =
+    rule.event === 'visitor_welcome' ||
+    rule.event === 'member_welcome' ||
+    rule.event === 'payment_received' ||
+    rule.event === 'dues_cleared'
 
   return (
     <form action={formAction} className="flex flex-col gap-3 border-b py-4 last:border-b-0">
@@ -87,38 +103,38 @@ function RuleRow({ rule }: { rule: NotificationRuleRow }) {
           </div>
         )}
 
-        {isDues ? (
-          <>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor={`rule-min-${rule.id}`}>Only over (Rs)</Label>
-              <Input
-                id={`rule-min-${rule.id}`}
-                name="minAmount"
-                type="number"
-                min={0}
-                step="1"
-                className="w-32"
-                defaultValue={rule.min_amount_paisa / 100}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor={`rule-repeat-${rule.id}`}>Ask again after (days)</Label>
-              <Input
-                id={`rule-repeat-${rule.id}`}
-                name="repeatAfterDays"
-                type="number"
-                min={1}
-                max={365}
-                className="w-36"
-                defaultValue={rule.repeat_after_days}
-              />
-            </div>
-          </>
+        {hasMinAmount ? (
+          <div className="flex flex-col gap-2">
+            <Label htmlFor={`rule-min-${rule.id}`}>Only over (Rs)</Label>
+            <Input
+              id={`rule-min-${rule.id}`}
+              name="minAmount"
+              type="number"
+              min={0}
+              step="1"
+              className="w-32"
+              defaultValue={rule.min_amount_paisa / 100}
+            />
+          </div>
         ) : (
-          <>
-            <input type="hidden" name="minAmount" value={rule.min_amount_paisa / 100} />
-            <input type="hidden" name="repeatAfterDays" value={rule.repeat_after_days} />
-          </>
+          <input type="hidden" name="minAmount" value={rule.min_amount_paisa / 100} />
+        )}
+
+        {hasRepeat ? (
+          <div className="flex flex-col gap-2">
+            <Label htmlFor={`rule-repeat-${rule.id}`}>Ask again after (days)</Label>
+            <Input
+              id={`rule-repeat-${rule.id}`}
+              name="repeatAfterDays"
+              type="number"
+              min={1}
+              max={365}
+              className="w-36"
+              defaultValue={rule.repeat_after_days}
+            />
+          </div>
+        ) : (
+          <input type="hidden" name="repeatAfterDays" value={rule.repeat_after_days} />
         )}
 
         <Button type="submit" variant="outline" size="sm" disabled={pending}>
@@ -137,9 +153,11 @@ export function RulesForm({ rules }: { rules: NotificationRuleRow[] }) {
       <CardHeader>
         <CardTitle>Reminders</CardTitle>
         <CardDescription>
-          Worked out once a night at 02:30. A reminder set for earlier than that
-          goes out the following morning. Nothing is sent, and nothing is
-          charged, until a gateway is connected above.
+          The reminders are worked out once a night at 02:30, and one set for
+          earlier than that goes out the following morning. The rest ride the
+          moment they are about -- a visit, a joining, a payment -- and leave
+          within a minute. Nothing is sent, and nothing is charged, until a
+          gateway is connected above.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col">

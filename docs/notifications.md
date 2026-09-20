@@ -69,6 +69,28 @@ pg_cron 'notifications-outbox'    every minute
   send_notification_batch()       claims due rows, calls the gateway via pg_net
 ```
 
+Five events do not wait for 02:30. They are triggers on the row that causes
+them, and the one-minute outbox carries them out, because an acknowledgement
+that arrives the following morning is a different and worse message:
+
+```
+visitors            INSERT   enqueue_visitor_welcome()      'thanks for coming in'
+memberships         INSERT   enqueue_member_welcome()       first membership only
+payments            INSERT   enqueue_payment_received()     kind = 'payment' only
+invoices            UPDATE   enqueue_dues_cleared()         status reaching 'paid'
+visitors (nightly)           enqueue_visitor_follow_ups()   the one sweep of the five
+```
+
+Each trigger body sits inside an exception handler and raises a warning rather
+than an error. A walk-in, a membership sale and a cash receipt are the product;
+the SMS is a courtesy, and a null template cannot be allowed to take the
+counter down.
+
+`payments_then_enqueue_receipt` is named to sort after `payments_sync_invoice`.
+Postgres fires row triggers of one timing in alphabetical order, and the
+receipt reads `invoices.due_paisa`: run it first and every receipt would quote
+the balance as it stood before the money arrived.
+
 Nothing runs in the Next.js app. The whole pipeline is Postgres, which is what
 lets the Flutter app and any future integration reuse it, and — the reason it
 was built this way — what avoids needing a Supabase project secret. Project
@@ -97,7 +119,18 @@ through `set_notification_credential`, and readable only by the sender.
   shown in red.
 - **Idempotency is the `dedupe_key`.** `renewal:<membership_id>:<offset_days>`,
   `dues:<member_id>:<date>`, `birthday:<member_id>:<year>`, unique per org. A
-  sweep that runs twice inserts once.
+  sweep that runs twice inserts once. The event-driven three key on the row
+  they are about: `member_welcome:<member_id>` (one welcome per person, even if
+  the first sale is voided and re-entered), `payment_received:<payment_id>`,
+  `dues_cleared:<invoice_id>` (a refund that reopens an invoice and a payment
+  that closes it again do not re-announce it -- the receipt for that payment
+  already said the money arrived).
+- **`dues_cleared` means the member owes nothing, not that one invoice closed.**
+  It refuses to fire while any other invoice of theirs is still `unpaid` or
+  `partial`, because "nothing is outstanding" would otherwise be a lie.
+- **`payment_received` honours `min_amount_paisa`.** It is the only rule
+  besides `dues_reminder` that does. A gym taking a Rs 50 top-up need not spend
+  an SMS on it.
 - **Phone numbers are normalised at enqueue time, not in the column.**
   `members.phone` is free text under `unique (org_id, phone)`, so normalising in
   place could collide two real members. `normalise_msisdn` produces the bare ten

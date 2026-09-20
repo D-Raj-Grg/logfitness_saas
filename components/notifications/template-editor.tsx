@@ -36,6 +36,9 @@ const EVENT_LABELS: Partial<Record<NotificationEvent, string>> = {
   birthday_greeting: 'Birthday greeting',
   visitor_welcome: 'Visitor welcome',
   visitor_follow_up: 'Visitor follow-up',
+  member_welcome: 'New member welcome',
+  payment_received: 'Payment receipt',
+  dues_cleared: 'Balance cleared',
 }
 
 /** Which placeholders actually carry a value for each reason. */
@@ -45,6 +48,11 @@ const VARIABLES: Partial<Record<NotificationEvent, string[]>> = {
   birthday_greeting: ['member_name', 'gym_name', 'branch_name'],
   visitor_welcome: ['visitor_name', 'gym_name', 'branch_name', 'plan_name', 'visited_on'],
   visitor_follow_up: ['visitor_name', 'gym_name', 'branch_name', 'plan_name', 'visited_on'],
+  member_welcome: ['member_name', 'gym_name', 'branch_name', 'plan_name', 'start_date', 'end_date'],
+  // `due_amount` here is what is left on that invoice AFTER the payment, which
+  // on the last instalment is Rs 0.
+  payment_received: ['member_name', 'gym_name', 'branch_name', 'amount', 'due_amount', 'invoice_no', 'paid_on'],
+  dues_cleared: ['member_name', 'gym_name', 'branch_name', 'amount', 'invoice_no'],
 }
 
 const SAMPLE: Record<string, string> = {
@@ -57,6 +65,10 @@ const SAMPLE: Record<string, string> = {
   due_amount: 'Rs 2,000',
   visitor_name: 'Bina Gurung',
   visited_on: '12 Sep 2026',
+  start_date: '20 Sep 2026',
+  amount: 'Rs 2,500',
+  invoice_no: 'INV000241',
+  paid_on: '20 Sep 2026',
 }
 
 /**

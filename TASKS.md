@@ -1123,6 +1123,17 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       surfaces go through `send_visitor_notification`, which sets it -- but the
       wrapper and the function should agree.
 
+- [ ] **2026-09-20** The three new `notification_event` values must reach the
+      Flutter app before any gym switches the rules on. The Dart mirrors throw
+      on an unknown wire value **by design** (see the 2026-09-12 note above), so
+      a member-facing build that reads a `member_welcome`, `payment_received`
+      or `dues_cleared` row in the notification log will throw on it. The rules
+      ship disabled, which is what buys the time: nothing emits until an owner
+      ticks a box, and that box is on the web console only. Add the three
+      values to `logfitness_flutter`'s `NotificationEvent`, its label map and
+      its count test, ship that build, and only then tell a gym the feature
+      exists.
+
 ## Open questions (from the PRD)
 
 - [x] Which SMS/Viber gateway for Nepal, and cost per message at chain volume?

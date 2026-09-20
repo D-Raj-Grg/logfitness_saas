@@ -30,6 +30,9 @@ const EDITABLE_EVENTS: NotificationEvent[] = [
   'birthday_greeting',
   'visitor_welcome',
   'visitor_follow_up',
+  'member_welcome',
+  'payment_received',
+  'dues_cleared',
 ]
 
 export default async function NotificationSettingsPage() {

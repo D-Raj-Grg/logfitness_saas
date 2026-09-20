@@ -39,6 +39,9 @@ export const NOTIFICATION_EVENTS = {
   visitor_welcome: 'Visitor welcome',
   visitor_follow_up: 'Visitor follow-up',
   announcement: 'Announcement',
+  member_welcome: 'New member welcome',
+  payment_received: 'Payment receipt',
+  dues_cleared: 'Balance cleared',
 } as const
 
 export const NOTIFICATION_CHANNELS = {
