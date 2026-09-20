@@ -7,6 +7,7 @@ import { Printer } from 'lucide-react'
 import { AuthFormMessage } from '@/components/auth/auth-form-message'
 import {
   AdjustDatesForm,
+  AdjustDiscountForm,
   CancelForm,
   FreezeForm,
   UnfreezeForm,
@@ -62,6 +63,7 @@ type OpenDialog =
   | { kind: 'unfreeze' }
   | { kind: 'cancel' }
   | { kind: 'dates' }
+  | { kind: 'discount' }
   | { kind: 'refund'; paymentId: string }
   | { kind: 'reverse'; paymentId: string }
   | null
@@ -100,13 +102,28 @@ export function MemberActionPanel({
   >(null)
 
   const canAct = staff.role !== 'trainer'
-  // Free days are money: extending a membership already sold is an owner and
-  // manager decision, and the RPC refuses anyone else even if this slips.
-  const canAdjustDates = staff.role === 'owner' || staff.role === 'manager'
+  // Free days and money off are the same decision wearing different clothes:
+  // both give away something already sold, so both sit with the people who
+  // answer for the branch's takings. The RPCs refuse anyone else even if this
+  // slips.
+  const canAdjustSale = staff.role === 'owner' || staff.role === 'manager'
   const hasLeft = member.status === 'left'
 
   const current =
     memberships.find((row) => row.id === member.current_membership_id) ?? null
+
+  // The membership's own invoice, for the re-pricing dialog. No extra query:
+  // invoices.membership_id is uniquely constrained, so there is at most one.
+  const currentInvoice =
+    invoices.find((invoice) => invoice.membership_id === current?.id) ?? null
+
+  const canAdjustPrice =
+    canAdjustSale &&
+    current !== null &&
+    current.status !== 'cancelled' &&
+    currentInvoice !== null &&
+    currentInvoice.status !== 'void' &&
+    currentInvoice.discount_paisa < currentInvoice.subtotal_paisa
 
   const openInvoices = invoices
     .filter((invoice) => invoice.status !== 'void' && (invoice.due_paisa ?? 0) > 0)
@@ -276,9 +293,14 @@ export function MemberActionPanel({
                   Unfreeze
                 </Button>
               ) : null}
-              {canAdjustDates && current && current.status !== 'cancelled' ? (
+              {canAdjustSale && current && current.status !== 'cancelled' ? (
                 <Button size="sm" variant="outline" onClick={() => setOpen({ kind: 'dates' })}>
                   Adjust dates
+                </Button>
+              ) : null}
+              {canAdjustPrice ? (
+                <Button size="sm" variant="outline" onClick={() => setOpen({ kind: 'discount' })}>
+                  Adjust price
                 </Button>
               ) : null}
               {current && (current.status === 'active' || current.status === 'frozen') ? (
@@ -368,7 +390,7 @@ export function MemberActionPanel({
                       {/* Money that never arrived is not money given back, so
                           the two are different buttons and different rows on
                           the drawer sheet. */}
-                      {canAdjustDates ? (
+                      {canAdjustSale ? (
                         <Button
                           size="sm"
                           variant="ghost"
@@ -506,6 +528,29 @@ export function MemberActionPanel({
                   currentStartDate={current.start_date}
                   currentEndDate={current.end_date}
                   canMoveStart={!checkedInMembershipIds.includes(current.id)}
+                  onSuccess={closeWith}
+                />
+              ) : null}
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={open?.kind === 'discount'} onOpenChange={dialogChange}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Adjust price</DialogTitle>
+                <DialogDescription>
+                  For a price agreed after the sale. The plan and what it was
+                  billed at do not change; the discount and the invoice total
+                  do, and the reason is recorded on the membership.
+                </DialogDescription>
+              </DialogHeader>
+              {open?.kind === 'discount' && current && currentInvoice ? (
+                <AdjustDiscountForm
+                  memberId={member.id}
+                  membershipId={current.id}
+                  subtotalPaisa={currentInvoice.subtotal_paisa}
+                  currentDiscountPaisa={currentInvoice.discount_paisa}
+                  paidPaisa={currentInvoice.paid_paisa}
                   onSuccess={closeWith}
                 />
               ) : null}

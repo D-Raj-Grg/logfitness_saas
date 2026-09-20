@@ -2055,6 +2055,16 @@ export type Database = {
         }
         Returns: Json
       }
+      adjust_membership_discount: {
+        Args: {
+          p_discount_note?: string
+          p_discount_paisa: number
+          p_discount_reason: Database["public"]["Enums"]["discount_reason"]
+          p_membership_id: string
+          p_reason: string
+        }
+        Returns: Json
+      }
       announcement_audience: {
         Args: {
           p_audience: Database["public"]["Enums"]["announcement_audience"]
@@ -2292,6 +2302,7 @@ export type Database = {
       }
       is_org_member: { Args: { target_org_id: string }; Returns: boolean }
       jwt_branch_ids: { Args: never; Returns: string[] }
+      jwt_can_announce: { Args: never; Returns: boolean }
       jwt_can_serve_members: { Args: never; Returns: boolean }
       jwt_claims: { Args: never; Returns: Json }
       jwt_is_member: { Args: never; Returns: boolean }
@@ -2310,6 +2321,7 @@ export type Database = {
         Args: { p_left_on: string; p_member_id: string }
         Returns: Database["public"]["Enums"]["member_status"]
       }
+      member_is_contactable: { Args: { p_member_id: string }; Returns: boolean }
       member_message_target: {
         Args: {
           p_channel?: Database["public"]["Enums"]["notification_channel"]
@@ -2326,10 +2338,6 @@ export type Database = {
           to_address: string
           vars: Json
         }[]
-      }
-      member_is_contactable: {
-        Args: { p_member_id: string }
-        Returns: boolean
       }
       member_notification_preview: {
         Args: {
@@ -2656,6 +2664,7 @@ export type Database = {
         Args: { p_provider_id: string; p_secret: string }
         Returns: undefined
       }
+      settle_invoice: { Args: { p_invoice_id: string }; Returns: undefined }
       storage_object_member: { Args: { object_name: string }; Returns: string }
       storage_object_org: { Args: { object_name: string }; Returns: string }
       sweep_membership_expiry: {

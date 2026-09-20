@@ -110,7 +110,11 @@ end $$;
 -- history is. The trigger comes off for a single statement, at the top level
 -- rather than inside a block: ALTER TABLE refuses while a transaction still
 -- has trigger events pending.
+-- invoices_guard_money (20260920120100) has to come off too: it freezes the
+-- discount columns against any UPDATE that is not adjust_membership_discount,
+-- and fabricating history is by definition not that.
 alter table public.invoices disable trigger invoices_guard_discount_reason;
+alter table public.invoices disable trigger invoices_guard_money;
 
 update public.invoices i set discount_reason = null, discount_note = null
 from public.members m
@@ -118,6 +122,7 @@ where m.id = i.member_id
   and m.org_id = 'd1d1d1d1-1111-1111-1111-111111111111'
   and i.discount_paisa > 0;
 
+alter table public.invoices enable trigger invoices_guard_money;
 alter table public.invoices enable trigger invoices_guard_discount_reason;
 
 do $$
@@ -146,7 +151,9 @@ begin
   assert due = 0, format('a pre-reason invoice would not take its payment; %s still due', due);
 
   -- But the reason is still required of anything discounted from here on,
-  -- including a correction made to that same old invoice.
+  -- including a correction made to that same old invoice. Two guards now
+  -- refuse this statement and invoices_guard_discount_reason is the one that
+  -- fires first, so the message the desk would see is still about the reason.
   failed := false;
   begin
     update public.invoices set discount_paisa = discount_paisa + 1000

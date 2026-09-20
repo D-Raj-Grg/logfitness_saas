@@ -17,6 +17,49 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-09-20 — A price agreed after the sale
+
+### Added
+
+- **"Adjust price"** on a member's current plan, for owners and branch
+  managers. The desk types the price that was agreed -- "make it 6,000" -- and
+  the console records what actually happened: the same membership, sold at a
+  discount agreed late. The plan's price and the invoice subtotal stay where
+  they were, the discount grows to meet the new number, and the invoice total
+  and the member's dues follow. A reason for the discount is required and
+  prints on the invoice; a sentence saying why it was agreed is appended to the
+  membership notes. Until now the only way to re-price was to cancel the
+  membership and sell it again, which burned an invoice number and broke the
+  renewal chain.
+- The price can only come down -- putting it back up is a new charge, which is
+  a sale -- and never below what has already been collected: that money leaves
+  by the refund door, where it is counted. A part-paid invoice that lands
+  exactly on the new total settles itself.
+
+### Security
+
+- **Any front-desk account could rewrite any invoice through the API.**
+  `invoices` carried an UPDATE policy for every member-facing staff member and
+  nothing behind it, so a `PATCH` setting `total_paisa` to 0 would clear a due
+  with no payment, no refund and nothing but an `audit_log` row to show for it.
+  No application code ever did this. `guard_invoice_money` now freezes the
+  money and identifying columns against every UPDATE except the one the new RPC
+  makes, and freezes `paid_paisa`/`status` against everything except the
+  settlement rule. Invoice notes stay editable.
+
+### Database
+
+- Migration `20260920120000` extracts the settlement rule out of
+  `sync_invoice_totals()` into `settle_invoice()`, so one place decides whether
+  an invoice is paid; `20260920120300` makes it an invoker function the RPC can
+  call. `20260920120100` adds the `invoices_guard_money` trigger.
+  `20260920120200` opens a door in `guard_membership_immutability` for the
+  discount trio and adds `adjust_membership_discount(...)`, owner and
+  branch-manager only.
+- New gate `supabase/tests/adjust_membership_discount.sql`.
+
+---
+
 ## 2026-09-20 — A discounted invoice can be paid again
 
 ### Fixed

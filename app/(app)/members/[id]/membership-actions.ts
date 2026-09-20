@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { requireRole } from '@/lib/auth'
 import {
   adjustMembershipDates as adjustMembershipDatesRow,
+  adjustMembershipDiscount as adjustMembershipDiscountRow,
   cancelMembership as cancelMembershipRow,
   freezeMembership as freezeMembershipRow,
   renewMembership as renewMembershipRow,
@@ -22,6 +23,7 @@ import { formatDate, formatMoney } from '@/lib/format'
 import { rpcErrorMessage } from '@/lib/rpc-error'
 import {
   adjustMembershipDatesSchema,
+  adjustMembershipDiscountSchema,
   cancelMembershipSchema,
   freezeMembershipSchema,
   membershipIdSchema,
@@ -378,6 +380,56 @@ export async function adjustMembershipDates(
       : ''
 
   return { success: `${window}${movement}${length}` }
+}
+
+
+/**
+ * The price agreed again after the sale. The member negotiated 6,600 down to
+ * 6,000 and the owner said yes, so the discount grows and the invoice total
+ * falls with it; the plan's price stays what it was. Owners and managers only,
+ * checked here so the button can be hidden and again inside the RPC, which is
+ * what the Flutter app will hit.
+ */
+export async function adjustMembershipDiscount(
+  _prevState: MembershipActionState,
+  formData: FormData
+): Promise<MembershipActionState> {
+  await requireRole('owner', 'manager')
+
+  const memberId = z.uuid().safeParse(formData.get('memberId'))
+
+  const parsed = adjustMembershipDiscountSchema.safeParse({
+    membershipId: formData.get('membershipId'),
+    discountPaisa: formData.get('discountPaisa'),
+    discountReason: optional(formData, 'discountReason'),
+    discountNote: optional(formData, 'discountNote'),
+    reason: formData.get('reason'),
+  })
+
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+  }
+
+  let result: Awaited<ReturnType<typeof adjustMembershipDiscountRow>>
+  try {
+    result = await adjustMembershipDiscountRow(parsed.data)
+  } catch (error) {
+    return { error: rpcErrorMessage(error, 'The price could not be changed.') }
+  }
+
+  if (memberId.success) revalidateMember(memberId.data)
+
+  const due =
+    result.due_paisa > 0
+      ? `${formatMoney(result.due_paisa)} still due.`
+      : 'Nothing outstanding.'
+
+  return {
+    success: `Invoice ${result.invoice_no} is now ${formatMoney(result.total_paisa)}. ${due}`,
+    // The member is standing there having just agreed a different number, so
+    // the corrected bill is the thing they should walk out with.
+    document: { href: `/invoices/${result.invoice_id}/print`, label: 'Print invoice' },
+  }
 }
 
 

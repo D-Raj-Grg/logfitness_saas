@@ -132,6 +132,37 @@ the member bought a term, not a pair of dates. Plan, price, discount, branch and
 member remain immutable: this is not a rewrite of the sale.
 Gate: `supabase/tests/member_archive_and_dates.sql`.
 
+**Price decision (2026-09-20): a price agreed after the sale.** A member
+negotiated Rs 6,600 down to Rs 6,000 a week after the membership was rung up,
+and the console had no way to say so -- the only route was cancel and re-sell,
+which burns an invoice number and tells an auditor a story that did not happen.
+`adjust_membership_discount` records what actually happened instead: the same
+membership, sold at a discount agreed late. `price_paisa` and the invoice
+subtotal stay at 6,600, because the plan's price is a fact and a discount the
+gym can see is worth more than a quietly smaller number; the discount grows and
+the invoice total follows. Owner or the branch's manager only, the same gate as
+`adjust_membership_dates`. The discount can only increase -- a price that walks
+back up is a new charge, and a new charge is a new sale -- and never past what
+has already been collected, which leaves by the refund door where it is counted.
+The reason is appended to the membership notes; `discount_reason` still says
+what kind of discount it is. The two GUC doors are
+`app.adjust_membership_discount` (membership) and `app.adjust_invoice_money`
+(invoice), both `set local`, neither reachable from PostgREST.
+Gate: `supabase/tests/adjust_membership_discount.sql`.
+
+**An invoice's money columns are frozen (2026-09-20).** `memberships` has been
+append-only at the money since it was created and `payments` has no UPDATE
+policy at all, but `invoices` carried the "member-facing staff amend invoices"
+UPDATE policy with nothing behind it: any front-desk token could `PATCH` a
+`total_paisa` of 0 and a due would vanish with no payment and no refund. The
+policy stays -- an invoice's notes are worth editing -- and
+`guard_invoice_money` becomes the boundary: subtotal, discount, total, the
+identifying columns and `issued_on` move only under
+`app.adjust_invoice_money`, and `paid_paisa`/`status` only under
+`app.settle_invoice`. What an invoice has been paid is derived from its payment
+rows by `settle_invoice()`, which is now the one place that decides settlement
+and is called both by the payment trigger and after a price change.
+
 **Scope decision (2026-09-07): one way to say which branches.** A manager who
 runs three branches could not previously ask any screen for their own total --
 the dashboard silently showed them `branchIds[0]` and called it the branch. Scope

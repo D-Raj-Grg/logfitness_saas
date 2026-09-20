@@ -211,6 +211,45 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
+- [ ] **2026-09-20** Two SQL test files no longer run, found while regression
+      testing the price-adjust work. `tenant_isolation.sql:79-84` catches
+      `insufficient_privilege` for a self-role-change, but
+      `guard_staff_assignment()` (`20260908100300`) raises `check_violation`,
+      so the exception escapes the block. `front_desk.sql` still calls the
+      scalar forms `in_gym_now(uuid)`, `absent_members(uuid, int)` and
+      `attendance_day_summary(date, uuid)` at lines 143, 146, 219, 237, 240,
+      247, 256 and 261; `20260908100000` replaced them with branch-list
+      versions and dropped the old signatures. Both files have been failing
+      since 8 September, so `npm run db:test` stops at the first one and the
+      suites after it were not running at all.
+
+- [x] **2026-09-20** Re-pricing a membership after the sale. A gym agreed Rs
+      6,600, the member negotiated again a week later and the owner accepted Rs
+      6,000, and there was no way to record it: the discount is set at the
+      point of sale and then frozen, so the only route was cancel and re-sell.
+      New RPC `adjust_membership_discount` and an **Adjust price** dialog on
+      the member's current plan, owner and branch-manager only. The plan price
+      and the invoice subtotal do not move; the discount grows and the total
+      follows. Increase-only, never below what has been collected, reason
+      required and appended to the membership notes. Closed a real hole on the
+      way: `invoices` had an UPDATE policy for every member-facing staff member
+      and no trigger behind it, so a front-desk `PATCH` could zero any invoice
+      total. Migrations `20260920120000`-`20260920120300`. Gate:
+      `supabase/tests/adjust_membership_discount.sql`.
+
+- [ ] **2026-09-20** No discount report anywhere. `plan_mix` sums
+      `memberships.price_paisa` and ignores `discount_paisa` entirely, so
+      neither sale-time nor after-the-fact discounts are totalled for the
+      owner -- who can now give them from two places. Wants a
+      `discount_report(p_branch_ids, p_from, p_to)` beside `daily_collection`,
+      broken down by `discount_reason`.
+
+- [ ] **2026-09-20** Flutter app has no "Adjust price". The RPC is the boundary
+      and refuses anyone but an owner or branch manager, so the mobile app is
+      safe without it, but a manager working from the phone cannot re-price.
+      Mirror the dialog in `logfitness_flutter` once the web flow has been used
+      for a few days.
+
 - [x] **2026-09-17** Announcements. A gym closing for Vishwakarma Puja had no
       way to say so except opening 400 row menus. New `/announcements` tab,
       owner and manager only: one SMS to members, visitors or both, with a

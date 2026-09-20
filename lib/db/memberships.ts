@@ -141,6 +141,48 @@ export async function adjustMembershipDates(args: {
   )
 }
 
+/**
+ * The price comes down after the sale. price_paisa and the invoice subtotal do
+ * not move -- the plan's price is a fact -- so what changes is the discount,
+ * on the membership and on the invoice the member is handed. Owner or branch
+ * manager only, and never below what has already been collected.
+ */
+export async function adjustMembershipDiscount(args: {
+  membershipId: string
+  discountPaisa: number
+  discountReason: Database['public']['Enums']['discount_reason'] | null
+  discountNote: string | null
+  reason: string
+}) {
+  const supabase = await createClient()
+
+  return unwrap<{
+    membership_id: string
+    member_id: string
+    invoice_id: string
+    invoice_no: string
+    subtotal_paisa: number
+    previous_discount_paisa: number
+    discount_paisa: number
+    discount_reason: Database['public']['Enums']['discount_reason'] | null
+    total_paisa: number
+    paid_paisa: number
+    due_paisa: number
+    status: Database['public']['Enums']['invoice_status']
+  }>(
+    await supabase.rpc('adjust_membership_discount', {
+      p_membership_id: args.membershipId,
+      p_discount_paisa: args.discountPaisa,
+      // The RPC refuses a null reason itself, with the same sentence the sale
+      // uses. The generated Args type reads it as non-null because it has no
+      // default.
+      p_discount_reason: args.discountReason as Database['public']['Enums']['discount_reason'],
+      p_reason: args.reason,
+      p_discount_note: args.discountNote ?? undefined,
+    })
+  )
+}
+
 export async function cancelMembership(membershipId: string, reason: string) {
   const supabase = await createClient()
   return unwrap<RpcResult>(

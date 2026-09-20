@@ -140,6 +140,24 @@ export const adjustMembershipDatesSchema = membershipIdSchema.extend({
   reason: z.string().trim().min(3, 'Say why the dates are changing').max(500),
 })
 
+/**
+ * Lowering the price of a membership already sold. The desk types the new
+ * price; the form works out the discount against the invoice subtotal it was
+ * rendered with, so what reaches the RPC is the same shape a sale uses and the
+ * two validations cannot drift.
+ *
+ * The reason is mandatory and separate from discountReason: the enum says what
+ * kind of discount it is, the sentence says why it was agreed after the fact.
+ */
+export const adjustMembershipDiscountSchema = refineDiscount(
+  membershipIdSchema.extend({
+    discountPaisa: rupeesSchema,
+    discountReason: discountReasonSchema,
+    discountNote: discountNoteSchema,
+    reason: z.string().trim().min(3, 'Say why the price is changing').max(500),
+  })
+)
+
 export const cancelMembershipSchema = membershipIdSchema.extend({
   reason: z.string().trim().min(3, 'Say why it is being cancelled').max(500),
 })
