@@ -211,6 +211,50 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
+- [ ] **2026-09-21** A sale entered a day late is dated the day it was keyed in.
+      `members.joined_on` defaults to `org_today()` and nothing can override it,
+      `invoices.issued_on` is set by `prepare_invoice_row`, and `payments.paid_at`
+      is `now()` -- so a member registered this morning for someone who walked in
+      yesterday joins today, and the cash lands in today's drawer. The membership
+      start date is already settable (`register_member.p_start_date`), which makes
+      the gap visible: the plan can start on the 14th while the member "joined" on
+      the 21st. M00051 was corrected by hand (joined_on, issued_on and paid_at
+      moved back one day, `payments_immutable` disabled for the one update) --
+      a hand edit to financial rows is exactly what this project is built to avoid,
+      so the desk needs a supported way to say when the sale actually happened.
+      Decide the shape: a backdate-only date on registration, whether it carries
+      the invoice and the payment with it, and who may set it.
+
+- [x] **2026-09-21** The drawer sheet says more than one number. `/payments`
+      showed NET COLLECTED above a grouped table and nothing else, so a refund
+      quietly shrank the net and inflated the transaction count, the cash that
+      should be in the box was added to the FonePay that is not, and the sheet
+      that exists to account for a day's money could not name a single member
+      who paid. Five KPI tiles with a previous-day comparison, a discount strip,
+      per-collector expansion down to individual payments, and a "members who
+      paid" table. Three new functions rather than a wider `daily_collection`:
+      `daily_collection_summary`, `daily_collection_detail` (migrations
+      `20260920130000`, `20260920130200`) and `discount_report`. `StatTile` was
+      lifted out of `components/dashboard/status-tiles.tsx` into
+      `components/app/stat-tile.tsx` because the arrears tab had grown a
+      hand-copied twin. Gate: `supabase/tests/daily_collection_summary.sql`.
+
+- [x] **2026-09-21** The app shell printed itself. `app/(app)/layout.tsx` had no
+      print handling at all, so printing any console screen put the navigation
+      sidebar and the org header on the paper -- including the drawer sheet,
+      which is printed at the end of every shift. Sidebar and header are now
+      `print:hidden`, `<main>` drops its padding, and the `thead`/`tfoot` repeat
+      rules in `globals.css` were widened off `.doc-a4` so a two-page sheet
+      keeps its column headings and its branch total.
+
+- [ ] **2026-09-21** React DevTools logs "The children should not have changed
+      if we pass in the same set" on `/payments`, from inside the extension's
+      own `updateVirtualInstanceRecursively`. It is DevTools failing to walk an
+      RSC tree whose server-rendered rows are passed as props into a client
+      component (`ExpandableCollector`), not an app error: no hydration or
+      DOM-nesting warning accompanies it and nothing misbehaves. Worth
+      re-checking against a later DevTools release before treating it as ours.
+
 - [ ] **2026-09-20** Two SQL test files no longer run, found while regression
       testing the price-adjust work. `tenant_isolation.sql:79-84` catches
       `insufficient_privilege` for a self-role-change, but
@@ -237,12 +281,16 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       total. Migrations `20260920120000`-`20260920120300`. Gate:
       `supabase/tests/adjust_membership_discount.sql`.
 
-- [ ] **2026-09-20** No discount report anywhere. `plan_mix` sums
+- [x] **2026-09-20** No discount report anywhere. `plan_mix` sums
       `memberships.price_paisa` and ignores `discount_paisa` entirely, so
       neither sale-time nor after-the-fact discounts are totalled for the
       owner -- who can now give them from two places. Wants a
       `discount_report(p_branch_ids, p_from, p_to)` beside `daily_collection`,
-      broken down by `discount_reason`.
+      broken down by `discount_reason`. Done 2026-09-21, migration
+      `20260920130100`: reads `invoices` rather than `memberships`, so a sale
+      re-priced after the fact counts as it was finally billed. Surfaced on the
+      drawer sheet as a reason strip; a `/reports/discounts` screen over the
+      same function is still open.
 
 - [ ] **2026-09-20** Flutter app has no "Adjust price". The RPC is the boundary
       and refuses anyone but an owner or branch manager, so the mobile app is
