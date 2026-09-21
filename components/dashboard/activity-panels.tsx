@@ -46,7 +46,9 @@ export async function RecentPaymentsPanel({ branchIds }: { branchIds: string[] |
                 href={`/members/${row.member_id}`}
                 title={nameOf(row.member as Named)}
                 subtitle={`${PAYMENT_METHOD_LABELS[row.method]} · ${formatDate(row.paid_at)} ${formatTime(row.paid_at)}`}
-                value={`${out ? '-' : ''}${formatMoney(row.amount_paisa)}`}
+                // Refunds and reversals are stored negative, so the sign is
+                // already in the number -- formatMoney would print it twice.
+                value={`${out ? '−' : ''}${formatMoney(Math.abs(row.amount_paisa))}`}
                 note={row.kind === 'refund' ? 'refund' : row.kind === 'reversal' ? 'never received' : null}
                 emphasis={out}
               />

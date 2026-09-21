@@ -155,7 +155,7 @@ export function CollectionSheet({
       <CollectionDiscounts rows={discounts} />
 
       {groups.map((branch) => (
-        <section key={branch.branchId} className="flex flex-col gap-2 break-inside-avoid">
+        <section key={branch.branchId} className="flex flex-col gap-2">
           <div className="flex items-baseline justify-between">
             <h2 className="text-base font-semibold">{branch.branchName}</h2>
             <Amount paisa={branch.totalPaisa} className="font-semibold" />

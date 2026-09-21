@@ -16,7 +16,7 @@ import {
 import { StatusTiles } from '@/components/dashboard/status-tiles'
 import { requireStaff } from '@/lib/auth'
 import { orgSnapshot } from '@/lib/db/reports'
-import { canViewReports } from '@/lib/roles'
+import { canViewMembers, canViewReports } from '@/lib/roles'
 import { resolveBranchScope } from '@/lib/scope'
 
 /**
@@ -59,6 +59,9 @@ export default async function DashboardPage({
   // Trainers see who is in and who is lapsing, not the takings. Same line the
   // tiles are drawn from, so the two never disagree.
   const charts = canViewReports(staff)
+  // The expiring list is a call list, but every row links into /members, which
+  // trainers may not open. A panel whose links bounce is worse than no panel.
+  const memberLists = canViewMembers(staff)
 
   return (
     <div className="flex flex-col gap-6">
@@ -116,9 +119,11 @@ export default async function DashboardPage({
         <Suspense key={`visitors-${scope.label}`} fallback={<ChartSkeleton className="[&>*:last-child]:h-[150px]" />}>
           <RecentVisitorsPanel branchIds={scope.branchIds} />
         </Suspense>
-        <Suspense key={`expiring-${scope.label}`} fallback={<ChartSkeleton className="[&>*:last-child]:h-[150px]" />}>
-          <ExpiringSoonPanel branchIds={scope.branchIds} />
-        </Suspense>
+        {memberLists ? (
+          <Suspense key={`expiring-${scope.label}`} fallback={<ChartSkeleton className="[&>*:last-child]:h-[150px]" />}>
+            <ExpiringSoonPanel branchIds={scope.branchIds} />
+          </Suspense>
+        ) : null}
       </div>
     </div>
   )

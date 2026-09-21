@@ -42,6 +42,9 @@ type ReportDefinition = {
  * database first and then apply the same filter the page applies, exactly as
  * the page itself does, so the file matches what is on screen.
  */
+/** Reports that cover a single day rather than resolvePeriod's window. */
+const DAY_SCOPED_REPORTS = new Set(['collection', 'collection-detail'])
+
 const REPORTS: Record<string, ReportDefinition> = {
   revenue: {
     fetch: async ({ scope, period }) => {
@@ -336,7 +339,13 @@ export async function GET(
   const body = toCsv(rows, definition.columns)
 
   const branchPart = scope.selectedId ? 'branch' : 'all'
-  const filename = `${report}-${branchPart}-${period.from}-to-${period.to}.csv`
+  // The collection reports cover one day, which resolvePeriod knows nothing
+  // about: naming those files after a 30-day window is how a sheet for the 1st
+  // goes into a folder as "to-2026-09-21".
+  const datePart = DAY_SCOPED_REPORTS.has(report)
+    ? first(searchParams.on) || todayInTimezone()
+    : `${period.from}-to-${period.to}`
+  const filename = `${report}-${branchPart}-${datePart}.csv`
 
   return new Response(body, {
     headers: {

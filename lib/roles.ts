@@ -32,6 +32,13 @@ export const canViewReports = (staff: CurrentStaff) =>
   staff.role === 'owner' || staff.role === 'manager'
 
 /**
+ * Who may open /members and a member's record. Trainers work from the floor
+ * and the check-in screen, and the nav has never offered them the roll -- so
+ * nothing else may hand them a link into it either.
+ */
+export const canViewMembers = (staff: CurrentStaff) => staff.role !== 'trainer'
+
+/**
  * Roles a staff member may hand out. Owners appoint anyone; managers staff
  * their own floor but cannot create peers or superiors. The RLS insert policy
  * enforces the owner half of this; the manager-to-manager case is policy we
