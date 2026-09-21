@@ -2227,6 +2227,7 @@ export type Database = {
           email: string
           full_name: string
           org_id: string
+          org_legal_name: string | null
           org_name: string
           role: Database["public"]["Enums"]["staff_role"]
           staff_id: string

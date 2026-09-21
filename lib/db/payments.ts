@@ -23,6 +23,42 @@ export async function listPaymentsForMember(memberId: string) {
   return data
 }
 
+/**
+ * The newest payments across the scope, named. The dashboard's activity strip
+ * -- a handful of rows answering "what came in just now", which the daily
+ * collection sheet answers for a whole day at a time.
+ *
+ * Refunds and reversals ride in the same table under `kind`, and they are left
+ * in on purpose: money going back out is the row a desk most wants to notice
+ * without being told.
+ */
+export async function recentPayments(args: {
+  branchIds?: string[] | null
+  limit?: number
+} = {}) {
+  const supabase = await createClient()
+
+  let request = supabase
+    .from('payments')
+    // The fkey is ambiguous on its own -- it resolves to both members and the
+    // overview view -- so the embed names the relation as well as the key.
+    .select('id, member_id, amount_paisa, method, kind, paid_at, member:members!payments_member_fkey(full_name)')
+    .order('paid_at', { ascending: false })
+    // paid_at can be backdated and rows written together share it, so the id
+    // is the tiebreak that keeps the strip stable between renders.
+    .order('id', { ascending: false })
+    .limit(args.limit ?? 6)
+
+  if (args.branchIds) {
+    request = request.in('branch_id', args.branchIds)
+  }
+
+  const { data, error } = await request
+
+  if (error) throw error
+  return data ?? []
+}
+
 export async function recordPayment(args: {
   invoiceId: string
   amountPaisa: number

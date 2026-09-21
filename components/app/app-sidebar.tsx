@@ -35,6 +35,9 @@ export function AppSidebar({ staff }: { staff: CurrentStaff }) {
     if (isMobile) setOpenMobile(false)
   }
 
+  const legalName = staff.orgLegalName?.trim()
+  const subtitle = legalName && legalName !== staff.orgName ? legalName : null
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -50,9 +53,14 @@ export function AppSidebar({ staff }: { staff: CurrentStaff }) {
               </span>
               <span className="grid flex-1 text-left leading-tight">
                 <span className="truncate font-semibold">{staff.orgName}</span>
-                <span className="truncate text-xs text-muted-foreground">
-                  Lord of Gyms
-                </span>
+                {/* The registered name, and only when it says something the
+                    line above does not. A gym that never filled it in gets one
+                    line rather than the same name twice. */}
+                {subtitle ? (
+                  <span className="truncate text-xs text-muted-foreground">
+                    {subtitle}
+                  </span>
+                ) : null}
               </span>
             </SidebarMenuButton>
           </SidebarMenuItem>

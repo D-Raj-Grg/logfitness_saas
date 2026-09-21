@@ -211,6 +211,17 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
+- [x] **2026-09-21** The dashboard showed shapes and no names, and the sidebar
+      called every gym "Lord of Gyms". Four activity panels below the charts --
+      recent payments, new and renewed memberships, recent visitors, and
+      memberships expiring within seven days -- each row linking to its record.
+      Payments and sales sit behind `canViewReports`; visitors and expiries are
+      the call list every role works from. No new report functions: two
+      PostgREST reads (`recentPayments`, `recentMemberships`) plus the existing
+      `listVisitors` and `listMembers`. The sidebar subtitle now reads
+      `orgs.legal_name`, carried on `current_staff()`
+      (`20260921093000_current_staff_knows_the_registered_name.sql`).
+
 - [ ] **2026-09-21** A sale entered a day late is dated the day it was keyed in.
       `members.joined_on` defaults to `org_today()` and nothing can override it,
       `invoices.issued_on` is set by `prepare_invoice_row`, and `payments.paid_at`

@@ -17,6 +17,36 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-09-21 — The dashboard names names
+
+### Added
+
+- **Four activity panels below the dashboard charts.** The charts said how much
+  and how many; the panels say who. Recent payments (money in and out, named,
+  with method and time), new and renewed memberships (plan and what was billed
+  after discount), recent visitors (phone and where the follow-up stands), and
+  memberships expiring within seven days (phone and days left, the closest ones
+  in red). Every row links to the record behind it, and every panel links to the
+  table it is a window onto.
+- Payments and sales sit behind the same reports gate as the charts, so a
+  trainer sees the two panels that are a call list and not the two that are the
+  takings. The whole strip follows the branch switcher.
+
+### Fixed
+
+- **The sidebar called every gym "Lord of Gyms".** The line under the gym name
+  was a literal typed into the component rather than anything the gym had ever
+  entered. It now shows the registered name from Settings, and shows nothing at
+  all when that name would only repeat the one above it.
+
+### Database
+
+- `current_staff()` returns `org_legal_name`. Dropped and recreated rather than
+  replaced, because the return type gained a column
+  (`20260921093000_current_staff_knows_the_registered_name.sql`).
+
+---
+
 ## 2026-09-21 — The drawer sheet says more than one number
 
 ### Added

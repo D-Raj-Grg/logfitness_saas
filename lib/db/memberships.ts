@@ -47,6 +47,41 @@ export async function listInvoicesForMember(memberId: string) {
 // and any payment either all land or none do. See supabase/migrations for the
 // function bodies; these are thin, typed wrappers.
 
+/**
+ * The newest memberships sold across the scope, named and priced.
+ *
+ * Ordered by created_at rather than start_date: this answers "what was sold",
+ * and a membership keyed today for a start date next week was still today's
+ * sale. previous_membership_id is what separates a new member from a renewal
+ * -- the caller reads it rather than a flag, because that column is already
+ * the chain the rest of the system walks.
+ */
+export async function recentMemberships(args: {
+  branchIds?: string[] | null
+  limit?: number
+} = {}) {
+  const supabase = await createClient()
+
+  let request = supabase
+    .from('memberships')
+    // The fkey resolves to both members and the overview view, so the embed
+    // names the relation alongside the key.
+    .select('id, member_id, plan_name, price_paisa, discount_paisa, start_date, end_date, previous_membership_id, created_at, cancelled_at, member:members!memberships_member_fkey(full_name)')
+    .is('cancelled_at', null)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(args.limit ?? 6)
+
+  if (args.branchIds) {
+    request = request.in('branch_id', args.branchIds)
+  }
+
+  const { data, error } = await request
+
+  if (error) throw error
+  return data ?? []
+}
+
 export async function renewMembership(args: {
   memberId: string
   planId: string

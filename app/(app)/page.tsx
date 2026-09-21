@@ -1,6 +1,12 @@
 import { Suspense } from 'react'
 
 import { ChartSkeleton, StatusTilesSkeleton, TableSkeleton } from '@/components/app/skeletons'
+import {
+  ExpiringSoonPanel,
+  RecentMembershipsPanel,
+  RecentPaymentsPanel,
+  RecentVisitorsPanel,
+} from '@/components/dashboard/activity-panels'
 import { BranchTable } from '@/components/dashboard/branch-table'
 import {
   AttendancePanel,
@@ -91,6 +97,29 @@ export default async function DashboardPage({
           </Suspense>
         </div>
       ) : null}
+
+      {/* What the charts cannot say: the individual rows behind them, each one
+          a name someone can act on. Money and sales are the reports gate --
+          the same line the charts are behind. Visitors and expiries are the
+          desk's call list, which every role works from. */}
+      <div className="grid gap-3 md:grid-cols-2">
+        {charts ? (
+          <>
+            <Suspense key={`payments-${scope.label}`} fallback={<ChartSkeleton className="[&>*:last-child]:h-[150px]" />}>
+              <RecentPaymentsPanel branchIds={scope.branchIds} />
+            </Suspense>
+            <Suspense key={`sales-${scope.label}`} fallback={<ChartSkeleton className="[&>*:last-child]:h-[150px]" />}>
+              <RecentMembershipsPanel branchIds={scope.branchIds} />
+            </Suspense>
+          </>
+        ) : null}
+        <Suspense key={`visitors-${scope.label}`} fallback={<ChartSkeleton className="[&>*:last-child]:h-[150px]" />}>
+          <RecentVisitorsPanel branchIds={scope.branchIds} />
+        </Suspense>
+        <Suspense key={`expiring-${scope.label}`} fallback={<ChartSkeleton className="[&>*:last-child]:h-[150px]" />}>
+          <ExpiringSoonPanel branchIds={scope.branchIds} />
+        </Suspense>
+      </div>
     </div>
   )
 }

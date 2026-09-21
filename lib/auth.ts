@@ -33,6 +33,7 @@ export const getCurrentStaff = cache(async function getCurrentStaff(): Promise<C
     staffId: row.staff_id,
     orgId: row.org_id,
     orgName: row.org_name,
+    orgLegalName: row.org_legal_name,
     fullName: row.full_name,
     email: row.email,
     role: row.role,

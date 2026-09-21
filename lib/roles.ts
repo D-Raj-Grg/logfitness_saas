@@ -6,6 +6,8 @@ export type CurrentStaff = {
   staffId: string
   orgId: string
   orgName: string
+  /** orgs.legal_name -- the registered name, null when it matches the trading name. */
+  orgLegalName: string | null
   fullName: string
   email: string
   role: StaffRole
