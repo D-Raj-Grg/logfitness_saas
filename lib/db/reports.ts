@@ -106,3 +106,25 @@ export async function planMix(branchIds?: string[] | null) {
   if (error) throw error
   return data ?? []
 }
+
+/**
+ * Money given away over a date range, by branch and discount reason.
+ *
+ * Reads invoices rather than memberships, so a sale re-priced after the fact
+ * through adjust_membership_discount is counted as it was finally billed. The
+ * drawer sheet calls this with from = to = the day on screen.
+ */
+export async function discountReport(
+  args: { branchIds?: string[] | null; from?: string; to?: string } = {}
+) {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase.rpc('discount_report', {
+    p_branch_ids: args.branchIds ?? undefined,
+    p_from: args.from ?? undefined,
+    p_to: args.to ?? undefined,
+  })
+
+  if (error) throw error
+  return data ?? []
+}

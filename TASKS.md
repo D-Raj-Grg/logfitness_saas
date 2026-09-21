@@ -237,7 +237,10 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       `20260920130000`, `20260920130200`) and `discount_report`. `StatTile` was
       lifted out of `components/dashboard/status-tiles.tsx` into
       `components/app/stat-tile.tsx` because the arrears tab had grown a
-      hand-copied twin. Gate: `supabase/tests/daily_collection_summary.sql`.
+      hand-copied twin. The member table carries phone and outstanding balance
+      (migration `20260920130300`) so chasing the day's shortfalls is one list
+      rather than fourteen tabs.
+      Gate: `supabase/tests/daily_collection_summary.sql`.
 
 - [x] **2026-09-21** The app shell printed itself. `app/(app)/layout.tsx` had no
       print handling at all, so printing any console screen put the navigation

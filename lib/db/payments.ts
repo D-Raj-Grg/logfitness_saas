@@ -115,6 +115,47 @@ export async function dailyCollection(
   return data
 }
 
+/**
+ * The same day, one row per branch plus a totals row: gross, refunds, net, what
+ * should be in the cash box, who paid, and what was billed. A separate call
+ * from dailyCollection because it answers a different question at a different
+ * grain -- see 20260920130000.
+ *
+ * The totals row is the one with a null branch_id.
+ */
+export async function dailyCollectionSummary(
+  args: { on?: string; branchIds?: string[] | null } = {}
+) {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase.rpc('daily_collection_summary', {
+    p_on: args.on ?? undefined,
+    p_branch_ids: args.branchIds ?? undefined,
+  })
+
+  if (error) throw error
+  return data ?? []
+}
+
+/**
+ * Every payment taken on one day, named and timed. The whole day in one call:
+ * the sheet expands rows on the client, and a query per expanded row would be a
+ * round trip per click.
+ */
+export async function dailyCollectionDetail(
+  args: { on?: string; branchIds?: string[] | null } = {}
+) {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase.rpc('daily_collection_detail', {
+    p_on: args.on ?? undefined,
+    p_branch_ids: args.branchIds ?? undefined,
+  })
+
+  if (error) throw error
+  return data ?? []
+}
+
 export async function arrearsReport(branchIds?: string[] | null) {
   const supabase = await createClient()
 

@@ -39,9 +39,16 @@ export default async function AppLayout({
 
   return (
     <SidebarProvider>
-      <AppSidebar staff={staff} />
+      {/* The console is a screen, not a document: on paper the navigation and
+          the org header are furniture around whatever was actually being
+          printed. The drawer sheet at /payments gets printed at the end of
+          every shift, and until now it came out with the sidebar down the
+          left. */}
+      <div className="print:hidden">
+        <AppSidebar staff={staff} />
+      </div>
       <SidebarInset>
-        <header className="flex h-14 min-w-0 shrink-0 items-center gap-2 border-b px-4">
+        <header className="flex h-14 min-w-0 shrink-0 items-center gap-2 border-b px-4 print:hidden">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
           <span className="text-sm font-medium">{staff.orgName}</span>
@@ -53,7 +60,7 @@ export default async function AppLayout({
             it any wide child -- a table that scrolls inside its own box, a
             long unbroken string -- sets the minimum width of the whole page
             and scrolls the layout sideways on a phone. */}
-        <main className="flex min-w-0 flex-1 flex-col gap-4 p-4">{children}</main>
+        <main className="flex min-w-0 flex-1 flex-col gap-4 p-4 print:p-0">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   )

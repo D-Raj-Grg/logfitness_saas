@@ -17,6 +17,71 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-09-21 — The drawer sheet says more than one number
+
+### Added
+
+- **Five figures on `/payments` instead of one.** Net collected, refunded and
+  reversed, what should physically be in the cash box (with the digital total
+  beside it, so `cash + digital = net` is checkable by eye), how many members
+  paid, and what was billed today with the part of it still owed. Each carries
+  a comparison with the day before.
+- **Every collector's rows expand** to the payments behind them: time, member,
+  method, reference number, invoice, and a link to the receipt. The sheet could
+  previously say "twelve FonePay transactions" and never name one of the twelve.
+- **A "members who paid" table**, always visible, one row per person rather than
+  per transaction, sorted by what they paid: name and code, phone, when they
+  paid, method, invoice or reference, the amount, and what they still owe
+  altogether. The last two answer the questions the list provokes -- how do I
+  reach them, and are they square -- which previously meant opening each member
+  in turn.
+- **A discount strip** showing what was given away that day, broken down by
+  reason. Discounts have been recordable since 10 September and givable from two
+  places since yesterday, and nothing had ever totalled them.
+- **A second export, `collection-detail`** — the day line by line, with the
+  reference numbers an accountant reconciles against a bank statement. The
+  grouped export gains a `Date` column, because until now the day it covered
+  survived exactly one rename of the file.
+
+### Fixed
+
+- **The headline transaction count counted refunds as sales.** It summed
+  `txn_count` across every payment kind, so a day with one refund read as one
+  transaction busier than it was. It now reads the payment count.
+- **Printing any console screen put the sidebar on the paper.**
+  `app/(app)/layout.tsx` had no print handling at all, which mattered most on
+  the one screen that gets printed at the end of every shift. The sheet now
+  prints without the navigation, carries its detail lines whether or not anyone
+  expanded them, repeats its column headings and totals onto a second page, and
+  ends with a counted-by / handed-to / variance strip that exists only on paper.
+
+### Database
+
+- Migrations `20260920130000` and `20260920130200` add `daily_collection_summary`
+  and `daily_collection_detail`. `daily_collection` is untouched: its grain is
+  right for the table body, and the new facts are at two different grains, so
+  widening it would have meant null-padded columns and a discriminator.
+  `distinct_payers` on the totals row is deliberately re-counted rather than
+  summed — a member who paid at two branches is one member who paid.
+- Migration `20260920130300` adds the member's phone and total outstanding
+  balance to `daily_collection_detail`. The balance is everything they owe, not
+  this invoice's remainder: a member who cleared one bill while another runs is
+  not square. It is read from `member_overview`, so the sheet cannot disagree
+  with the member's own page or with the arrears tab.
+- Migration `20260920130100` adds `discount_report(branch_ids, from, to)`,
+  closing a backlog item. It reads `invoices` rather than `memberships`, so a
+  sale re-priced after the fact is counted as it was finally billed.
+- New gate `supabase/tests/daily_collection_summary.sql` ties the summary to
+  both `daily_collection` and `revenue_report`, so the three cannot drift.
+
+### Changed
+
+- `StatTile` moved from inside `components/dashboard/status-tiles.tsx` to
+  `components/app/stat-tile.tsx`. The arrears tab had grown a hand-copied twin
+  of the same markup; both tabs now use the one component.
+
+---
+
 ## 2026-09-20 — A price agreed after the sale
 
 ### Added

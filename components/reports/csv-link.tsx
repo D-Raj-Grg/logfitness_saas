@@ -9,7 +9,14 @@ import { useSearchParams } from 'next/navigation'
  * to (branch, period, bucket, band, the collection day) rather than always
  * exporting the caller's default view.
  */
-export function CsvLink({ report }: { report: string }) {
+export function CsvLink({
+  report,
+  label = 'Export CSV',
+}: {
+  report: string
+  /** Named when a screen exports more than one file, so the two are tellable apart. */
+  label?: string
+}) {
   const searchParams = useSearchParams()
   const query = searchParams.toString()
   const href = `/api/reports/${report}/csv${query ? `?${query}` : ''}`
@@ -19,7 +26,7 @@ export function CsvLink({ report }: { report: string }) {
       href={href}
       className="text-sm font-medium text-primary underline-offset-4 hover:underline print:hidden"
     >
-      Export CSV
+      {label}
     </a>
   )
 }

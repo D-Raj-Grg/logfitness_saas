@@ -150,6 +150,28 @@ what kind of discount it is. The two GUC doors are
 (invoice), both `set local`, neither reachable from PostgREST.
 Gate: `supabase/tests/adjust_membership_discount.sql`.
 
+**Reporting decision (2026-09-21): three functions, not one wider one.** The
+drawer sheet needed gross/refunds/net, cash versus digital, who paid, and what
+was billed -- and the lines behind every group. `daily_collection` was left
+exactly as it was: its grain (branch, collector, method, kind) is right for the
+table body, and the new facts sit at two other grains, so widening it would have
+meant null-padded columns, a discriminator, and edits to three test files and
+the CSV route. `daily_collection_summary` answers the day per branch plus a
+totals row, `daily_collection_detail` returns the payments underneath, and
+`discount_report` totals what was given away. The detail function takes no
+collector or method parameter: the sheet is a server component, and one bounded
+query for the whole day is what lets a row expand without a round trip and lets
+the printed sheet carry detail nobody clicked for.
+
+Two invariants are load-bearing and easy to break. `distinct_payers` on the
+totals row is re-counted, not summed, because a member who paid at two branches
+is one member who paid -- the only place the `org_snapshot` "totals = the sum of
+the branches" rule deliberately fails. And the refund and reversal columns reuse
+`revenue_report`'s filter expressions verbatim; the gate asserts the summary,
+`daily_collection` and `revenue_report` agree on the same day, because the day
+they disagree is the day nobody trusts any of them.
+Gate: `supabase/tests/daily_collection_summary.sql`.
+
 **An invoice's money columns are frozen (2026-09-20).** `memberships` has been
 append-only at the money since it was created and `payments` has no UPDATE
 policy at all, but `invoices` carried the "member-facing staff amend invoices"

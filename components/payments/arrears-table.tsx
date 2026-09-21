@@ -5,8 +5,8 @@ import {
   isArrearsBucket,
   type ArrearsBucket,
 } from '@/components/payments/arrears-buckets'
+import { StatTile } from '@/components/app/stat-tile'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
 import {
   Table,
   TableBody,
@@ -57,28 +57,18 @@ export function ArrearsTable({
   return (
     <div className="flex flex-col gap-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <Card>
-          <CardContent className="flex flex-col gap-1 py-4">
-            <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Total outstanding
-            </span>
-            <span className="text-2xl font-semibold text-destructive tabular-nums">
-              {formatMoney(totalOutstanding)}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {allRows.length} member{allRows.length === 1 ? '' : 's'}
-            </span>
-          </CardContent>
-        </Card>
+        <StatTile
+          label="Total outstanding"
+          value={formatMoney(totalOutstanding)}
+          className="text-destructive"
+          hint={`${allRows.length} member${allRows.length === 1 ? '' : 's'}`}
+        />
         {ARREARS_BUCKETS.map((bucket) => (
-          <Card key={bucket}>
-            <CardContent className="flex flex-col gap-1 py-4">
-              <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                {bucket} days
-              </span>
-              <span className="text-2xl font-semibold tabular-nums">{bucketCounts[bucket]}</span>
-            </CardContent>
-          </Card>
+          <StatTile
+            key={bucket}
+            label={`${bucket} days`}
+            value={String(bucketCounts[bucket])}
+          />
         ))}
       </div>
 

@@ -2246,6 +2246,64 @@ export type Database = {
           txn_count: number
         }[]
       }
+      daily_collection_detail: {
+        Args: { p_branch_ids?: string[]; p_on?: string }
+        Returns: {
+          amount_paisa: number
+          branch_id: string
+          branch_name: string
+          invoice_id: string
+          invoice_no: string
+          kind: Database["public"]["Enums"]["payment_kind"]
+          member_code: string
+          member_due_paisa: number
+          member_id: string
+          member_name: string
+          member_phone: string
+          method: Database["public"]["Enums"]["payment_method"]
+          paid_at: string
+          payment_id: string
+          reason: string
+          reference_no: string
+          staff_id: string
+          staff_name: string
+        }[]
+      }
+      daily_collection_summary: {
+        Args: { p_branch_ids?: string[]; p_on?: string }
+        Returns: {
+          billed_discount_paisa: number
+          billed_due_paisa: number
+          billed_paisa: number
+          branch_id: string
+          branch_name: string
+          cash_paisa: number
+          digital_paisa: number
+          distinct_payers: number
+          gross_paisa: number
+          invoice_count: number
+          net_paisa: number
+          on_date: string
+          payment_count: number
+          refund_count: number
+          refunds_paisa: number
+          reversal_count: number
+          reversals_paisa: number
+          txn_count: number
+        }[]
+      }
+      discount_report: {
+        Args: { p_branch_ids?: string[]; p_from?: string; p_to?: string }
+        Returns: {
+          branch_id: string
+          branch_name: string
+          discount_paisa: number
+          invoice_count: number
+          net_billed_paisa: number
+          reason: Database["public"]["Enums"]["discount_reason"]
+          subtotal_paisa: number
+        }[]
+      }
       enqueue_birthday_greetings: { Args: never; Returns: number }
       enqueue_dues_reminders: { Args: never; Returns: number }
       enqueue_notification: {

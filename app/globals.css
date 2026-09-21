@@ -175,6 +175,14 @@
   color: var(--ink);
 }
 
+/* The drawer sheet folds a collector's individual payments away behind the
+   subtotal row. Hiding them here rather than in the component keeps the rows
+   themselves untouched across a toggle -- React only flips the attribute, and
+   the printed sheet below reveals them all regardless of what was clicked. */
+tbody[data-open='false'] tr[data-detail] {
+  display: none;
+}
+
 @media print {
   @page {
     size: A4;
@@ -202,19 +210,29 @@
     display: none !important;
   }
 
-  /* Totals live in a tfoot so they repeat if a document runs to two pages. */
-  .doc-a4 thead {
+  /* Totals live in a tfoot so they repeat if a document runs to two pages.
+     Not scoped to .doc-a4: the drawer sheet at /payments is an ordinary app
+     screen that gets printed at the end of every shift, and a second page
+     without its column headings or its branch total is a worse sheet than a
+     first page with them. */
+  thead {
     display: table-header-group;
   }
-  .doc-a4 tfoot {
+  tfoot {
     display: table-footer-group;
   }
-  .doc-a4 tr {
+  tr {
     break-inside: avoid;
   }
 
   .avoid-break {
     break-inside: avoid;
+  }
+
+  /* On paper the sheet is the complete record, so every folded payment line
+     comes back whether or not somebody expanded it on screen. */
+  tbody[data-open='false'] tr[data-detail] {
+    display: table-row;
   }
 
   /* Browsers drop backgrounds by default, so documents are drawn with rules

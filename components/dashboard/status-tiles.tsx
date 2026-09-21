@@ -1,39 +1,8 @@
-import Link from 'next/link'
-
-import { Card, CardContent } from '@/components/ui/card'
+import { StatTile } from '@/components/app/stat-tile'
 import type { orgSnapshot } from '@/lib/db/reports'
 import { formatMoney } from '@/lib/format'
-import { cn } from '@/lib/utils'
 
 type SnapshotRow = Awaited<ReturnType<typeof orgSnapshot>>[number]
-
-function StatTile({
-  label,
-  value,
-  href,
-  hint,
-  className,
-}: {
-  label: string
-  value: string
-  href: string
-  hint?: string
-  className?: string
-}) {
-  return (
-    <Link href={href} className="block rounded-xl focus-visible:outline-2 focus-visible:outline-ring">
-      <Card className="h-full transition-colors hover:bg-muted/40">
-        <CardContent className="flex flex-col gap-1 py-4">
-          <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            {label}
-          </span>
-          <span className={cn('text-2xl font-semibold tabular-nums', className)}>{value}</span>
-          {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
-        </CardContent>
-      </Card>
-    </Link>
-  )
-}
 
 /**
  * The dashboard's headline numbers, from the totals row of org_snapshot.

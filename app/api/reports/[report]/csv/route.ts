@@ -3,14 +3,18 @@ import { NextRequest } from 'next/server'
 import { requireRole } from '@/lib/auth'
 import { toCsv } from '@/lib/csv'
 import { absentMembers } from '@/lib/db/attendance'
-import { arrearsReport, dailyCollection } from '@/lib/db/payments'
+import {
+  arrearsReport,
+  dailyCollection,
+  dailyCollectionDetail,
+} from '@/lib/db/payments'
 import {
   attendanceTrend,
   membershipMovement,
   planMix,
   revenueReport,
 } from '@/lib/db/reports'
-import { formatMoney, todayInTimezone } from '@/lib/format'
+import { formatDateTime, formatMoney, todayInTimezone } from '@/lib/format'
 import { resolvePeriod, type ResolvedPeriod } from '@/lib/reports/period'
 import { resolveBranchScope, type BranchScope } from '@/lib/scope'
 
@@ -163,6 +167,9 @@ const REPORTS: Record<string, ReportDefinition> = {
       const on = first(searchParams.on) || todayInTimezone()
       const rows = await dailyCollection({ on, branchIds: scope.branchIds })
       return rows.map((row) => ({
+        // The day the sheet covers. The filename carries it too, but a
+        // filename survives exactly one rename, and this file gets renamed.
+        on,
         branch_name: row.branch_name,
         staff_name: row.staff_name,
         method: row.method,
@@ -172,12 +179,58 @@ const REPORTS: Record<string, ReportDefinition> = {
       }))
     },
     columns: [
+      { key: 'on', header: 'Date' },
       { key: 'branch_name', header: 'Branch' },
       { key: 'staff_name', header: 'Collected by' },
       { key: 'method', header: 'Method' },
       { key: 'kind', header: 'Kind' },
       { key: 'amount', header: 'Amount' },
       { key: 'txn_count', header: 'Transactions' },
+    ],
+  },
+
+  /**
+   * The same day, line by line. A different grain deserves its own file --
+   * `collection` is the shift's summary, and this is what gets reconciled
+   * against a gateway or bank statement, which needs the reference number and
+   * the member beside every amount.
+   */
+  'collection-detail': {
+    fetch: async ({ scope, searchParams }) => {
+      const on = first(searchParams.on) || todayInTimezone()
+      const rows = await dailyCollectionDetail({ on, branchIds: scope.branchIds })
+      return rows.map((row) => ({
+        on,
+        paid_at: formatDateTime(row.paid_at),
+        branch_name: row.branch_name,
+        staff_name: row.staff_name,
+        member_code: row.member_code,
+        member_name: row.member_name,
+        member_phone: row.member_phone ?? '',
+        method: row.method,
+        kind: row.kind,
+        amount: formatMoney(row.amount_paisa),
+        member_due: formatMoney(row.member_due_paisa),
+        reference_no: row.reference_no ?? '',
+        reason: row.reason ?? '',
+        invoice_no: row.invoice_no ?? '',
+      }))
+    },
+    columns: [
+      { key: 'on', header: 'Date' },
+      { key: 'paid_at', header: 'Time' },
+      { key: 'branch_name', header: 'Branch' },
+      { key: 'staff_name', header: 'Collected by' },
+      { key: 'member_code', header: 'Member code' },
+      { key: 'member_name', header: 'Member' },
+      { key: 'member_phone', header: 'Phone' },
+      { key: 'method', header: 'Method' },
+      { key: 'kind', header: 'Kind' },
+      { key: 'amount', header: 'Amount' },
+      { key: 'member_due', header: 'Member still owes' },
+      { key: 'reference_no', header: 'Reference no' },
+      { key: 'reason', header: 'Reason' },
+      { key: 'invoice_no', header: 'Invoice no' },
     ],
   },
 
