@@ -17,6 +17,61 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-09-27 — Passwords can be reset
+
+### Added
+
+- **"Reset password" on the Staff page** (`4cfdf52`, `83eba46`). Beside Edit on
+  any row the signed-in owner or manager may edit, under the same role ceiling.
+  Type a new password twice and it takes effect at once; the old one stops
+  working. For someone who never signed up it reads "Create account" instead
+  and makes the account with the password you chose, so a colleague who cannot
+  get an invitation email still gets in. Nobody resets their own password here.
+- **"Forgot password?" on the sign-in page** (`4cfdf52`). Enter an email, get
+  a link, set a new password, land signed in. The confirmation reads the same
+  whether or not the address belongs to anyone, so the form cannot be used to
+  find out which emails are on a team.
+
+### Fixed
+
+- **An invited colleague could show as Active with no account behind them**
+  (`83eba46`). Deactivate followed by Reactivate wrote `active` without asking
+  whether anyone had ever signed up, and the row lost its "Awaiting signup"
+  badge. Reactivate now sends an unlinked row back to "Awaiting signup".
+- **Someone who signed up after a reactivate could never be linked**
+  (`83eba46`). The self-service link only adopted rows still marked `invited`,
+  so a reactivated row was refused forever and its owner bounced to onboarding.
+  Any unlinked row for the email is now the invitation, whatever its status.
+
+### Security
+
+- **The reset link's origin came from the request** (`0fef647`). A forged Host
+  or Origin header could have put another domain in front of the reset token.
+  Supabase's redirect allow-list would have refused it; the origin now comes
+  from configuration so the link is trustworthy before it gets there.
+- **Reset password could take over an account at another gym** (`dc2eabb`).
+  For a few hours on `main`, inviting an email that already had an account and
+  pressing Reset adopted that account and overwrote its password. An account
+  already signing in as staff anywhere is now refused outright; one that exists
+  but is nobody's staff login is linked without touching its password, and its
+  owner receives a reset email instead. A password is only ever written to an
+  account this gym already held before the call or created inside it.
+
+### Database
+
+- `link_staff_account()` adopts any unlinked row matching the email, not only
+  `invited` ones; a deactivated row stays deactivated after linking. New
+  `link_staff_account_by_email(p_staff_id)` does the same on a colleague's
+  behalf for an owner or manager, and returns null when no account exists
+  (`20260927120000_staff_account_can_be_linked_by_a_manager.sql`).
+- `link_staff_account_by_email()` refuses an account that is already staff
+  anywhere
+  (`20260927123000_link_by_email_refuses_someone_elses_staff_account.sql`).
+- The app needs `SUPABASE_SERVICE_ROLE_KEY` for the Staff page reset, and the
+  Supabase redirect allow-list needs `<app>/auth/callback` for the emailed one.
+
+---
+
 ## 2026-09-21 — The dashboard names names
 
 ### Added
