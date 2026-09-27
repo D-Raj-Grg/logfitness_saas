@@ -5,6 +5,7 @@ import { z } from 'zod'
 
 import { createClient } from '@/lib/supabase/server'
 import { safeNext } from '@/lib/safe-next'
+import { siteOrigin } from '@/lib/site-origin'
 import {
   forgotPasswordSchema,
   resetPasswordSchema,
@@ -90,15 +91,9 @@ export async function requestPasswordReset(
     return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
   }
 
-  // The origin of an emailed link is never read from the request: a forged
-  // Host or Origin header would otherwise put an attacker's domain in front
-  // of the reset token. Supabase's redirect allow-list is the backstop; this
-  // makes the link trustworthy before it gets there.
-  const origin =
-    process.env.NEXT_PUBLIC_SITE_URL ??
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-      : 'http://localhost:3000')
+  // Supabase's redirect allow-list is the backstop; siteOrigin() makes the
+  // link trustworthy before it gets there.
+  const origin = siteOrigin()
 
   const supabase = await createClient()
   await supabase.auth.resetPasswordForEmail(parsed.data.email, {

@@ -10,6 +10,7 @@ import {
 } from '@/lib/db/notifications'
 import { assignableRoles } from '@/lib/roles'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { siteOrigin } from '@/lib/site-origin'
 import { createClient } from '@/lib/supabase/server'
 import {
   inviteStaffSchema,
@@ -342,7 +343,15 @@ export async function resetStaffPassword(
   // when there is none -- in which case the account is created here, with
   // this password, so "reset" doubles as "set up". Either way the row ends up
   // linked, and current_staff() can find them the next time they sign in.
+  //
+  // The password is only ever written to an account this org already holds:
+  // one linked before this call, or one created inside it. An account merely
+  // adopted here by email was created by someone else for their own purposes
+  // (the RPC refuses one that is already staff elsewhere, but a lone signup
+  // still qualifies), and overwriting its password would take it from them.
+  // They get a reset email instead, so the mailbox owner stays in control.
   let created = false
+  let adopted = false
   if (!authUserId) {
     const { data: linked, error: linkError } = await supabase.rpc(
       'link_staff_account_by_email',
@@ -352,6 +361,7 @@ export async function resetStaffPassword(
       return { error: linkError.message }
     }
     authUserId = linked
+    adopted = Boolean(linked)
 
     if (!authUserId) {
       const { data: account, error: createError } = await admin.auth.admin.createUser({
@@ -382,6 +392,16 @@ export async function resetStaffPassword(
       .update({ status: 'active' })
       .eq('id', target.id)
       .eq('org_id', actor.orgId)
+  }
+
+  if (adopted) {
+    await supabase.auth.resetPasswordForEmail(target.email, {
+      redirectTo: `${siteOrigin()}/auth/callback?next=/reset-password`,
+    })
+    revalidatePath('/staff')
+    return {
+      success: `${target.full_name} already had an account with ${target.email}, so it was linked and a password reset email was sent to them instead.`,
+    }
   }
 
   if (!created) {
