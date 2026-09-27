@@ -1,6 +1,5 @@
 'use server'
 
-import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
@@ -91,9 +90,15 @@ export async function requestPasswordReset(
     return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
   }
 
-  // The link must come back to this deployment, not whatever Site URL the
-  // Supabase project happens to hold, so the origin is taken from the request.
-  const origin = (await headers()).get('origin') ?? process.env.NEXT_PUBLIC_SITE_URL ?? ''
+  // The origin of an emailed link is never read from the request: a forged
+  // Host or Origin header would otherwise put an attacker's domain in front
+  // of the reset token. Supabase's redirect allow-list is the backstop; this
+  // makes the link trustworthy before it gets there.
+  const origin =
+    process.env.NEXT_PUBLIC_SITE_URL ??
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : 'http://localhost:3000')
 
   const supabase = await createClient()
   await supabase.auth.resetPasswordForEmail(parsed.data.email, {
