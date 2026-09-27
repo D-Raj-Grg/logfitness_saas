@@ -222,10 +222,10 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       -> `/auth/callback` (PKCE `exchangeCodeForSession`) -> `/reset-password`
       (`auth.updateUser`). `safeNext` moved to `lib/safe-next.ts` so the
       callback shares it.
-- [ ] **2026-09-27** Set `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` and the
+- [x] **2026-09-27** Set `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` and the
       Vercel project (all environments). Until then the staff reset reports
       "Password resets are not configured on this server yet."
-- [ ] **2026-09-27** Add `https://<app host>/auth/callback` (and the localhost
+- [x] **2026-09-27** Add `https://<app host>/auth/callback` (and the localhost
       equivalent) to Supabase Auth -> URL Configuration -> Redirect URLs, or
       the reset email's link is refused. Confirm the reset email template is
       sent from the custom SMTP sender, not the Supabase default.
