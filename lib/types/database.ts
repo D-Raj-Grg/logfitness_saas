@@ -2227,7 +2227,7 @@ export type Database = {
           email: string
           full_name: string
           org_id: string
-          org_legal_name: string | null
+          org_legal_name: string
           org_name: string
           role: Database["public"]["Enums"]["staff_role"]
           staff_id: string
@@ -2376,6 +2376,10 @@ export type Database = {
       }
       link_member_account: { Args: never; Returns: string }
       link_staff_account: { Args: never; Returns: string }
+      link_staff_account_by_email: {
+        Args: { p_staff_id: string }
+        Returns: string
+      }
       member_computed_status: {
         Args: { p_left_on: string; p_member_id: string }
         Returns: Database["public"]["Enums"]["member_status"]

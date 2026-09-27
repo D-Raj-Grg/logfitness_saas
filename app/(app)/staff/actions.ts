@@ -167,7 +167,7 @@ export async function setStaffStatus(
   // RLS rejection, and so a manager cannot deactivate an owner.
   const { data: target } = await supabase
     .from('staff')
-    .select('id, role')
+    .select('id, role, auth_user_id')
     .eq('id', parsed.data.staffId)
     .maybeSingle()
 
@@ -179,9 +179,15 @@ export async function setStaffStatus(
     return { error: 'Only an owner can change another owner.' }
   }
 
+  // Reactivating someone who never signed up puts them back to "awaiting
+  // signup", not "active": an active row with no account behind it looks
+  // fine in the table and then cannot be linked or given a password.
+  const status =
+    parsed.data.status === 'active' && !target.auth_user_id ? 'invited' : parsed.data.status
+
   const { error } = await supabase
     .from('staff')
-    .update({ status: parsed.data.status })
+    .update({ status })
     .eq('id', parsed.data.staffId)
     // Redundant next to RLS and the read above, but it keeps the blast radius
     // of any future policy change to a single org.
@@ -307,7 +313,7 @@ export async function resetStaffPassword(
   // from here, not from the form.
   const { data: target } = await supabase
     .from('staff')
-    .select('id, role, status, auth_user_id')
+    .select('id, role, status, auth_user_id, email, full_name')
     .eq('id', parsed.data.staffId)
     .eq('org_id', actor.orgId)
     .maybeSingle()
@@ -321,10 +327,6 @@ export async function resetStaffPassword(
     return { error: 'You cannot reset that person\'s password.' }
   }
 
-  if (!target.auth_user_id) {
-    return { error: 'They have not signed up yet, so there is no password to reset.' }
-  }
-
   let admin
   try {
     admin = createAdminClient()
@@ -332,15 +334,70 @@ export async function resetStaffPassword(
     return { error: 'Password resets are not configured on this server yet.' }
   }
 
-  const { error } = await admin.auth.admin.updateUserById(target.auth_user_id, {
-    password: parsed.data.password,
-  })
+  let authUserId = target.auth_user_id
 
-  if (error) {
-    return { error: error.message }
+  // An unlinked row means one of two things: they signed up but the link
+  // never happened (a reactivated row used to block it), or they never signed
+  // up at all. The RPC adopts an existing account by email and returns null
+  // when there is none -- in which case the account is created here, with
+  // this password, so "reset" doubles as "set up". Either way the row ends up
+  // linked, and current_staff() can find them the next time they sign in.
+  let created = false
+  if (!authUserId) {
+    const { data: linked, error: linkError } = await supabase.rpc(
+      'link_staff_account_by_email',
+      { p_staff_id: target.id }
+    )
+    if (linkError) {
+      return { error: linkError.message }
+    }
+    authUserId = linked
+
+    if (!authUserId) {
+      const { data: account, error: createError } = await admin.auth.admin.createUser({
+        email: target.email,
+        password: parsed.data.password,
+        email_confirm: true,
+        user_metadata: { full_name: target.full_name },
+      })
+      if (createError) {
+        return { error: createError.message }
+      }
+      created = true
+      authUserId = account.user.id
+
+      const { error: relinkError } = await supabase.rpc('link_staff_account_by_email', {
+        p_staff_id: target.id,
+      })
+      if (relinkError) {
+        return { error: relinkError.message }
+      }
+    }
   }
 
+  // A row still marked "awaiting signup" is now signed up.
+  if (target.status === 'invited') {
+    await supabase
+      .from('staff')
+      .update({ status: 'active' })
+      .eq('id', target.id)
+      .eq('org_id', actor.orgId)
+  }
+
+  if (!created) {
+    const { error } = await admin.auth.admin.updateUserById(authUserId, {
+      password: parsed.data.password,
+    })
+    if (error) {
+      return { error: error.message }
+    }
+  }
+
+  revalidatePath('/staff')
+
   return {
-    success: 'Password changed. They can sign in with it straight away.',
+    success: created
+      ? `Account created. ${target.full_name} can sign in with ${target.email} and this password.`
+      : 'Password changed. They can sign in with it straight away.',
   }
 }

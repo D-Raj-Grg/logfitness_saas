@@ -211,6 +211,19 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
+- [x] **2026-09-27** "Reset password" on Suraj's row said "They have not signed
+      up yet" although the table showed him Active. Deactivate -> Reactivate
+      writes `active` without checking `auth_user_id`, so an invited row loses
+      its "Awaiting signup" badge; and `link_staff_account()` only adopted
+      `invited` rows, so Taru (signed up, reactivated row) could never link.
+      Migration `20260927120000`: `link_staff_account()` adopts any unlinked
+      row for the email; new `link_staff_account_by_email(p_staff_id)` lets an
+      owner/manager do it for a colleague. `resetStaffPassword` now links an
+      existing account or, when none exists, creates it with the chosen
+      password (`auth.admin.createUser`, email confirmed) -- the dialog reads
+      "Create account" on invited rows. Reactivate sends an unlinked row back
+      to `invited`.
+
 - [x] **2026-09-27** Nobody could recover a lost password: no forgot-password
       page, and no way for an owner to set one for a colleague. Two flows now.
       Staff page: "Reset password" on any row the actor may edit (hidden while

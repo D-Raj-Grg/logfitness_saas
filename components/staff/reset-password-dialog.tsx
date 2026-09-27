@@ -75,7 +75,7 @@ function ResetPasswordForm({
 
       <div>
         <Button type="submit" disabled={pending || Boolean(state.success)}>
-          {pending ? 'Saving...' : 'Set password'}
+          {pending ? 'Saving...' : row.status === 'invited' ? 'Create account' : 'Set password'}
         </Button>
       </div>
     </form>
@@ -94,8 +94,9 @@ export function ResetPasswordDialog({ row }: { row: StaffListRow }) {
         <DialogHeader>
           <DialogTitle>Reset password for {row.full_name}</DialogTitle>
           <DialogDescription>
-            Use this when they have forgotten it. They can change it again
-            themselves from the sign-in page.
+            {row.status === 'invited'
+              ? 'They have not signed up yet. This creates their account with the password you choose.'
+              : 'Use this when they have forgotten it. They can change it again themselves from the sign-in page.'}
           </DialogDescription>
         </DialogHeader>
         {/* Keyed so a reopened dialog starts clean, not with a stale result. */}

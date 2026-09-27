@@ -126,9 +126,7 @@ export function StaffTable({
                         actorBranchIds={actorBranchIds}
                         branches={branches}
                       />
-                      {/* No account exists until the invitation is accepted,
-                          so there is no password to reset before then. */}
-                      {row.status !== 'invited' ? <ResetPasswordDialog row={row} /> : null}
+                      <ResetPasswordDialog row={row} />
                     </>
                   ) : null}
                   <StatusToggle row={row} />
