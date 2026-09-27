@@ -211,6 +211,25 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
+- [x] **2026-09-27** Nobody could recover a lost password: no forgot-password
+      page, and no way for an owner to set one for a colleague. Two flows now.
+      Staff page: "Reset password" on any row the actor may edit (hidden while
+      `invited`, since no account exists yet) -- `resetStaffPassword` reads the
+      target through RLS, applies the `assignableRoles` ceiling, then calls
+      `auth.admin.updateUserById` through the new service-role client in
+      `lib/supabase/admin.ts`. Login: "Forgot password?" -> `/forgot-password`
+      (`resetPasswordForEmail`, same notice whether or not the address exists)
+      -> `/auth/callback` (PKCE `exchangeCodeForSession`) -> `/reset-password`
+      (`auth.updateUser`). `safeNext` moved to `lib/safe-next.ts` so the
+      callback shares it.
+- [ ] **2026-09-27** Set `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` and the
+      Vercel project (all environments). Until then the staff reset reports
+      "Password resets are not configured on this server yet."
+- [ ] **2026-09-27** Add `https://<app host>/auth/callback` (and the localhost
+      equivalent) to Supabase Auth -> URL Configuration -> Redirect URLs, or
+      the reset email's link is refused. Confirm the reset email template is
+      sent from the custom SMTP sender, not the Supabase default.
+
 - [x] **2026-09-21** The dashboard showed shapes and no names, and the sidebar
       called every gym "Lord of Gyms". Four activity panels below the charts --
       recent payments, new and renewed memberships, recent visitors, and

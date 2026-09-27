@@ -9,9 +9,11 @@ import {
   previewNotificationTemplate,
 } from '@/lib/db/notifications'
 import { assignableRoles } from '@/lib/roles'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import {
   inviteStaffSchema,
+  resetStaffPasswordSchema,
   setStaffStatusSchema,
   updateStaffAssignmentSchema,
 } from '@/lib/validation/staff'
@@ -276,4 +278,69 @@ export async function updateStaffAssignment(
 
   revalidatePath('/staff')
   return { success: 'Saved. It takes effect the next time they sign in.' }
+}
+
+export async function resetStaffPassword(
+  _prevState: StaffFormState,
+  formData: FormData
+): Promise<StaffFormState> {
+  const actor = await requireRole('owner', 'manager')
+
+  const parsed = resetStaffPasswordSchema.safeParse({
+    staffId: formData.get('staffId'),
+    password: formData.get('password'),
+    confirm: formData.get('confirm'),
+  })
+
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+  }
+
+  if (parsed.data.staffId === actor.staffId) {
+    return { error: 'Change your own password from the sign-in page instead.' }
+  }
+
+  const supabase = await createClient()
+
+  // The RLS-bound read is the authorisation step: it only returns a row from
+  // the actor's own org. Everything below trusts auth_user_id because it came
+  // from here, not from the form.
+  const { data: target } = await supabase
+    .from('staff')
+    .select('id, role, status, auth_user_id')
+    .eq('id', parsed.data.staffId)
+    .eq('org_id', actor.orgId)
+    .maybeSingle()
+
+  if (!target) {
+    return { error: 'That staff member could not be found.' }
+  }
+
+  // Same ceiling as reassignment: a manager staffs their own floor.
+  if (!assignableRoles(actor.role).includes(target.role)) {
+    return { error: 'You cannot reset that person\'s password.' }
+  }
+
+  if (!target.auth_user_id) {
+    return { error: 'They have not signed up yet, so there is no password to reset.' }
+  }
+
+  let admin
+  try {
+    admin = createAdminClient()
+  } catch {
+    return { error: 'Password resets are not configured on this server yet.' }
+  }
+
+  const { error } = await admin.auth.admin.updateUserById(target.auth_user_id, {
+    password: parsed.data.password,
+  })
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  return {
+    success: 'Password changed. They can sign in with it straight away.',
+  }
 }

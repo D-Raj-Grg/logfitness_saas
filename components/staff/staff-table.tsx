@@ -6,6 +6,7 @@ import { setStaffStatus, type StaffFormState } from '@/app/(app)/staff/actions'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EditStaffDialog } from '@/components/staff/edit-staff-dialog'
+import { ResetPasswordDialog } from '@/components/staff/reset-password-dialog'
 import {
   Table,
   TableBody,
@@ -118,12 +119,17 @@ export function StaffTable({
                       to reassign -- assignableRoles is the same ceiling the
                       action enforces, so a disabled path is never shown. */}
                   {assignableRoles(actorRole).includes(row.role) ? (
-                    <EditStaffDialog
-                      row={row}
-                      actorRole={actorRole}
-                      actorBranchIds={actorBranchIds}
-                      branches={branches}
-                    />
+                    <>
+                      <EditStaffDialog
+                        row={row}
+                        actorRole={actorRole}
+                        actorBranchIds={actorBranchIds}
+                        branches={branches}
+                      />
+                      {/* No account exists until the invitation is accepted,
+                          so there is no password to reset before then. */}
+                      {row.status !== 'invited' ? <ResetPasswordDialog row={row} /> : null}
+                    </>
                   ) : null}
                   <StatusToggle row={row} />
                 </div>

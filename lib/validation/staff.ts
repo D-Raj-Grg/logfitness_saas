@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { emailSchema } from '@/lib/validation/auth'
+import { emailSchema, passwordSchema } from '@/lib/validation/auth'
 
 export const staffRoleSchema = z.enum([
   'owner',
@@ -51,5 +51,16 @@ export const updateStaffAssignmentSchema = z.object({
   role: z.enum(['owner', 'manager', 'front_desk', 'trainer']),
   branchIds: z.array(z.uuid()),
 })
+
+export const resetStaffPasswordSchema = z
+  .object({
+    staffId: z.uuid(),
+    password: passwordSchema,
+    confirm: z.string(),
+  })
+  .refine((value) => value.password === value.confirm, {
+    message: 'Passwords do not match',
+    path: ['confirm'],
+  })
 
 export type InviteStaffInput = z.infer<typeof inviteStaffSchema>

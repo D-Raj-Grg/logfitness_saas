@@ -1,32 +1,17 @@
 'use server'
 
+import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { createClient } from '@/lib/supabase/server'
-import { signInSchema, signUpSchema } from '@/lib/validation/auth'
-
-/**
- * Constrains the post-login destination to a path on this site. A bare
- * X
- * both begin with a slash and are read by browsers as protocol-relative URLs,
- * which turns the login form into an open redirect.
- */
-function safeNext(value: FormDataEntryValue | null): string {
-  const next = typeof value === 'string' ? value : ''
-
-  if (!next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) {
-    return '/'
-  }
-
-  try {
-    const placeholder = 'http://localhost'
-    const resolved = new URL(next, placeholder)
-    return resolved.origin === placeholder ? `${resolved.pathname}${resolved.search}` : '/'
-  } catch {
-    return '/'
-  }
-}
+import { safeNext } from '@/lib/safe-next'
+import {
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  signInSchema,
+  signUpSchema,
+} from '@/lib/validation/auth'
 
 export type AuthFormState = {
   error?: string
@@ -94,4 +79,53 @@ export async function signOut() {
   const supabase = await createClient()
   await supabase.auth.signOut()
   redirect('/login')
+}
+
+export async function requestPasswordReset(
+  _prevState: AuthFormState,
+  formData: FormData
+): Promise<AuthFormState> {
+  const parsed = forgotPasswordSchema.safeParse({ email: formData.get('email') })
+
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+  }
+
+  // The link must come back to this deployment, not whatever Site URL the
+  // Supabase project happens to hold, so the origin is taken from the request.
+  const origin = (await headers()).get('origin') ?? process.env.NEXT_PUBLIC_SITE_URL ?? ''
+
+  const supabase = await createClient()
+  await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+    redirectTo: `${origin}/auth/callback?next=/reset-password`,
+  })
+
+  // Same notice whether or not the address exists: anything else lets an
+  // outsider enumerate staff email addresses.
+  return {
+    notice: 'If that address belongs to a staff account, a reset link is on its way.',
+  }
+}
+
+export async function updatePassword(
+  _prevState: AuthFormState,
+  formData: FormData
+): Promise<AuthFormState> {
+  const parsed = resetPasswordSchema.safeParse({
+    password: formData.get('password'),
+    confirm: formData.get('confirm'),
+  })
+
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase.auth.updateUser({ password: parsed.data.password })
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  redirect('/')
 }
