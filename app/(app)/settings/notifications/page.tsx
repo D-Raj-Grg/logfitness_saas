@@ -33,6 +33,8 @@ const EDITABLE_EVENTS: NotificationEvent[] = [
   'member_welcome',
   'payment_received',
   'dues_cleared',
+  // 'membership_renewed' joins this list once a Flutter build that knows the
+  // event is out: a template saved for it would break that app's template list.
 ]
 
 export default async function NotificationSettingsPage() {

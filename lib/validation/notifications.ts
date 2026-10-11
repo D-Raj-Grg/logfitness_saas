@@ -15,6 +15,7 @@ export const notificationEventSchema = z.enum([
   'member_welcome',
   'payment_received',
   'dues_cleared',
+  'membership_renewed',
 ])
 
 /**
@@ -237,7 +238,7 @@ export const notificationListQuerySchema = z.object({
   status: z.enum(['all', 'queued', 'sending', 'sent', 'failed', 'cancelled', 'skipped'])
     .catch('all')
     .default('all'),
-  event: z.enum(['all', 'renewal_reminder', 'dues_reminder', 'birthday_greeting', 'staff_invite', 'test_message', 'custom_message', 'visitor_welcome', 'visitor_follow_up', 'announcement', 'member_welcome', 'payment_received', 'dues_cleared'])
+  event: z.enum(['all', 'renewal_reminder', 'dues_reminder', 'birthday_greeting', 'staff_invite', 'test_message', 'custom_message', 'visitor_welcome', 'visitor_follow_up', 'announcement', 'member_welcome', 'payment_received', 'dues_cleared', 'membership_renewed'])
     .catch('all')
     .default('all'),
   channel: z.enum(['all', 'sms', 'viber', 'email']).catch('all').default('all'),

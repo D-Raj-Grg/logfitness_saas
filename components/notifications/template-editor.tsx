@@ -39,6 +39,7 @@ const EVENT_LABELS: Partial<Record<NotificationEvent, string>> = {
   member_welcome: 'New member welcome',
   payment_received: 'Payment receipt',
   dues_cleared: 'Balance cleared',
+  membership_renewed: 'Membership renewed',
 }
 
 /** Which placeholders actually carry a value for each reason. */
@@ -53,6 +54,9 @@ const VARIABLES: Partial<Record<NotificationEvent, string[]>> = {
   // on the last instalment is Rs 0.
   payment_received: ['member_name', 'gym_name', 'branch_name', 'amount', 'due_amount', 'invoice_no', 'paid_on'],
   dues_cleared: ['member_name', 'gym_name', 'branch_name', 'amount', 'invoice_no'],
+  // `period` and `payment_line` are whole phrases the database builds, so a
+  // session pack or an unpaid renewal still reads as a sentence.
+  membership_renewed: ['member_name', 'gym_name', 'branch_name', 'plan_name', 'start_date', 'end_date', 'period', 'amount', 'due_amount', 'payment_line'],
 }
 
 const SAMPLE: Record<string, string> = {
@@ -69,6 +73,8 @@ const SAMPLE: Record<string, string> = {
   amount: 'Rs 2,500',
   invoice_no: 'INV000241',
   paid_on: '20 Sep 2026',
+  period: 'from 20 Sep 2026 to 19 Oct 2026',
+  payment_line: 'Received Rs 2,500, thank you.',
 }
 
 /**

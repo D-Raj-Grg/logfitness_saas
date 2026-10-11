@@ -2974,6 +2974,7 @@ export const Constants = {
       attendance_method: ["manual", "qr", "card", "biometric"],
       branch_status: ["active", "inactive"],
       class_booking_status: [
+        | "membership_renewed"
         "booked",
         "waitlisted",
         "cancelled",
@@ -3043,3 +3044,4 @@ export const Constants = {
     },
   },
 } as const
+        "membership_renewed",

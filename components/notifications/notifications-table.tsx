@@ -56,6 +56,7 @@ const EVENT_LABELS: Record<NotificationMessageRow['event'], string> = {
   member_welcome: 'Welcome',
   payment_received: 'Receipt',
   dues_cleared: 'Settled',
+  membership_renewed: 'Renewed',
 }
 
 const CHANNEL_LABELS: Record<NotificationMessageRow['channel'], string> = {

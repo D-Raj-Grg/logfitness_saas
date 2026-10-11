@@ -44,6 +44,8 @@ function ruleTitle(rule: NotificationRuleRow) {
       return 'Every time money is handed over'
     case 'dues_cleared':
       return 'When a member has nothing left outstanding'
+    case 'membership_renewed':
+      return 'When an existing member buys another plan; replaces the payment receipt for that sale'
     default:
       return rule.event.replace(/_/g, ' ')
   }
@@ -69,7 +71,8 @@ function RuleRow({ rule }: { rule: NotificationRuleRow }) {
     rule.event === 'visitor_welcome' ||
     rule.event === 'member_welcome' ||
     rule.event === 'payment_received' ||
-    rule.event === 'dues_cleared'
+    rule.event === 'dues_cleared' ||
+    rule.event === 'membership_renewed'
 
   return (
     <form action={formAction} className="flex flex-col gap-3 border-b py-4 last:border-b-0">

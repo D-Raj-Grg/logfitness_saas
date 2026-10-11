@@ -42,6 +42,7 @@ export const NOTIFICATION_EVENTS = {
   member_welcome: 'New member welcome',
   payment_received: 'Payment receipt',
   dues_cleared: 'Balance cleared',
+  membership_renewed: 'Membership renewed',
 } as const
 
 export const NOTIFICATION_CHANNELS = {
