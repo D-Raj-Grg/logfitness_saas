@@ -111,6 +111,16 @@ export function MemberActionPanel({
 
   const current =
     memberships.find((row) => row.id === member.current_membership_id) ?? null
+  // A lapsed member is a renewal, not a first sale: the plan has expired but
+  // the history is still theirs.
+  const isRenewal = current !== null || memberships.length > 0
+  // The newest plan by end date, for prefilling a renewal. Cancelled ones do
+  // not count: nobody continues from a plan that was voided.
+  const lastMembership =
+    memberships
+      .filter((row) => row.status !== 'cancelled')
+      .sort((x, y) => (y.end_date ?? '9999-12-31').localeCompare(x.end_date ?? '9999-12-31'))[0] ??
+    null
 
   // The membership's own invoice, for the re-pricing dialog. No extra query:
   // invoices.membership_id is uniquely constrained, so there is at most one.
@@ -217,7 +227,9 @@ export function MemberActionPanel({
               ? 'This member has left.'
               : current
                 ? `Sold at ${branches.find((b) => b.id === current.branch_id)?.name ?? 'a branch'}`
-                : 'No plan on the books yet.'}
+                : isRenewal
+                  ? 'No active plan. The last one has expired.'
+                  : 'No plan on the books yet.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm">
@@ -265,7 +277,9 @@ export function MemberActionPanel({
             <p className="text-muted-foreground">
               {hasLeft
                 ? 'Reactivate the member before selling a membership.'
-                : 'Sell a plan to get them started.'}
+                : isRenewal
+                  ? 'Renew to put them back on a plan.'
+                  : 'Sell a plan to get them started.'}
             </p>
           )}
 
@@ -275,7 +289,7 @@ export function MemberActionPanel({
             <div className="flex flex-wrap gap-2 pt-1 [&_button]:h-9 sm:[&_button]:h-8">
               {!hasLeft ? (
                 <Button size="sm" onClick={() => setOpen({ kind: 'renew' })}>
-                  {current ? 'Renew' : 'Sell plan'}
+                  {isRenewal ? 'Renew' : 'Sell plan'}
                 </Button>
               ) : null}
               {openInvoices.length > 0 ? (
@@ -413,7 +427,7 @@ export function MemberActionPanel({
           <Dialog open={open?.kind === 'renew'} onOpenChange={dialogChange}>
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
-                <DialogTitle>{current ? 'Renew membership' : 'Sell a membership'}</DialogTitle>
+                <DialogTitle>{isRenewal ? 'Renew membership' : 'Sell a membership'}</DialogTitle>
                 <DialogDescription>
                   {member.full_name} · {member.member_code}
                 </DialogDescription>
@@ -424,6 +438,7 @@ export function MemberActionPanel({
                   branches={sellableBranches}
                   defaultBranchId={defaultBranchId}
                   isFirstMembership={memberships.length === 0}
+                  lastMembership={lastMembership}
                   currentEndDate={
                     current && current.status !== 'cancelled' && current.status !== 'expired'
                       ? current.end_date

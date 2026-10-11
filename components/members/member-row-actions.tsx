@@ -76,7 +76,7 @@ export function MemberRowActions({
               <DropdownMenuSeparator />
               {hasLeft ? null : (
                 <DropdownMenuItem render={<Link href={`${profile}?action=renew`} />}>
-                  {row.current_plan_name ? 'Renew plan' : 'Sell plan'}
+                  {row.current_plan_name || row.has_membership_history ? 'Renew plan' : 'Sell plan'}
                 </DropdownMenuItem>
               )}
               {row.due_paisa > 0 ? (

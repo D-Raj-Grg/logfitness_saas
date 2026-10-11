@@ -24,7 +24,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { formatDate, formatMoney } from '@/lib/format'
+import { formatDate, formatMoney, todayInTimezone } from '@/lib/format'
+import { continueFromDate } from '@/lib/renewal-start'
 import { paisaOrZero, planTerm, rupees, signupFeeSplit } from '@/lib/plan-pricing'
 import {
   DISCOUNT_REASONS,
@@ -42,6 +43,7 @@ export function RenewForm({
   defaultBranchId,
   isFirstMembership,
   currentEndDate,
+  lastMembership,
   onSuccess,
 }: {
   memberId: string
@@ -49,6 +51,8 @@ export function RenewForm({
   defaultBranchId: string
   isFirstMembership: boolean
   currentEndDate: string | null
+  /** The newest non-cancelled membership, to prefill the plan and the start. */
+  lastMembership: { plan_id: string; end_date: string | null } | null
   onSuccess: (message: string, document?: { href: string; label: string }) => void
 }) {
   const [state, formAction, pending] = useActionState<MembershipActionState, FormData>(
@@ -67,16 +71,28 @@ export function RenewForm({
   const [paid, setPaid] = useState('')
   const [method, setMethod] = useState<PaymentMethod>('cash')
   const [payment, setPayment] = useState<PaymentStatus>('full')
+  const continueFrom = currentEndDate
+    ? null
+    : continueFromDate(lastMembership?.end_date ?? null, todayInTimezone())
+  const [startMode, setStartMode] = useState<'continue' | 'today'>('continue')
 
   useEffect(() => {
     startLoadingPlans(async () => {
       const result = await loadPlansForBranch(branchId)
       setPlans(result.plans)
       setStandardFee(result.standardSignupFeePaisa)
-      setPlanId((current) =>
-        result.plans.some((plan) => plan.id === current) ? current : ''
-      )
+      setPlanId((current) => {
+        if (result.plans.some((plan) => plan.id === current)) return current
+        // First load: offer the plan they were on, if it is still sold here.
+        const last = result.plans.find((plan) => plan.id === lastMembership?.plan_id)
+        return last ? last.id : ''
+      })
+      // The prefilled plan skips choosePlan, so seed paid-in-full here. Only
+      // when nothing is typed yet, and the discount is never carried over.
+      const prefill = result.plans.find((plan) => plan.id === lastMembership?.plan_id)
+      if (prefill) setPaid((typed) => (typed === '' ? fullAmount(prefill, '') : typed))
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchId])
 
   useEffect(() => {
@@ -184,12 +200,47 @@ export function RenewForm({
 
         <div className="flex flex-col gap-2 sm:col-span-2">
           <Label htmlFor="renew-start">Start date (optional)</Label>
-          <Input id="renew-start" name="startDate" type="date" />
-          <p className="text-xs text-muted-foreground">
-            {currentEndDate
-              ? `Leave blank to start the day after the current plan ends (${formatDate(currentEndDate)}).`
-              : 'Leave blank to start today.'}
-          </p>
+          {continueFrom ? (
+            <>
+              <div className="flex flex-wrap gap-4 text-sm">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    checked={startMode === 'continue'}
+                    onChange={() => setStartMode('continue')}
+                  />
+                  Continue from {formatDate(continueFrom)}
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    checked={startMode === 'today'}
+                    onChange={() => setStartMode('today')}
+                  />
+                  Start today
+                </label>
+              </div>
+              <input
+                type="hidden"
+                name="startDate"
+                value={startMode === 'continue' ? continueFrom : ''}
+              />
+              <p className="text-xs text-muted-foreground">
+                {startMode === 'continue'
+                  ? `The last plan ended ${formatDate(lastMembership?.end_date ?? continueFrom)}; this one picks up the next day so there is no gap.`
+                  : 'The days since the last plan ended stay uncovered.'}
+              </p>
+            </>
+          ) : (
+            <>
+              <Input id="renew-start" name="startDate" type="date" />
+              <p className="text-xs text-muted-foreground">
+                {currentEndDate
+                  ? `Leave blank to start the day after the current plan ends (${formatDate(currentEndDate)}).`
+                  : 'Leave blank to start today.'}
+              </p>
+            </>
+          )}
           <FieldError messages={state.fieldErrors?.startDate} />
         </div>
 
