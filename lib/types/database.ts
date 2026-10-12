@@ -2559,6 +2559,10 @@ export type Database = {
         Args: { p_provider_id: string }
         Returns: undefined
       }
+      clear_unassigned_card_scans: {
+        Args: { p_card_uid: string }
+        Returns: number
+      }
       complete_pt_session: { Args: { p_pt_session_id: string }; Returns: Json }
       convert_visitor: {
         Args: { p_member_id: string; p_visitor_id: string }
