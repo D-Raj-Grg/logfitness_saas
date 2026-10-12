@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ATTENDANCE_METHOD_LABELS, formatMinutesIn } from '@/lib/attendance'
+import { ATTENDANCE_METHOD_LABELS, attendanceActorLabel, formatMinutesIn } from '@/lib/attendance'
 import type { AttendanceDetailRow } from '@/lib/db/attendance'
 import type { listInvoicesForMember, listMembershipsForMember } from '@/lib/db/memberships'
 import type { listNotificationsForMember, NotificationStatus } from '@/lib/db/notifications'
@@ -398,7 +398,7 @@ export function MemberHistoryTabs({
                       <TableCell className="text-muted-foreground">{row.branch_name}</TableCell>
                       <TableCell>{ATTENDANCE_METHOD_LABELS[row.method]}</TableCell>
                       <TableCell className="text-muted-foreground">
-                        {row.checked_in_by_name ?? '--'}
+                        {attendanceActorLabel(row)}
                       </TableCell>
                     </TableRow>
                   )

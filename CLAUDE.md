@@ -30,6 +30,10 @@ v1 excludes: card-on-file/Stripe recurring billing, member web self-service, POS
 inventory, payroll/HR, biometric hardware, workout program builder, marketing/CRM,
 accounting integrations. Do not build these without an explicit scope decision.
 
+**RFID card check-in came in on 2026-10-12**, an explicit scope decision: an ESP32 + RC522
+door reader checks members in by card and answers allow/deny (see `TASKS.md` Phase 2). It
+is cards only -- biometrics, turnstile relays and staff cards are still out.
+
 
 1. Always read the PLANNING.md at the start of every new conversation 
 2. Check TASKS.md before starting your work

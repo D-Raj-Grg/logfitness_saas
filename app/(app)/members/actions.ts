@@ -28,6 +28,11 @@ import {
   uploadMemberPhoto,
 } from '@/lib/db/photos'
 import { convertVisitor } from '@/lib/db/visitors'
+import {
+  assignMemberCard as assignMemberCardRpc,
+  revokeMemberCard as revokeMemberCardRpc,
+} from '@/lib/db/member-cards'
+import { rpcErrorMessage } from '@/lib/rpc-error'
 import type { CurrentStaff } from '@/lib/roles'
 import {
   inviteMemberToAppSchema,
@@ -41,6 +46,10 @@ import {
   updateMemberSchema,
   type MemberInput,
 } from '@/lib/validation/members'
+import {
+  assignMemberCardSchema,
+  revokeMemberCardSchema,
+} from '@/lib/validation/member-cards'
 
 export type MemberFormState = {
   error?: string
@@ -638,4 +647,60 @@ export async function deleteMember(
   revalidatePath('/')
 
   redirect('/members')
+}
+
+/**
+ * Hand a member an RFID card. The UID comes from a recent tap on a reader (the
+ * picker) or is typed in; either way it is normalised and checked here and
+ * again in assign_member_card(), which also refuses a card that is live for
+ * someone else, by member code.
+ */
+export async function assignMemberCard(
+  _prevState: MemberFormState,
+  formData: FormData
+): Promise<MemberFormState> {
+  await requireRole('owner', 'manager', 'front_desk')
+
+  const parsed = assignMemberCardSchema.safeParse({
+    memberId: formData.get('memberId'),
+    cardUid: formData.get('cardUid') ?? '',
+    replace: formData.get('replace') ?? undefined,
+  })
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+  }
+
+  try {
+    await assignMemberCardRpc(parsed.data)
+  } catch (error) {
+    return { error: rpcErrorMessage(error, 'The card could not be assigned.') }
+  }
+
+  revalidatePath(`/members/${parsed.data.memberId}`)
+  return { success: 'Card assigned. Door access follows membership status and dues.' }
+}
+
+/** Lost, stolen, handed back. The reason is kept on the card's history row. */
+export async function revokeMemberCard(
+  _prevState: MemberFormState,
+  formData: FormData
+): Promise<MemberFormState> {
+  await requireRole('owner', 'manager', 'front_desk')
+
+  const parsed = revokeMemberCardSchema.safeParse({
+    memberId: formData.get('memberId'),
+    reason: formData.get('reason'),
+  })
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+  }
+
+  try {
+    await revokeMemberCardRpc(parsed.data)
+  } catch (error) {
+    return { error: rpcErrorMessage(error, 'The card could not be revoked.') }
+  }
+
+  revalidatePath(`/members/${parsed.data.memberId}`)
+  return { success: 'Card revoked. The reader refuses it from now on.' }
 }

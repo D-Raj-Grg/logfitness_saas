@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { Printer } from 'lucide-react'
 
 import { MemberAppAccess } from '@/components/members/member-app-access'
+import { MemberCardAccess } from '@/components/members/member-card-access'
 import { MemberHistoryTabs } from '@/components/members/member-history-tabs'
 import { MemberMessageActions } from '@/components/members/member-message-actions'
 import { MemberRecordActions } from '@/components/members/member-record-actions'
@@ -15,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { requireStaff } from '@/lib/auth'
 import { listAttendanceForMember } from '@/lib/db/attendance'
 import { listBranches } from '@/lib/db/branches'
+import { listMemberCards, listUnassignedCardScans } from '@/lib/db/member-cards'
 import { getMember, getMemberOverview } from '@/lib/db/members'
 import { listInvoicesForMember, listMembershipsForMember } from '@/lib/db/memberships'
 import { listNotificationsForMember } from '@/lib/db/notifications'
@@ -55,17 +57,40 @@ export default async function MemberProfilePage({
       ? action
       : null
 
-  const [overview, member, memberships, invoices, payments, attendance, branches, messages] =
-    await Promise.all([
-      getMemberOverview(id),
-      getMember(id),
-      listMembershipsForMember(id),
-      listInvoicesForMember(id),
-      listPaymentsForMember(id),
-      listAttendanceForMember(id),
-      listBranches(),
-      listNotificationsForMember(id),
-    ])
+  const canManage = staff.role !== 'trainer'
+
+  const [
+    overview,
+    member,
+    memberships,
+    invoices,
+    payments,
+    attendance,
+    branches,
+    messages,
+    cards,
+    cardScans,
+  ] = await Promise.all([
+    getMemberOverview(id),
+    getMember(id),
+    listMembershipsForMember(id),
+    listInvoicesForMember(id),
+    listPaymentsForMember(id),
+    listAttendanceForMember(id),
+    listBranches(),
+    listNotificationsForMember(id),
+    // A failed card read must not take the whole profile down: null renders
+    // the Access card row in an error state, and a failed inbox read is just
+    // an empty picker (typing the UID still works).
+    canManage ? listMemberCards(id).catch(() => null) : Promise.resolve([]),
+    // The enrollment inbox only matters to someone who can assign a card. An
+    // owner sees taps from every branch; anyone else, their own branches'.
+    canManage
+      ? listUnassignedCardScans(staff.role === 'owner' ? null : staff.branchIds).catch(
+          () => []
+        )
+      : Promise.resolve([]),
+  ])
 
   if (!overview || !member) notFound()
 
@@ -79,7 +104,6 @@ export default async function MemberProfilePage({
   const photoUrl = await memberPhotoUrl(member.photo_path)
 
   const branchNames = Object.fromEntries(branches.map((branch) => [branch.id, branch.name]))
-  const canManage = staff.role !== 'trainer'
   const left = overview.status === 'left'
   const archived = Boolean(member.archived_at)
   const lastSeen = attendance[0] ?? null
@@ -268,6 +292,10 @@ export default async function MemberProfilePage({
               acceptedAt={member.accepted_at}
               hasAuthUser={Boolean(member.auth_user_id)}
             />
+          ) : null}
+
+          {canManage ? (
+            <MemberCardAccess memberId={id} cards={cards} scans={cardScans} />
           ) : null}
 
           <MemberHistoryTabs

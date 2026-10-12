@@ -45,3 +45,6 @@ next-env.d.ts
 
 # Agent skills are symlinked from the workspace root, not part of the app
 .agents/
+
+# ESP32 reader settings (WiFi password, device key)
+firmware/**/config.h
