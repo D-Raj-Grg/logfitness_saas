@@ -5,8 +5,9 @@
 --
 -- Seeds two orgs, drives the real RPCs as real personas, asserts the behaviour
 -- and the isolation, then removes its fixtures. A failed assertion aborts.
--- rfid_check_in is called after `reset role` with no JWT claims -- the same
--- position the rfid-check Edge Function's service-role client is in.
+-- rfid_check_in is called as `service_role` with no JWT claims -- the same
+-- position the rfid-check Edge Function's service-role client is in -- so the
+-- grant itself is exercised, not a superuser bypass.
 --
 --   psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/rfid_check_in.sql
 
@@ -205,6 +206,15 @@ begin
   end;
   assert failed, 'an authenticated user executed rfid_check_in';
 
+  execute 'set local role anon';
+  failed := false;
+  begin
+    perform public.rfid_check_in(hash_a1, '04A31B2C');
+  exception when insufficient_privilege then failed := true;
+  end;
+  assert failed, 'anon executed rfid_check_in';
+  execute 'set local role authenticated';
+
   -- persona: org A manager, branch 1 only -------------------------------------
   execute 'reset role';
   perform set_config('request.jwt.claims', json_build_object(
@@ -236,6 +246,7 @@ begin
   -- the door, as the Edge Function: no JWT ------------------------------------
   execute 'reset role';
   perform set_config('request.jwt.claims', null, true);
+  execute 'set local role service_role';
 
   result := public.rfid_check_in('0000', '04A31B2C');
   assert result ->> 'decision' = 'deny' and result ->> 'reason' = 'device_unknown',
@@ -303,9 +314,9 @@ begin
   select count(*) into n from public.unassigned_card_scans s where s.card_uid = '04A31B2C';
   assert n = 0, 'the assigned card is still in the branch 1 inbox';
 
-  -- persona: front desk branch 2 sees only branch 2's inbox. The branch 2 copy
-  -- of the card was out of reach of the branch 1 desk's delete (RLS), so it
-  -- stays until its reader prunes it -- the picker must hide live cards.
+  -- persona: front desk branch 2 sees only branch 2's inbox. Assigning the
+  -- card at branch 1 cleared it from every reader's inbox in the org, branch 2
+  -- included, even though the branch 1 desk cannot see branch 2's rows.
   execute 'reset role';
   perform set_config('request.jwt.claims', json_build_object(
     'sub', gen_random_uuid()::text, 'role', 'authenticated',
@@ -319,13 +330,22 @@ begin
   select count(*) into n from public.unassigned_card_scans s where s.card_uid = 'CAFEBABE';
   assert n = 1, 'branch 2 desk could not see its own inbox';
 
-  delete from public.unassigned_card_scans s where s.card_uid = '04A31B2C';
+  select count(*) into n from public.unassigned_card_scans s where s.card_uid = '04A31B2C';
+  assert n = 0, 'assigning the card at branch 1 left it in branch 2''s inbox';
+
+  -- The org-wide cleanup only ever removes cards that are already live; a
+  -- stranger stays in the inbox.
+  n := public.clear_unassigned_card_scans('CAFEBABE');
+  assert n = 0, format('clearing an unassigned uid removed %s rows', n);
+
+  delete from public.unassigned_card_scans s where s.card_uid = 'CAFEBABE';
   get diagnostics n = row_count;
   assert n = 1, 'branch 2 desk could not clear its own inbox row';
 
   -- the door: allow, and what it writes ---------------------------------------
   execute 'reset role';
   perform set_config('request.jwt.claims', null, true);
+  execute 'set local role service_role';
 
   result := public.rfid_check_in(hash_a1, '04A31B2C', now());
   assert result ->> 'decision' = 'allow', format('an active member was refused: %s', result);
@@ -388,6 +408,15 @@ begin
   select d.checked_in_by_name into txt from public.attendance_detail d where d.id = visit_1;
   assert txt is null, 'a device visit was attributed to a person';
 
+  -- A human check-in can never claim to be a reader.
+  failed := false;
+  begin
+    insert into public.attendance (org_id, branch_id, member_id, attended_on, checked_in_by, device_id)
+    values (org_a, br_a1, m_none, today_a, st_a_desk1, dev_a1);
+  exception when insufficient_privilege then failed := true;
+  end;
+  assert failed, 'the front desk wrote a visit attributed to a reader';
+
   -- every other membership state ------------------------------------------------
   perform public.assign_member_card(m_due, '11111111');
   perform public.assign_member_card(m_expiring, 'AABBCCDD');
@@ -395,8 +424,19 @@ begin
   perform public.assign_member_card(m_frozen, '33333333');
   perform public.assign_member_card(m_none, '44444444');
 
+  -- A card cannot be inserted already revoked in someone else's name.
+  failed := false;
+  begin
+    insert into public.member_cards
+      (org_id, member_id, card_uid, assigned_by, revoked_at, revoked_by, revoke_reason)
+    values (org_a, m_none, '99999999', st_a_desk1, now(), st_a_owner, 'Lost');
+  exception when insufficient_privilege then failed := true;
+  end;
+  assert failed, 'a pre-revoked card was inserted';
+
   execute 'reset role';
   perform set_config('request.jwt.claims', null, true);
+  execute 'set local role service_role';
 
   result := public.rfid_check_in(hash_a1, '11111111');
   assert result ->> 'decision' = 'deny' and result ->> 'reason' = 'dues',
@@ -523,6 +563,7 @@ begin
 
   execute 'reset role';
   perform set_config('request.jwt.claims', null, true);
+  execute 'set local role service_role';
 
   result := public.rfid_check_in(hash_a1, '04A31B2C');
   assert result ->> 'reason' = 'unknown_card', format('a replaced card gave %s', result);
@@ -542,6 +583,7 @@ begin
 
   execute 'reset role';
   perform set_config('request.jwt.claims', null, true);
+  execute 'set local role service_role';
 
   result := public.rfid_check_in(hash_a1, 'AABBCCDD');
   assert result ->> 'decision' = 'deny' and result ->> 'reason' = 'device_disabled',
@@ -608,6 +650,7 @@ begin
 
   execute 'reset role';
   perform set_config('request.jwt.claims', null, true);
+  execute 'set local role service_role';
 
   select count(*) into n from public.attendance a where a.org_id = org_a;
   assert n = 2, format('org B deleted org A visits (%s left)', n);
