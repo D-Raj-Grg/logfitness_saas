@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import Link from 'next/link'
 
 import { AttendanceLogTable } from '@/components/attendance/attendance-log-table'
 import { BranchPicker } from '@/components/attendance/branch-picker'
@@ -81,15 +82,27 @@ export default async function CheckInPage({
               : 'The front desk, across every branch.'}
           </p>
         </div>
-        {scope.canSwitch ? (
-          <Suspense>
-            <BranchPicker
-              branchId={branchId ?? null}
-              branches={scope.options}
-              allowAllBranches={scope.canSwitch}
-            />
-          </Suspense>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Settings is owner-only in the nav, so this is how a manager finds
+              the card readers for their own door. */}
+          {staff.role === 'owner' || staff.role === 'manager' ? (
+            <Link
+              href="/settings/devices"
+              className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              Devices
+            </Link>
+          ) : null}
+          {scope.canSwitch ? (
+            <Suspense>
+              <BranchPicker
+                branchId={branchId ?? null}
+                branches={scope.options}
+                allowAllBranches={scope.canSwitch}
+              />
+            </Suspense>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">

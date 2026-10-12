@@ -33,6 +33,16 @@ export default async function SettingsPage() {
         </p>
       </Link>
 
+      <Link
+        href="/settings/devices"
+        className="rounded-lg border p-4 transition-colors hover:bg-muted/50"
+      >
+        <div className="font-medium">Devices</div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          RFID readers at the door: register one, replace its key, or switch it off.
+        </p>
+      </Link>
+
       <OrgPreferencesForm settings={org.settings} />
 
       <OrgLetterheadForm org={org} logoUrl={orgLogoUrl(org.logo_path)} />
