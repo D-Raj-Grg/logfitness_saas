@@ -13,7 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { recurrenceOf, type ClassRow } from '@/lib/db/classes'
+import { recurrenceOf, type ClassRow } from '@/lib/validation/classes'
 import type { RecurrenceSlot } from '@/lib/validation/classes'
 
 export const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']

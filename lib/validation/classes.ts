@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import type { Database } from '@/lib/types/database'
+
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 
 /** One weekly slot. Matches validate_class_recurrence(): 0 = Sunday. */
@@ -76,3 +78,9 @@ export const cancelBookingSchema = z.object({
 })
 
 export const weekSchema = z.iso.date()
+
+export type ClassRow = Database['public']['Tables']['classes']['Row']
+
+export function recurrenceOf(row: Pick<ClassRow, 'recurrence'>): RecurrenceSlot[] {
+  return Array.isArray(row.recurrence) ? (row.recurrence as unknown as RecurrenceSlot[]) : []
+}

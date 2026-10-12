@@ -1,12 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
-import type { Database } from '@/lib/types/database'
-import type { RecurrenceSlot } from '@/lib/validation/classes'
+import { recurrenceOf, type ClassRow } from '@/lib/validation/classes'
 
-export type ClassRow = Database['public']['Tables']['classes']['Row']
-
-export function recurrenceOf(row: Pick<ClassRow, 'recurrence'>): RecurrenceSlot[] {
-  return Array.isArray(row.recurrence) ? (row.recurrence as unknown as RecurrenceSlot[]) : []
-}
+export { recurrenceOf, type ClassRow }
 
 /** Classes RLS lets the caller see; branchIds null = no extra filter. */
 export async function listClasses(branchIds: string[] | null) {

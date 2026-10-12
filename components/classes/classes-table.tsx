@@ -20,7 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { recurrenceOf, type ClassRow } from '@/lib/db/classes'
+import { recurrenceOf, type ClassRow } from '@/lib/validation/classes'
 
 function ClassDialog({
   open,
