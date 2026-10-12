@@ -391,6 +391,7 @@ export type Database = {
           ends_at: string
           id: string
           org_id: string
+          original_starts_at: string | null
           starts_at: string
           status: Database["public"]["Enums"]["class_session_status"]
           trainer_id: string | null
@@ -405,6 +406,7 @@ export type Database = {
           ends_at: string
           id?: string
           org_id: string
+          original_starts_at?: string | null
           starts_at: string
           status?: Database["public"]["Enums"]["class_session_status"]
           trainer_id?: string | null
@@ -419,6 +421,7 @@ export type Database = {
           ends_at?: string
           id?: string
           org_id?: string
+          original_starts_at?: string | null
           starts_at?: string
           status?: Database["public"]["Enums"]["class_session_status"]
           trainer_id?: string | null
@@ -1616,6 +1619,106 @@ export type Database = {
           },
         ]
       }
+      pt_sessions: {
+        Row: {
+          branch_id: string
+          cancel_reason: string | null
+          cancelled_at: string | null
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          duration_minutes: number
+          id: string
+          member_id: string
+          membership_id: string | null
+          notes: string | null
+          org_id: string
+          scheduled_at: string
+          status: Database["public"]["Enums"]["pt_session_status"]
+          trainer_id: string
+          updated_at: string
+        }
+        Insert: {
+          branch_id: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          duration_minutes?: number
+          id?: string
+          member_id: string
+          membership_id?: string | null
+          notes?: string | null
+          org_id: string
+          scheduled_at: string
+          status?: Database["public"]["Enums"]["pt_session_status"]
+          trainer_id: string
+          updated_at?: string
+        }
+        Update: {
+          branch_id?: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          duration_minutes?: number
+          id?: string
+          member_id?: string
+          membership_id?: string | null
+          notes?: string | null
+          org_id?: string
+          scheduled_at?: string
+          status?: Database["public"]["Enums"]["pt_session_status"]
+          trainer_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pt_sessions_branch_fkey"
+            columns: ["branch_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "pt_sessions_member_fkey"
+            columns: ["member_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "member_overview"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "pt_sessions_member_fkey"
+            columns: ["member_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "pt_sessions_membership_fkey"
+            columns: ["membership_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "memberships"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "pt_sessions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pt_sessions_trainer_fkey"
+            columns: ["trainer_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id", "org_id"]
+          },
+        ]
+      }
       push_log: {
         Row: {
           created_at: string
@@ -2161,6 +2264,17 @@ export type Database = {
         Args: { p_member_id?: string; p_session_id: string }
         Returns: Json
       }
+      book_pt_session: {
+        Args: {
+          p_duration_minutes?: number
+          p_member_id: string
+          p_membership_id?: string
+          p_notes?: string
+          p_scheduled_at: string
+          p_trainer_id: string
+        }
+        Returns: Json
+      }
       cancel_announcement: { Args: { p_id: string }; Returns: number }
       cancel_class_booking: {
         Args: { p_booking_id: string; p_reason?: string }
@@ -2171,6 +2285,10 @@ export type Database = {
         Returns: Json
       }
       cancel_notification: { Args: { p_id: string }; Returns: undefined }
+      cancel_pt_session: {
+        Args: { p_pt_session_id: string; p_reason?: string }
+        Returns: Json
+      }
       check_in_member: {
         Args: {
           p_branch_id: string
@@ -2191,6 +2309,7 @@ export type Database = {
         Args: { p_provider_id: string }
         Returns: undefined
       }
+      complete_pt_session: { Args: { p_pt_session_id: string }; Returns: Json }
       convert_visitor: {
         Args: { p_member_id: string; p_visitor_id: string }
         Returns: Json
@@ -2333,6 +2452,7 @@ export type Database = {
         Args: { p_membership_id: string; p_notes?: string }
         Returns: Json
       }
+      generate_class_sessions: { Args: { p_class_id: string }; Returns: number }
       has_branch_access: {
         Args: { target_branch_id: string }
         Returns: boolean
@@ -2379,6 +2499,14 @@ export type Database = {
       link_staff_account_by_email: {
         Args: { p_staff_id: string }
         Returns: string
+      }
+      mark_session_attendance: {
+        Args: { p_attended: boolean; p_booking_id: string }
+        Returns: Json
+      }
+      materialize_class_sessions: {
+        Args: { p_class_id?: string; p_days?: number }
+        Returns: number
       }
       member_computed_status: {
         Args: { p_left_on: string; p_member_id: string }
@@ -2629,6 +2757,10 @@ export type Database = {
         Args: { p_provider_id: string }
         Returns: undefined
       }
+      reschedule_class_session: {
+        Args: { p_ends_at: string; p_session_id: string; p_starts_at: string }
+        Returns: Json
+      }
       resolve_notification_template: {
         Args: {
           p_channel: Database["public"]["Enums"]["notification_channel"]
@@ -2723,6 +2855,10 @@ export type Database = {
         Args: { p_left_on?: string; p_member_id: string; p_reason?: string }
         Returns: Json
       }
+      set_org_setting: {
+        Args: { _key: string; _value: Json }
+        Returns: Json
+      }
       set_notification_credential: {
         Args: { p_provider_id: string; p_secret: string }
         Returns: undefined
@@ -2736,6 +2872,25 @@ export type Database = {
           expired: number
           members_touched: number
           started: number
+        }[]
+      }
+      trainer_utilization: {
+        Args: { p_branch_ids?: string[]; p_from?: string; p_to?: string }
+        Returns: {
+          attended: number
+          branch_id: string
+          branch_name: string
+          class_hours: number
+          classes_held: number
+          fill_pct: number
+          no_shows: number
+          pt_completed: number
+          pt_hours: number
+          pt_scheduled: number
+          seats_available: number
+          seats_filled: number
+          trainer_id: string
+          trainer_name: string
         }[]
       }
       try_jsonb: { Args: { p_text: string }; Returns: Json }
@@ -2839,6 +2994,7 @@ export type Database = {
       payment_kind: "payment" | "refund" | "reversal"
       payment_method: "cash" | "esewa" | "khalti" | "fonepay" | "bank" | "card"
       plan_type: "time" | "session_pack"
+      pt_session_status: "scheduled" | "completed" | "cancelled"
       staff_role: "owner" | "manager" | "front_desk" | "trainer"
       staff_status: "invited" | "active" | "inactive"
       visitor_kind: "enquiry" | "guest"
@@ -3038,6 +3194,7 @@ export const Constants = {
       payment_kind: ["payment", "refund", "reversal"],
       payment_method: ["cash", "esewa", "khalti", "fonepay", "bank", "card"],
       plan_type: ["time", "session_pack"],
+      pt_session_status: ["scheduled", "completed", "cancelled"],
       staff_role: ["owner", "manager", "front_desk", "trainer"],
       staff_status: ["invited", "active", "inactive"],
       visitor_kind: ["enquiry", "guest"],
