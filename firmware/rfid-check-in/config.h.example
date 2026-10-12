@@ -1,0 +1,53 @@
+// config.h -- per-reader settings for rfid-check-in.ino
+//
+// 1. Copy this file to `config.h` in the same folder (next to the .ino).
+// 2. Fill in the values below.
+// 3. Never commit config.h: it holds the WiFi password and the device key.
+//    The repo .gitignore already excludes firmware/**/config.h.
+
+#ifndef RFID_CHECK_IN_CONFIG_H
+#define RFID_CHECK_IN_CONFIG_H
+
+// ---- WiFi (2.4 GHz only; the ESP32 cannot join 5 GHz networks) ----------
+#define WIFI_SSID      "your-wifi-name"
+#define WIFI_PASS      "your-wifi-password"
+
+// ---- Device identity ----------------------------------------------------
+// The key shown ONCE when you register the reader in the web console
+// (Settings -> Devices -> Register a reader). Starts with "lgd_".
+// The firmware never prints it to Serial.
+#define DEVICE_KEY     "lgd_paste_your_device_key_here"
+
+// Short name shown on the OLED (max ~20 characters), e.g. "Front door".
+#define DEVICE_LABEL   "Front door"
+
+// ---- Backend ------------------------------------------------------------
+// Do not change unless the Supabase project changes.
+#define RFID_ENDPOINT  "https://hefptanjhwxcuhikuhwd.supabase.co/functions/v1/rfid-check"
+
+// ---- Buzzer -------------------------------------------------------------
+// GPIO the buzzer (or its transistor) is wired to.
+#define BUZZER_PIN          25
+// 1 = buzzer sounds when the pin is HIGH (most active-buzzer modules),
+// 0 = buzzer sounds when the pin is LOW (some low-level-trigger modules).
+#define BUZZER_ACTIVE_HIGH  1
+
+// ---- Keypad buttons K1..K4 (on the OLED board) --------------------------
+// Set each to the GPIO the button is wired to, or -1 if not connected.
+// Buttons are read active-low: the button connects the pin to GND and the
+// firmware enables the ESP32's internal pull-up (INPUT_PULLUP).
+//
+// WARNING: GPIO34, 35, 36 (VP) and 39 (VN) are input-only and have NO
+// internal pull-up. If a button is on one of those pins, it needs an external
+// 10k resistor from the pin to 3.3V, otherwise the pin floats and the button
+// "presses itself".
+// Avoid GPIO 5, 18, 19, 21, 22, 23, 25, 26, 27 (already used) and
+// 6-11 (flash).
+//
+// Only K1 does something today: it shows the info screen for 5 seconds.
+#define BTN_K1_PIN  -1
+#define BTN_K2_PIN  -1
+#define BTN_K3_PIN  -1
+#define BTN_K4_PIN  -1
+
+#endif  // RFID_CHECK_IN_CONFIG_H
