@@ -23,6 +23,20 @@ export const ATTENDANCE_METHOD_LABELS: Record<AttendanceMethod, string> = {
   biometric: 'Biometric',
 }
 
+/**
+ * Who let the member in, for the attendance tables. A desk check-in names the
+ * staff member; a card tap has no person behind it (checked_in_by is null), so
+ * it names the reader instead. An owner's check-in can also have neither.
+ */
+export function attendanceActorLabel(row: {
+  checked_in_by_name: string | null
+  device_name: string | null
+}) {
+  if (row.checked_in_by_name) return row.checked_in_by_name
+  if (row.device_name) return `Device · ${row.device_name}`
+  return '--'
+}
+
 export const BANNER_LABELS: Record<CheckInBanner, string> = {
   active: 'Active member',
   expiring: 'Expiring soon',

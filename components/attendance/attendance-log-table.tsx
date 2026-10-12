@@ -8,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ATTENDANCE_METHOD_LABELS } from '@/lib/attendance'
+import { ATTENDANCE_METHOD_LABELS, attendanceActorLabel } from '@/lib/attendance'
 import type { AttendanceDetailRow } from '@/lib/db/attendance'
 import { formatMoney, formatTime } from '@/lib/format'
 
@@ -81,7 +81,7 @@ export function AttendanceLogTable({
                 ) : null}
               </TableCell>
               <TableCell className="text-muted-foreground">
-                {row.checked_in_by_name ?? '--'}
+                {attendanceActorLabel(row)}
               </TableCell>
               <TableCell className="text-right tabular-nums">
                 {row.due_paisa_at_checkin > 0 ? (
