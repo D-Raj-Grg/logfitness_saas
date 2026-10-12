@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
+import { OrgPreferencesForm } from '@/components/settings/org-preferences-form'
 import { OrgLetterheadForm } from '@/components/settings/org-letterhead-form'
 import { requireRole } from '@/lib/auth'
 import { getOrgProfile } from '@/lib/db/orgs'
@@ -31,6 +32,8 @@ export default async function SettingsPage() {
           The SMS gateway, when renewal and dues reminders go out, and what they say.
         </p>
       </Link>
+
+      <OrgPreferencesForm settings={org.settings} />
 
       <OrgLetterheadForm org={org} logoUrl={orgLogoUrl(org.logo_path)} />
     </div>

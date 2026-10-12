@@ -1,6 +1,6 @@
 import { ORG_LOGO_BUCKET } from '@/lib/org-logo'
 import { createClient } from '@/lib/supabase/server'
-import type { Database } from '@/lib/types/database'
+import type { Database, Json } from '@/lib/types/database'
 
 export type OrgRow = Database['public']['Tables']['orgs']['Row']
 export type OrgUpdate = Database['public']['Tables']['orgs']['Update']
@@ -80,5 +80,20 @@ export async function uploadOrgLogo(path: string, file: File) {
 export async function removeOrgLogo(path: string) {
   const supabase = await createClient()
   const { error } = await supabase.storage.from(ORG_LOGO_BUCKET).remove([path])
+  if (error) throw error
+}
+
+/**
+ * Merges one allow-listed key into orgs.settings. The RPC is owner-only and
+ * validates key and value; a direct orgs update would replace the whole bag.
+ */
+export async function setOrgSetting(key: string, value: Json) {
+  const supabase = await createClient()
+
+  const { error } = await supabase.rpc('set_org_setting', {
+    _key: key,
+    _value: value,
+  })
+
   if (error) throw error
 }

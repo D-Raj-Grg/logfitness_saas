@@ -49,3 +49,24 @@ export const orgLetterheadSchema = z.object({
 })
 
 export type OrgLetterheadInput = z.infer<typeof orgLetterheadSchema>
+
+/**
+ * The owner-editable keys of orgs.settings. Bounds mirror the set_org_setting
+ * RPC, which is the real gate.
+ */
+export const MAX_CANCELLATION_WINDOW_MINUTES = 10080
+
+export const orgPreferencesSchema = z.object({
+  classCancellationWindowMinutes: z
+    .string()
+    .trim()
+    .refine((value) => /^\d+$/.test(value), 'Enter a whole number of minutes')
+    .transform(Number)
+    .refine(
+      (value) => value <= MAX_CANCELLATION_WINDOW_MINUTES,
+      'At most 10080 minutes (7 days)'
+    ),
+  notificationLocale: z.enum(['en', 'ne'], 'Choose a language'),
+})
+
+export type OrgPreferencesInput = z.infer<typeof orgPreferencesSchema>

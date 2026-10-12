@@ -42,6 +42,11 @@ const REPORTS = [
     description: 'Check-ins and distinct members over time, across branches.',
   },
   {
+    title: 'Trainer utilization',
+    href: '/reports/trainers',
+    description: 'Class fill, attendance and personal-training hours per trainer.',
+  },
+  {
     title: 'Plan mix',
     href: '/reports/plans',
     description: 'Active memberships and revenue by plan, per branch.',

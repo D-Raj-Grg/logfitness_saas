@@ -7,11 +7,12 @@ import { requireRole } from '@/lib/auth'
 import {
   getOrgProfile,
   removeOrgLogo,
+  setOrgSetting,
   updateOrgProfile,
   uploadOrgLogo,
 } from '@/lib/db/orgs'
 import { ALLOWED_LOGO_TYPES, MAX_LOGO_BYTES, orgLogoPath } from '@/lib/org-logo'
-import { orgLetterheadSchema } from '@/lib/validation/orgs'
+import { orgLetterheadSchema, orgPreferencesSchema } from '@/lib/validation/orgs'
 
 export type SettingsFormState = {
   error?: string
@@ -114,4 +115,36 @@ export async function updateOrgLetterhead(
   revalidatePath('/', 'layout')
 
   return { success: 'Letterhead saved.' }
+}
+
+export async function updateOrgPreferences(
+  _prevState: SettingsFormState,
+  formData: FormData
+): Promise<SettingsFormState> {
+  // Owner-only for clarity; set_org_setting raises 42501 for anyone else.
+  await requireRole('owner')
+
+  const parsed = orgPreferencesSchema.safeParse({
+    classCancellationWindowMinutes: formData.get('classCancellationWindowMinutes'),
+    notificationLocale: formData.get('notificationLocale'),
+  })
+
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+  }
+
+  try {
+    await setOrgSetting(
+      'class_cancellation_window_minutes',
+      parsed.data.classCancellationWindowMinutes
+    )
+    await setOrgSetting('notification_locale', parsed.data.notificationLocale)
+  } catch (error) {
+    const { message } = (error ?? {}) as DbError
+    return { error: message ?? 'Something went wrong. Please try again.' }
+  }
+
+  revalidatePath('/settings')
+
+  return { success: 'Preferences saved.' }
 }

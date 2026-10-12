@@ -14,6 +14,7 @@ import {
   planMix,
   revenueReport,
 } from '@/lib/db/reports'
+import { trainerUtilization } from '@/lib/db/trainer-utilization'
 import { formatDateTime, formatMoney, todayInTimezone } from '@/lib/format'
 import { resolvePeriod, type ResolvedPeriod } from '@/lib/reports/period'
 import { resolveBranchScope, type BranchScope } from '@/lib/scope'
@@ -124,6 +125,31 @@ const REPORTS: Record<string, ReportDefinition> = {
       { key: 'branch_name', header: 'Branch' },
       { key: 'check_ins', header: 'Check-ins' },
       { key: 'distinct_members', header: 'Distinct members' },
+    ],
+  },
+
+  trainers: {
+    fetch: async ({ scope, period }) => {
+      const rows = await trainerUtilization({
+        branchIds: scope.branchIds,
+        from: period.from,
+        to: period.to,
+      })
+      return rows.map((row) => ({ ...row }))
+    },
+    columns: [
+      { key: 'trainer_name', header: 'Trainer' },
+      { key: 'branch_name', header: 'Branch' },
+      { key: 'classes_held', header: 'Classes' },
+      { key: 'class_hours', header: 'Class hours' },
+      { key: 'seats_available', header: 'Seats available' },
+      { key: 'seats_filled', header: 'Seats filled' },
+      { key: 'fill_pct', header: 'Fill %' },
+      { key: 'attended', header: 'Attended' },
+      { key: 'no_shows', header: 'No-shows' },
+      { key: 'pt_scheduled', header: 'PT scheduled' },
+      { key: 'pt_completed', header: 'PT completed' },
+      { key: 'pt_hours', header: 'PT hours' },
     ],
   },
 

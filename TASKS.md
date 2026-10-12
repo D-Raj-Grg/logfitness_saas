@@ -128,20 +128,21 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       the oldest waitlisted booking in the same transaction. Both are
       `security definer` (members hold no direct insert/update policy on
       `class_bookings`) with every RLS-equivalent check made by hand inside.
-- [ ] `pt_sessions` table (not built -- out of scope for this task; only the
-      class/session/booking schema was in scope)
-- [ ] `pg_cron` job materializing `class_sessions` 60 days ahead from recurrence rules
-- [ ] Class CRUD: trainer, capacity, room, recurrence (Next.js UI; the underlying
+- [x] `pt_sessions` table + RLS + audit; RPCs `book_pt_session`,
+      `complete_pt_session`, `cancel_pt_session`. Gate: `supabase/tests/pt_sessions.sql`
+      (written, not yet run).
+- [x] `pg_cron` job materializing `class_sessions` 60 days ahead from recurrence rules
+- [x] Class CRUD: trainer, capacity, room, recurrence (Next.js UI; the underlying
       owner/manager write policies on `classes` already exist). **Restore the
       `Classes` entry in `components/app/nav-items.ts` when `/classes` exists** --
       it was removed on 2026-09-07 because the link 404'd on every prefetch.
-- [ ] Timetable calendar view (dnd-kit for reschedule)
-- [ ] Front-desk booking into a session, with waitlist at capacity (Next.js UI;
+- [x] Timetable calendar view (dnd-kit for reschedule)
+- [x] Front-desk booking into a session, with waitlist at capacity (Next.js UI;
       the backend RPC it will call -- `book_class_session` with the staff
       `p_member_id` override -- is done)
-- [ ] Trainer marks session attendance
-- [ ] PT sessions decrementing `sessions_remaining` on session-pack memberships
-- [ ] Trainer utilization report
+- [x] Trainer marks session attendance (`mark_session_attendance`, `/trainer-sessions`)
+- [x] PT sessions decrementing `sessions_remaining` on session-pack memberships (`/pt`)
+- [x] Trainer utilization report (`trainer_utilization`, `/reports/trainers`, CSV)
 
 ## Phase 5 — Notifications
 
@@ -198,8 +199,8 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       would need cannot be set from this tooling. `verify_qr_token` is
       staff-only (`20260905150400`). The Flutter screens that use it are Phase 3
       of the app repo.
-- [ ] Plan status, expiry, and dues screen
-- [ ] Payment history
+- [x] Plan status, expiry, and dues screen
+- [x] Payment history
 - [x] Class browsing and self-booking — backend only: `classes`,
       `class_sessions`, `class_bookings` with RLS, plus `book_class_session`
       (capacity → waitlist) and `cancel_class_booking` (window + waitlist

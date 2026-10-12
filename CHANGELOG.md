@@ -17,6 +17,47 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-10-06 — Personal training, attendance and trainer utilization
+
+### Added
+
+- **PT sessions** (`/pt`): schedule a one-to-one session with a trainer, complete
+  it (uses one session from a session-pack membership, refused at 0) or cancel it.
+- **Mark attendance** (`/trainer-sessions`): trainers (their own classes),
+  managers and owners mark booked members attended or no-show.
+- **Trainer utilization** (`/reports/trainers`, CSV via `/api/reports/trainers/csv`):
+  class fill, attendance and PT hours per trainer and branch.
+
+### Database
+
+- `pt_sessions` table with RLS and audit; RPCs `book_pt_session`,
+  `complete_pt_session`, `cancel_pt_session`, `mark_session_attendance`,
+  `reschedule_class_session`, `generate_class_sessions`; report function
+  `trainer_utilization`.
+- Nightly `pg_cron` job `materialize-class-sessions` fills `class_sessions` 60 days
+  ahead from each class's recurrence in the org's timezone. `class_sessions` gains
+  `original_starts_at` so a rescheduled session is not regenerated at its old slot.
+- `class_sessions.booked_count` now counts attended and no-show seats as held.
+
+---
+
+## 2026-10-06 — Classes UI
+
+### Added
+
+- **Classes** (`/classes`): owners and managers add and edit classes (branch,
+  trainer, capacity, room, weekly slots matching `validate_class_recurrence()`);
+  everyone can read the list. The `Classes` sidebar entry is back, with `PT
+  sessions` (`/pt`) and `My sessions` (`/trainer-sessions`) entries ahead of
+  those routes.
+- **Timetable** (`/classes/timetable`): week view of sessions for the selected
+  branch scope. Owners and managers drag a session to another day/hour; the move
+  is optimistic and rolls back with a toast if `reschedule_class_session` refuses.
+- **Front-desk booking**: from a timetable session panel or `/classes/[sessionId]`,
+  search a member, book (reports booked vs waitlisted) and cancel bookings.
+
+---
+
 ## 2026-09-27 — Passwords can be reset
 
 ### Added
