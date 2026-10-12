@@ -45,6 +45,11 @@ export async function listMemberCards(memberId: string) {
  * The enrollment inbox: the ten most recent taps from unknown cards. Pass the
  * caller's branch ids to narrow it (RLS already limits it to branches they can
  * reach); null means every branch, which is what an owner sees.
+ *
+ * A UID that is already live for a member is dropped even if its scan row
+ * survived (rows from before the org-wide cleanup, or a tap racing an
+ * assignment): offering it would only end in "That card belongs to ...".
+ * Twice the page size is fetched so the filter rarely leaves the list short.
  */
 export async function listUnassignedCardScans(branchIds?: string[] | null) {
   const supabase = await createClient()
@@ -53,11 +58,23 @@ export async function listUnassignedCardScans(branchIds?: string[] | null) {
     .from('unassigned_card_scans')
     .select('id, card_uid, branch_id, device_id, last_seen_at, scan_count, devices(name)')
     .order('last_seen_at', { ascending: false })
-    .limit(10)
+    .limit(20)
 
   if (branchIds) request = request.in('branch_id', branchIds)
 
-  return unwrap<UnassignedCardScan[]>(await request) ?? []
+  const scans = unwrap<UnassignedCardScan[]>(await request) ?? []
+  if (scans.length === 0) return scans
+
+  const live = unwrap<{ card_uid: string }[]>(
+    await supabase
+      .from('member_cards')
+      .select('card_uid')
+      .is('revoked_at', null)
+      .in('card_uid', [...new Set(scans.map((scan) => scan.card_uid))])
+  ) ?? []
+  const assigned = new Set(live.map((row) => row.card_uid))
+
+  return scans.filter((scan) => !assigned.has(scan.card_uid)).slice(0, 10)
 }
 
 export async function assignMemberCard(args: {

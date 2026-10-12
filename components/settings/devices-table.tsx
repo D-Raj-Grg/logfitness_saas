@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useState } from 'react'
 
 import {
   renameDevice,
@@ -44,10 +44,11 @@ import {
 } from '@/components/ui/table'
 import type { DeviceListRow } from '@/lib/db/devices'
 import { formatDateTime } from '@/lib/format'
+import { useDismissibleActionState } from '@/hooks/use-dismissible-action-state'
 
 function RenameDeviceDialog({ device }: { device: DeviceListRow }) {
   const [open, setOpen] = useState(false)
-  const [state, formAction, pending] = useActionState<DeviceFormState, FormData>(
+  const [state, formAction, pending, dismiss] = useDismissibleActionState<DeviceFormState>(
     async (prev, formData) => {
       const result = await renameDevice(prev, formData)
       if (result.success) setOpen(false)
@@ -55,9 +56,13 @@ function RenameDeviceDialog({ device }: { device: DeviceListRow }) {
     },
     {}
   )
+  const onOpenChange = (next: boolean) => {
+    dismiss()
+    setOpen(next)
+  }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger render={<Button variant="ghost" size="sm" />}>Rename</DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <form action={formAction} className="flex flex-col gap-4">
@@ -103,17 +108,16 @@ function RenameDeviceDialog({ device }: { device: DeviceListRow }) {
  */
 function RotateKeyDialog({ device }: { device: DeviceListRow }) {
   const [open, setOpen] = useState(false)
-  const [state, formAction, pending] = useActionState<DeviceFormState, FormData>(
+  // Dismissed on every open and close, so neither an earlier error nor an
+  // earlier key reappears when the dialog is opened again.
+  const [state, formAction, pending, dismiss] = useDismissibleActionState<DeviceFormState>(
     rotateDeviceKey,
     {}
   )
-  // A key from an earlier rotate in this session must not reappear when the
-  // dialog is reopened, so it is hidden once the dialog that showed it closes.
-  const [dismissedKey, setDismissedKey] = useState<string | null>(null)
-  const showKey = state.key && state.key !== dismissedKey ? state.key : null
+  const showKey = state.key ?? null
 
   function onOpenChange(next: boolean) {
-    if (!next && state.key) setDismissedKey(state.key)
+    dismiss()
     setOpen(next)
   }
 
@@ -167,7 +171,7 @@ function RotateKeyDialog({ device }: { device: DeviceListRow }) {
 function StatusToggle({ device }: { device: DeviceListRow }) {
   const [open, setOpen] = useState(false)
   const disabling = device.status === 'active'
-  const [state, formAction, pending] = useActionState<DeviceFormState, FormData>(
+  const [state, formAction, pending, dismiss] = useDismissibleActionState<DeviceFormState>(
     async (prev, formData) => {
       const result = await setDeviceStatus(prev, formData)
       if (result.success) setOpen(false)
@@ -175,9 +179,13 @@ function StatusToggle({ device }: { device: DeviceListRow }) {
     },
     {}
   )
+  const onOpenChange = (next: boolean) => {
+    dismiss()
+    setOpen(next)
+  }
 
   return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogTrigger
         render={<Button variant={disabling ? 'destructive' : 'outline'} size="sm" />}
       >

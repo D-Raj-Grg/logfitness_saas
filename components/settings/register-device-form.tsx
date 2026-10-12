@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useState } from 'react'
 import { Check, Copy } from 'lucide-react'
 
 import { registerDevice, type DeviceFormState } from '@/app/(app)/settings/devices/actions'
@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useDismissibleActionState } from '@/hooks/use-dismissible-action-state'
 
 const selectClass =
   'h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/30'
@@ -68,14 +69,13 @@ export function RegisterDeviceForm({
 }: {
   branches: { id: string; name: string }[]
 }) {
-  const [state, formAction, pending] = useActionState<DeviceFormState, FormData>(
+  // "I have copied it" dismisses the result, key and all; a later
+  // registration brings a different key and shows it.
+  const [state, formAction, pending, dismiss] = useDismissibleActionState<DeviceFormState>(
     registerDevice,
     {}
   )
-  // The action result cannot be cleared from here, so "Done" hides the key it
-  // carries instead. A later registration brings a different key and shows it.
-  const [dismissedKey, setDismissedKey] = useState<string | null>(null)
-  const showKey = state.key && state.key !== dismissedKey ? state.key : null
+  const showKey = state.key ?? null
 
   return (
     <Card>
@@ -92,7 +92,7 @@ export function RegisterDeviceForm({
             <AuthFormMessage notice={state.success} />
             <DeviceKeyReveal deviceKey={showKey} />
             <div>
-              <Button type="button" onClick={() => setDismissedKey(showKey)}>
+              <Button type="button" onClick={dismiss}>
                 I have copied it
               </Button>
             </div>

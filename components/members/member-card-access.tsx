@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { RefreshCw } from 'lucide-react'
 
@@ -35,6 +35,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { MemberCardRow, UnassignedCardScan } from '@/lib/db/member-cards'
 import { formatDate, formatDateTime } from '@/lib/format'
+import { useDismissibleActionState } from '@/hooks/use-dismissible-action-state'
 
 const MANUAL = 'manual'
 
@@ -56,9 +57,11 @@ function AssignCardDialog({
   const router = useRouter()
   const [refreshing, startRefresh] = useTransition()
   const [open, setOpen] = useState(false)
-  const [choice, setChoice] = useState<string>(scans[0]?.card_uid ?? MANUAL)
+  // Null until the desk picks something. Until then the newest tap is selected
+  // -- including one that "Check for new taps" just brought in -- else typing.
+  const [choice, setChoice] = useState<string | null>(null)
   const [manualUid, setManualUid] = useState('')
-  const [state, formAction, pending] = useActionState<MemberFormState, FormData>(
+  const [state, formAction, pending, dismiss] = useDismissibleActionState<MemberFormState>(
     async (prev, formData) => {
       const result = await assignMemberCard(prev, formData)
       if (result.success) setOpen(false)
@@ -67,16 +70,23 @@ function AssignCardDialog({
     {}
   )
 
-  // A refresh can bring a new tap in, or take the chosen one away (assigned to
-  // someone else meanwhile); fall back to the newest tap, else typing.
+  function onOpenChange(next: boolean) {
+    dismiss()
+    // Every opening starts from the newest tap, not from last time's pick.
+    setChoice(null)
+    setOpen(next)
+  }
+
+  // A refresh can also take the chosen tap away (assigned meanwhile); fall
+  // back the same way.
   const selected =
-    choice === MANUAL || scans.some((scan) => scan.card_uid === choice)
+    choice === MANUAL || (choice && scans.some((scan) => scan.card_uid === choice))
       ? choice
       : (scans[0]?.card_uid ?? MANUAL)
   const cardUid = selected === MANUAL ? manualUid : selected
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger render={<Button variant="outline" size="sm" />}>
         {replacing ? 'Replace card' : 'Assign card'}
       </DialogTrigger>
@@ -187,7 +197,7 @@ function AssignCardDialog({
 
 function RevokeCardDialog({ memberId, cardUid }: { memberId: string; cardUid: string }) {
   const [open, setOpen] = useState(false)
-  const [state, formAction, pending] = useActionState<MemberFormState, FormData>(
+  const [state, formAction, pending, dismiss] = useDismissibleActionState<MemberFormState>(
     async (prev, formData) => {
       const result = await revokeMemberCard(prev, formData)
       if (result.success) setOpen(false)
@@ -195,9 +205,13 @@ function RevokeCardDialog({ memberId, cardUid }: { memberId: string; cardUid: st
     },
     {}
   )
+  const onOpenChange = (next: boolean) => {
+    dismiss()
+    setOpen(next)
+  }
 
   return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogTrigger render={<Button variant="ghost" size="sm" />}>Revoke</AlertDialogTrigger>
       <AlertDialogContent>
         <form action={formAction} className="flex flex-col gap-4">
@@ -238,7 +252,8 @@ function RevokeCardDialog({ memberId, cardUid }: { memberId: string; cardUid: st
 
 /**
  * The member's door card, beside the app access row. `cards` is the member's
- * whole card history, newest first; at most one of them is live.
+ * whole card history, newest first; at most one of them is live. Null means it
+ * could not be read, and the row says so instead of guessing "no card".
  */
 export function MemberCardAccess({
   memberId,
@@ -246,9 +261,20 @@ export function MemberCardAccess({
   scans,
 }: {
   memberId: string
-  cards: MemberCardRow[]
+  cards: MemberCardRow[] | null
   scans: UnassignedCardScan[]
 }) {
+  if (!cards) {
+    return (
+      <div className="flex flex-col gap-0.5 rounded-lg border px-4 py-3">
+        <span className="text-sm font-medium">Access card</span>
+        <span className="text-sm text-muted-foreground">
+          The card details could not be loaded. Refresh the page to try again.
+        </span>
+      </div>
+    )
+  }
+
   const live = cards.find((card) => !card.revoked_at) ?? null
   const lastRevoked = live ? null : (cards[0] ?? null)
 

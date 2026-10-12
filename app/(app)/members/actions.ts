@@ -677,7 +677,7 @@ export async function assignMemberCard(
   }
 
   revalidatePath(`/members/${parsed.data.memberId}`)
-  return { success: 'Card assigned. It opens the door from the next tap.' }
+  return { success: 'Card assigned. Door access follows membership status and dues.' }
 }
 
 /** Lost, stolen, handed back. The reason is kept on the card's history row. */

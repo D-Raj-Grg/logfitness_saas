@@ -79,11 +79,16 @@ export default async function MemberProfilePage({
     listAttendanceForMember(id),
     listBranches(),
     listNotificationsForMember(id),
-    canManage ? listMemberCards(id) : Promise.resolve([]),
+    // A failed card read must not take the whole profile down: null renders
+    // the Access card row in an error state, and a failed inbox read is just
+    // an empty picker (typing the UID still works).
+    canManage ? listMemberCards(id).catch(() => null) : Promise.resolve([]),
     // The enrollment inbox only matters to someone who can assign a card. An
     // owner sees taps from every branch; anyone else, their own branches'.
     canManage
-      ? listUnassignedCardScans(staff.role === 'owner' ? null : staff.branchIds)
+      ? listUnassignedCardScans(staff.role === 'owner' ? null : staff.branchIds).catch(
+          () => []
+        )
       : Promise.resolve([]),
   ])
 
