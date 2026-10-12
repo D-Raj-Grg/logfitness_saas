@@ -14,7 +14,7 @@
 
 // ---- Device identity ----------------------------------------------------
 // The key shown ONCE when you register the reader in the web console
-// (Settings -> Check-in devices -> Register). Starts with "lgd_".
+// (Settings -> Devices -> Register a reader). Starts with "lgd_".
 // The firmware never prints it to Serial.
 #define DEVICE_KEY     "lgd_paste_your_device_key_here"
 

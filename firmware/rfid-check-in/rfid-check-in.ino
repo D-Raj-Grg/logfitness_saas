@@ -23,6 +23,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <time.h>
+#include "sntp.h"  // sntp_set_time_sync_notification_cb (core 2.x; 3.x renames it esp_sntp.h)
 
 #include "config.h"
 
@@ -63,7 +64,7 @@
 #define INFO_HOLD_MS          5000UL
 #define WIFI_BOOT_WAIT_MS     20000UL
 #define WIFI_RETRY_MS         15000UL
-#define NTP_WAIT_MS           30000UL
+#define NTP_WAIT_MS           15000UL
 #define NTP_RETRY_MS          (10UL * 60UL * 1000UL)
 #define NTP_RESYNC_MS         (24UL * 60UL * 60UL * 1000UL)
 #define RC522_CHECK_MS        60000UL
@@ -116,6 +117,7 @@ bool wifiWasConnected = false;
 uint32_t lastWifiAttemptMs = 0;
 
 bool ntpPending = false;
+volatile bool ntpFreshReply = false;  // set by the SNTP callback (lwIP task)
 bool ntpEverSynced = false;
 uint32_t ntpStartMs = 0;
 uint32_t lastNtpSyncMs = 0;
@@ -188,6 +190,28 @@ void copyDisplayText(char *dst, size_t dstSize, const char *src, size_t maxChars
     }
   }
   dst[n] = '\0';
+}
+
+// Rupees from paisa, grouped like the console (en-IN: 1,23,456.5). Paisa are
+// dropped from Rs 1,00,000 up so the line always fits 21 characters.
+void formatRupees(char *out, size_t outSize, long paisa) {
+  if (paisa < 0) paisa = 0;
+  long rs = paisa / 100;
+  long ps = paisa % 100;
+  char digits[16];
+  char grouped[24];
+  snprintf(digits, sizeof(digits), "%ld", rs);
+  int len = (int)strlen(digits);
+  int g = 0;
+  for (int i = 0; i < len; i++) {
+    int left = len - i;  // digits still to copy, including this one
+    if (i > 0 && (left == 3 || (left > 3 && (left - 3) % 2 == 0))) grouped[g++] = ',';
+    grouped[g++] = digits[i];
+  }
+  grouped[g] = '\0';
+  if (ps == 0 || rs >= 100000) snprintf(out, outSize, "Rs %s", grouped);
+  else if (ps % 10 == 0) snprintf(out, outSize, "Rs %s.%ld", grouped, ps / 10);
+  else snprintf(out, outSize, "Rs %s.%02ld", grouped, ps);
 }
 
 void readUidHex(char *out, size_t outSize) {
@@ -338,10 +362,8 @@ void drawResult(const CheckResult &r) {
     case RES_DENY:
       snprintf(big, sizeof(big), "DENY");
       if (strcmp(r.reason, "dues") == 0) {
-        long rs = r.duePaisa / 100;
-        long ps = r.duePaisa % 100;
-        if (ps == 0) snprintf(line1, sizeof(line1), "PAY DUES Rs %ld", rs);
-        else snprintf(line1, sizeof(line1), "PAY DUES Rs %ld.%02ld", rs, ps);
+        snprintf(line1, sizeof(line1), "PAY DUES");
+        formatRupees(line2, sizeof(line2), r.duePaisa);
       } else if (strcmp(r.reason, "expired") == 0) {
         snprintf(line1, sizeof(line1), "EXPIRED");
       } else if (strcmp(r.reason, "frozen") == 0) {
@@ -407,22 +429,30 @@ void drawResult(const CheckResult &r) {
 // ---------------------------------------------------------------------------
 // WiFi + time
 // ---------------------------------------------------------------------------
+// Runs in the lwIP task whenever an NTP reply has set the system clock.
+void onNtpSync(struct timeval *tv) {
+  (void)tv;
+  ntpFreshReply = true;
+}
+
 void startNtp() {
   Serial.println("[ntp] requesting time");
+  ntpFreshReply = false;
   configTime(TZ_OFFSET_SEC, 0, "pool.ntp.org", "time.google.com");
   ntpPending = true;
   ntpStartMs = millis();
   lastNtpAttemptMs = ntpStartMs;
 }
 
-// Copy the (NTP-disciplined) system clock into the DS3231, as local time.
+// After a fresh NTP reply, copy the system clock into the DS3231 as local
+// time. Without a reply (within NTP_WAIT_MS) the RTC is left alone.
 void updateNtp() {
   uint32_t now = millis();
   if (ntpPending) {
     time_t sys = time(nullptr);
     struct tm local;
     localtime_r(&sys, &local);
-    if (local.tm_year + 1900 >= MIN_VALID_YEAR) {
+    if (ntpFreshReply && local.tm_year + 1900 >= MIN_VALID_YEAR) {
       ntpPending = false;
       ntpEverSynced = true;
       lastNtpSyncMs = now;
@@ -436,7 +466,9 @@ void updateNtp() {
                     local.tm_hour, local.tm_min, local.tm_sec);
     } else if (now - ntpStartMs > NTP_WAIT_MS) {
       ntpPending = false;
-      Serial.println("[ntp] no answer, will retry");
+      // First sync: retry in NTP_RETRY_MS. Daily re-sync: try again tomorrow.
+      if (ntpEverSynced) lastNtpSyncMs = now;
+      Serial.println("[ntp] no fresh reply, RTC left unchanged");
     }
     return;
   }
@@ -578,6 +610,9 @@ void postCheck(const char *uid, CheckResult &r) {
 // Card + buttons
 // ---------------------------------------------------------------------------
 void enterState(ReaderState s) {
+  // The same-UID window runs from the end of the result hold, so a card left
+  // on the reader is not posted again the moment the screen clears.
+  if (s == ST_IDLE && state == ST_RESULT) lastUidMs = millis();
   state = s;
   stateSinceMs = millis();
   if (s == ST_IDLE) {
@@ -613,7 +648,14 @@ void handleCard() {
   drawResult(r);
   switch (r.kind) {
     case RES_ALLOW: startBeep(BEEP_SHORT, PATTERN_LEN(BEEP_SHORT)); break;
-    case RES_DENY:  startBeep(BEEP_TRIPLE, PATTERN_LEN(BEEP_TRIPLE)); break;
+    case RES_DENY:
+      // Triple = "card not enrolled / misread"; long = a real denial.
+      if (strcmp(r.reason, "unknown_card") == 0 || strcmp(r.reason, "bad_uid") == 0) {
+        startBeep(BEEP_TRIPLE, PATTERN_LEN(BEEP_TRIPLE));
+      } else {
+        startBeep(BEEP_LONG, PATTERN_LEN(BEEP_LONG));
+      }
+      break;
     default:        startBeep(BEEP_LONG, PATTERN_LEN(BEEP_LONG)); break;
   }
   state = ST_RESULT;
@@ -685,6 +727,7 @@ void setup() {
                 (v == 0x00 || v == 0xFF) ? "(NOT FOUND - check wiring/3.3V)" : "");
   lastRc522CheckMs = millis();
 
+  sntp_set_time_sync_notification_cb(onNtpSync);
   connectWifi();
   wifiWasConnected = false;  // let maintainWifi() log + start NTP
   maintainWifi();

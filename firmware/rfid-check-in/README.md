@@ -72,8 +72,9 @@ anything today (info screen).
 
 ## Register the reader and get its key
 
-1. In the web console go to **Settings -> Check-in devices -> Register**.
-2. Pick the branch the reader is installed at and give it a name.
+1. In the web console go to **Settings -> Devices** (`/settings/devices`).
+2. In **Register a reader**, pick the branch the reader is installed at, give
+   it a name and click **Register reader**.
 3. The console shows the device key (starts with `lgd_`) **once**. Copy it now.
    Only its sha256 hash is stored, so it cannot be shown again; if you lose
    it, rotate the key (below).
@@ -99,7 +100,8 @@ anything today (info screen).
 
 Time comes from the DS3231. After WiFi connects the reader syncs the RTC from
 NTP (`pool.ntp.org`, `time.google.com`) in Nepal time, UTC+5:45, and again
-every 24 hours. The RTC holds local time; the `ts` sent to the server is
+every 24 hours. The RTC is only written after a fresh NTP reply (waits up to
+15 s); if none arrives it is left alone. The RTC holds local time; the `ts` sent to the server is
 converted back to real Unix seconds.
 
 | State | OLED | Beep |
@@ -108,8 +110,8 @@ converted back to real Unix seconds.
 | Idle | label + WiFi state, large clock, date, `TAP CARD` | - |
 | Checking | `CHECKING` + card UID | - |
 | Allowed | name, member code, `ALLOW`, `WELCOME` (or `ALREADY IN` on a second tap today), `Expires in N days` when expiring | 1 short |
-| Denied: dues | `DENY`, `PAY DUES Rs X` (X = `due_paisa` / 100) | 3 short |
-| Denied: expired / frozen / not started / no membership / left | `DENY`, `EXPIRED` / `FROZEN` / `NOT STARTED YET` / `NO MEMBERSHIP` / `NOT A MEMBER` | 3 short |
+| Denied: dues | `DENY`, `PAY DUES`, `Rs 1,500.5` (from `due_paisa`, grouped like the console; paisa dropped from Rs 1,00,000) | 1 long |
+| Denied: expired / frozen / not started / no membership / left | `DENY`, `EXPIRED` / `FROZEN` / `NOT STARTED YET` / `NO MEMBERSHIP` / `NOT A MEMBER` | 1 long |
 | Unknown card | `DENY`, `UNKNOWN CARD`, `Ask desk to assign` | 3 short |
 | Bad read | `DENY`, `BAD READ`, `Tap again` | 3 short |
 | Key unknown (HTTP 401) | `SETUP`, `DEVICE KEY UNKNOWN` | 1 long |
@@ -117,13 +119,17 @@ converted back to real Unix seconds.
 | Offline (no WiFi, timeout, HTTP 5xx/other) | `OFFLINE`, `NOT RECORDED`, cause | 1 long |
 | K1 pressed (idle) | info for 5 s: label, IP, RSSI, RTC date/time, firmware version | - |
 
-Results stay on screen for 3 seconds. The same card is ignored for 3 seconds
-after its result so a lingering card does not double-post (the server also
+Beeps by ear: **1 short** = in, **1 long** = refused or reader problem,
+**3 short** = card not enrolled (or misread), send them to the desk.
+
+Results stay on screen for 3 seconds. The same card is ignored for a further
+3 seconds after the result clears so a lingering card does not double-post (the server also
 records at most one visit per member per day).
 
-**Enrolling a new card:** a member taps an unassigned card, the reader shows
-`UNKNOWN CARD`, and the scan appears in the console's unassigned-scans list.
-Staff assign it from the member's profile. The next tap is allowed.
+**Enrolling a new card:** the member taps the new card; the reader shows
+`UNKNOWN CARD` and remembers the UID. At the desk, open the member's profile
+-> **Access card** -> **Assign card**, and pick the UID under **Recent unknown
+cards** (or type it in). The next tap is checked normally.
 
 ## Security
 
@@ -134,11 +140,11 @@ Staff assign it from the member's profile. The next tap is allowed.
   card in?" for that branch and create check-ins for cards that are assigned,
   but treat a leaked key as compromised. A follow-up is to pin the CA with the
   ESP32 certificate bundle.
-- **Rotating a key**: in the console open **Settings -> Check-in devices**, pick
+- **Rotating a key**: in the console open **Settings -> Devices**, find
   the reader, choose **Rotate key**, copy the new key, update `DEVICE_KEY` in
   `config.h` and re-flash. The old key stops working immediately, so the reader
   shows `DEVICE KEY UNKNOWN` until it is re-flashed.
-- **Disabling a reader** (lost or stolen) in the console makes it show
+- **Disabling a reader** (lost or stolen) with **Disable** in **Settings -> Devices** makes it show
   `READER DISABLED`; nothing it sends is recorded.
 
 ## Troubleshooting
