@@ -464,4 +464,17 @@ Do not build these without an explicit decision to change scope.
   `supabase/tests/membership_payment_messages.sql`. The Flutter mirrors throw
   on an unknown `notification_event`, so the three values need a client release
   before a gym switches them on -- see `TASKS.md`.
+- **RFID card check-in (2026-10-12).** A door reader (ESP32 + RC522) is a
+  `devices` row bound to one branch, and it is not a user: it holds no JWT, only
+  a random key (`lgd_` + 32 bytes) that `register_device` / `rotate_device_key`
+  return exactly once. Postgres stores only its sha256 (`key_hash`) and an
+  8-character `key_prefix`; there is no project secret to provision, because the
+  Edge Function only gets `SUPABASE_URL` and the service-role key. The
+  `rfid-check` function runs with `verify_jwt: false`, hashes the
+  `x-device-key` header, and calls `rfid_check_in(p_key_hash, p_card_uid)` -- a
+  security definer RPC executable by `service_role` only, which derives org and
+  branch from the device row and trusts nothing else in the request. Desk and
+  door judge a member by the same `attendance_snapshot()`. Door check-ins have
+  `checked_in_by` null and `device_id` set; the console shows them as
+  "Device · <name>". Gate: `supabase/tests/rfid_check_in.sql`.
 - Next task: the rest of Phase 3's reports and Phase 4's class UI. See `TASKS.md`.

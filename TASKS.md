@@ -64,6 +64,23 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 - [x] Attendance history on the member profile
 - [x] Absent 14+ days report (churn early warning) — `/reports/absent`
 - [x] QR token design (mint/verify) — `mint_qr_token` / `verify_qr_token` RPCs, HMAC-signed with a Vault key created on first use; used in Phase 6
+- [ ] RFID card check-in at the door (2026-10-12; explicit scope decision, see
+      Discovered). ESP32 + RC522 reader, OLED + buzzer; allow iff the membership
+      is active/expiring and nothing is owed. Enrollment = tap an unknown card,
+      then assign it from the member profile.
+  - [x] DB: `devices`, `member_cards`, `unassigned_card_scans`, `attendance.device_id`;
+        `register_device` / `rotate_device_key` / `update_device`;
+        `attendance_snapshot`, `assign_member_card`, `revoke_member_card`,
+        `rfid_check_in` (service-role only). Gate: `supabase/tests/rfid_check_in.sql`
+  - [x] Edge Function `rfid-check` (`verify_jwt: false`, device key hashed and
+        handed to `rfid_check_in`)
+  - [x] Web: `/settings/devices` (owner + manager; one-time key display, rename,
+        enable/disable, rotate), "Access card" row on the member profile (assign
+        from recent unknown taps or by UID, replace, revoke with a reason),
+        "Device · <name>" as the actor on door check-ins
+  - [x] Flutter staff app: card assignment on the member profile (`logfitness_flutter`)
+  - [ ] Firmware: `config.h` (gitignored) for WiFi + device key, project
+        `hefptanjhwxcuhikuhwd`, OLED/buzzer states
 
 ## Phase 3 — Chain layer
 
@@ -1267,6 +1284,35 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
       values to `logfitness_flutter`'s `NotificationEvent`, its label map and
       its count test, ship that build, and only then tell a gym the feature
       exists.
+
+- [x] **2026-10-12** Scope decision: RFID card check-in is in v1. CLAUDE.md
+      lists "biometric hardware" as excluded; the user decided on 2026-10-12 to
+      build an RFID door reader (cards, not biometrics) with attendance and an
+      allow/deny decision. Staff cards, relays/turnstiles and biometrics stay
+      out. See Phase 2.
+
+- [ ] **2026-10-12** Switch `check_in_member` to `attendance_snapshot()`. The
+      membership/dues/banner read was lifted out verbatim for `rfid_check_in`,
+      but `check_in_member` still carries its own inline copy, so the desk and
+      the door can drift. Replace the inline block with a call -- same
+      signature and jsonb shape, since it is the Flutter app's contract.
+
+- [ ] **2026-10-12** Denied card taps leave no trace. `rfid_check_in` writes
+      attendance only on an allow, and an unknown card only lands in
+      `unassigned_card_scans`; a member refused for dues or an expired plan is
+      invisible to the desk. Add a `card_scan_log` (org/branch scoped, RLS,
+      pruned) if gyms ask "who tried to get in".
+
+- [ ] **2026-10-12** The firmware talks HTTPS with `setInsecure()` -- no
+      certificate check -- so the device key could be read by anyone who can
+      intercept the reader's traffic. Pin the Supabase root CA in the sketch
+      (and plan for its rotation) before a gym runs a reader on a shared
+      network.
+
+- [ ] **2026-10-12** Staff cards are unsupported. `member_cards` is members
+      only; a trainer tapping in gets `unknown_card` and lands in the
+      unassigned inbox. Staff attendance by card needs its own table and a
+      decision about what a staff "check-in" means.
 
 ## Open questions (from the PRD)
 
