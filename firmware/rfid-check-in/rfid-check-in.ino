@@ -23,7 +23,15 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <time.h>
-#include "sntp.h"  // sntp_set_time_sync_notification_cb (core 2.x; 3.x renames it esp_sntp.h)
+// sntp_set_time_sync_notification_cb() is declared in esp_sntp.h on core 3.x
+// (IDF 5) and in both esp_sntp.h and sntp.h on core 2.x (IDF 4.4).
+#if __has_include(<esp_sntp.h>)
+  #include <esp_sntp.h>
+#elif __has_include(<sntp.h>)
+  #include <sntp.h>
+#else
+  #error "No esp_sntp.h or sntp.h: install the ESP32 Arduino core (2.x or 3.x)"
+#endif
 
 #include "config.h"
 

@@ -52,7 +52,7 @@ anything today (info screen).
 1. **Board support.** File -> Preferences -> Additional Boards Manager URLs:
    `https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json`.
    Tools -> Board -> Boards Manager -> install **esp32 by Espressif Systems**, a
-   **2.0.x** release (2.0.17 is the last 2.x). Core 3.x is not tested.
+   **2.0.x** release (2.0.17 is the last 2.x). The sketch is written to compile on 3.x too, but has only been checked against 2.x APIs.
 2. **Board settings.** Tools -> Board -> **ESP32 Dev Module**. Upload speed
    921600 (drop to 115200 if uploads fail). Port: the CP2102 COM port (install
    the Silicon Labs CP210x driver if no port appears).
