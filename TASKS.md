@@ -81,6 +81,43 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
   - [x] Flutter staff app: card assignment on the member profile (`logfitness_flutter`)
   - [ ] Firmware: `config.h` (gitignored) for WiFi + device key, project
         `hefptanjhwxcuhikuhwd`, OLED/buzzer states
+  - [ ] Offline mode (2026-10-14; sized for 5,000 members). Reader caches the
+        allow-list in flash and decides from it when the server is down.
+        Trade-off, accepted: the cache is trusted until the next sync, so a
+        revoked card or new arrears still opens the door during an outage.
+    - [x] DB: `rfid_sync_cards` (keyset-paged allow-list, same rule as
+          `rfid_check_in`), `rfid_log_offline` (backdated, idempotent backfill;
+          strangers go to the enrollment inbox), both service-role only.
+          Migration `20261014100000_rfid_offline_sync.sql`; gate
+          `supabase/tests/rfid_offline_sync.sql` (incl. 5,000-member sync)
+    - [x] Edge Function `rfid-sync` (`GET` pages as `UID,YYYYMMDD` text,
+          `POST` events), `verify_jwt: false`, device key auth
+    - [x] Firmware 1.1.0: LittleFS cache + tap queue, sync every 15 min,
+          online-first with cache fallback, compiles on core 2.0.17
+    - [ ] Flash 1.1.0 and walk the offline checklist on the real reader (tap
+          online, pull WiFi, tap enrolled / unknown card, reboot offline,
+          reconnect, check backdated attendance rows)
+    - [ ] Fit the DS3231 battery (offline boots without it have no date)
+  - [x] Door relay (2026-10-14): fw 1.1.0 now pulses GPIO26 on every allowed
+        tap (3 s default, active-HIGH HW-482). It was never driven before.
+        Verified on the bench: relay clicks and releases.
+  - [x] Distinct beep patterns per outcome + menu/serial Sound test (2026-10-14)
+  - [x] Code review of offline mode / relay / menu / web page (2026-10-14): fixed
+        signed-millis deadline bugs (sync backoff, web lock), background calls
+        blocking the door during an outage, `Rs 0` shown for offline dues, unchecked
+        flash writes + remove-before-rename of the cache, 401/403 keeping a stale
+        cache, queue-full not surfaced, backfill snapshot taken at upload time
+        (migration `20261014100200`), archived-with-dues mismatch, and a real
+        password in `config.h.example`. Unknown-card taps are intentionally NOT
+        queued offline (a member enrolled after the last sync would get a visit
+        recorded for a tap the door refused).
+  - [x] WiFi settings page (2026-10-14): password + one-use token + lockout, no
+        door-open route; offline test, relay on/off, open time, sound, sync,
+        recent taps. Verified from curl: 401/403/429 paths, toggles, no relay route.
+  - [ ] Settings menu on the OLED keypad (hold K4 + code): offline test, relay,
+        open time, relay test, sound, sync. Code done and flashed; the OLED
+        board's K1..K4 pins were not connected to the ESP32. Wire K1..K4 to
+        GPIO13/14/16/17 and test the menu.
 
 ## Phase 3 — Chain layer
 

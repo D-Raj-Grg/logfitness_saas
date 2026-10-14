@@ -4,9 +4,9 @@ A door reader for Lord of Gyms. A member taps their RFID card; the reader sends
 the card UID to the `rfid-check` Edge Function, which records the visit and
 answers **allow** or **deny**. The OLED shows the answer and the buzzer beeps.
 
-The reader never decides anything itself. Membership, dues and card ownership
-all live in the backend. If the server cannot be reached the reader shows
-**OFFLINE** and the visit is **not** recorded (there is no offline queue yet).
+Online, the reader never decides anything itself: membership, dues and card
+ownership all live in the backend. If the server cannot be reached it falls back
+to **offline mode** (below) using a copy of the allow-list it keeps in flash.
 
 ## Hardware
 
@@ -15,7 +15,7 @@ all live in the backend. If the server cannot be reached the reader shows
 - DS3231 RTC module with a CR2032 coin cell
 - 128x64 SSD1306 I2C OLED (0.96" or 1.3") at address 0x3C, with the 4-button keypad (K1-K4)
 - Buzzer (active buzzer module, or a buzzer driven through a transistor)
-- Relay: GPIO26 is reserved for a future door relay; the firmware does not drive it
+- Door relay: single-channel transistor board (HW-482, JQC3F-05VDC-C, 10 A), active-HIGH, on GPIO26
 
 ## Wiring
 
@@ -37,15 +37,56 @@ all live in the backend. If the server cannot be reached the reader shows
 | OLED | VCC / GND | 3V3 / GND | |
 | Buzzer | + / signal | GPIO25 (default) | set `BUZZER_PIN` in `config.h` |
 | Buzzer | - | GND | |
-| Keypad | K1..K4 | unknown, set in `config.h` | button to GND, read active-low |
-| Relay | IN | GPIO26 | reserved, unused |
+| Keypad | K1 | GPIO13 | the `^` button; button to GND, read active-low (`BTN_K1_PIN`) |
+| Keypad | K2 | GPIO14 | the `v` button |
+| Keypad | K3 | GPIO16 | the `#` button |
+| Keypad | K4 | GPIO17 | the `*` button |
+| Relay | IN | GPIO26 | energised when HIGH (`RELAY_ACTIVE_HIGH`) |
+| Relay | VCC / GND | VIN (5 V) / GND | **5 V, not 3V3**: the coil is a 5 V part |
 
-Button pins: trace each K1-K4 button on the OLED board to the ESP32 pin it
-reaches and put the GPIO numbers in `config.h` (`BTN_K1_PIN` ...). Leave a
-button at `-1` if it is not connected. The firmware uses `INPUT_PULLUP`, but
+The OLED board's header is `GND VCC SCL SDA K4 K3 K2 K1`. Only the first four
+carry wires; **K1..K4 must each be wired to a GPIO** (the table above uses the
+free pins 13, 14, 16, 17 and `config.h` says the same via `BTN_K1_PIN` ...). Set a
+button to `-1` to leave it unused. The firmware uses `INPUT_PULLUP`, but
 **GPIO34, 35, 36 and 39 have no internal pull-ups**: a button on one of those
-pins needs an external 10 kΩ resistor from the pin to 3.3 V. Only K1 does
-anything today (info screen).
+pins needs an external 10 kΩ resistor from the pin to 3.3 V.
+
+## Door relay
+
+An allowed tap (online, or offline from the cached list) energises the relay for
+`RELAY_OPEN_MS` (default 3 s; the menu offers 1/3/5/10 s). That includes `ALREADY
+IN`, so a member who stepped out can come back in. Denied taps, unknown cards,
+offline-not-recorded and device errors never open it.
+
+- Wire the door strike through the relay's **COM + NO** contacts on the strike's
+  own supply. Whether the lock is fail-safe or fail-secure is a hardware choice.
+- The firmware drives GPIO26 to "off" as the very first thing at boot.
+- Background sync/upload is held off while the relay is open, so a slow request
+  cannot stretch the open time.
+- Inverted module (opto-isolated "low-level trigger")? Set `RELAY_ACTIVE_HIGH 0`.
+- Check it: menu -> **Relay test**, or send `r` over USB serial.
+
+## Settings menu
+
+Hold **K4 for 3 s** on the idle screen, then press the code on the keypad
+(`SETTINGS_PIN` in `config.h`, default `1234` = K1,K2,K3,K4; `""` = no code).
+K1 = up, K2 = down, K3 = change/run, K4 = back. It closes itself after 30 s
+without a key; a wrong code returns to the idle screen. Card taps are ignored
+while it is open.
+
+| Item | What it does |
+|---|---|
+| Offline test | Skips the server and decides from the cached list; taps are queued and upload/sync pause until you switch it off. Idle screen shows `* OFFLINE TEST *`. **Not saved**: a reboot switches it off. |
+| Relay | ON/OFF (saved). Off means allowed taps no longer open the door. |
+| Open time | 1 / 3 / 5 / 10 s (saved). |
+| Relay test | Pulses the relay once now, even if Relay is OFF (it is a wiring check). |
+| Sound | ON/OFF (saved). |
+| Sync now | Fetches the card list straight away. |
+| Back | Close the menu. |
+
+Settings live in `/settings.bin` on the reader's flash. Without a keypad, the
+same switches are on USB serial (115200): `o` offline test, `r` relay test,
+`s` sync now, `i` status.
 
 ## Software setup (Arduino IDE 1.8.19, Windows)
 
@@ -109,18 +150,33 @@ converted back to real Unix seconds.
 | Boot | `BOOT`, then `WIFI` + SSID + progress dots (up to 20 s) | one short beep when ready |
 | Idle | label + WiFi state, large clock, date, `TAP CARD` | - |
 | Checking | `CHECKING` + card UID | - |
-| Allowed | name, member code, `ALLOW`, `WELCOME` (or `ALREADY IN` on a second tap today), `Expires in N days` when expiring | 1 short |
+| Allowed | name, member code, `ALLOW`, `WELCOME` (or `ALREADY IN` on a second tap today), and `N Days Left` (`1 Day Left`, `Expires Today`) | 1 short |
 | Denied: dues | `DENY`, `PAY DUES`, `Rs 1,500.5` (from `due_paisa`, grouped like the console; paisa dropped from Rs 1,00,000) | 1 long |
 | Denied: expired / frozen / not started / no membership / left | `DENY`, `EXPIRED` / `FROZEN` / `NOT STARTED YET` / `NO MEMBERSHIP` / `NOT A MEMBER` | 1 long |
 | Unknown card | `DENY`, `UNKNOWN CARD`, `Ask desk to assign` | 3 short |
 | Bad read | `DENY`, `BAD READ`, `Tap again` | 3 short |
 | Key unknown (HTTP 401) | `SETUP`, `DEVICE KEY UNKNOWN` | 1 long |
 | Reader disabled (HTTP 403) | `DISABLED`, `READER DISABLED` | 1 long |
-| Offline (no WiFi, timeout, HTTP 5xx/other) | `OFFLINE`, `NOT RECORDED`, cause | 1 long |
-| K1 pressed (idle) | info for 5 s: label, IP, RSSI, RTC date/time, firmware version | - |
+| Offline, card allowed | card UID, `ALLOW`, `OFFLINE MODE`, `N Days Left` (`No Expiry` for open-ended plans) | 1 short |
+| Offline, any other status | card UID, then the same `DENY` screens as online: `EXPIRED`, `FROZEN`, `NOT STARTED YET`, `NO MEMBERSHIP`, `NOT A MEMBER`, `PAY DUES` (no amount offline: it says `See front desk`) | 1 long (2 long for dues) |
+| Offline, card not in the list | card UID, `DENY`, `UNKNOWN CARD`, `Ask desk to assign` | 3 short |
+| Offline and never synced (no list yet) | `OFFLINE`, `NOT RECORDED`, cause | 1 long |
+| K1 pressed (idle) | info for 5 s: label, IP, RSSI, RTC date/time, firmware version, `C<cards cached> Q<taps queued>` | - |
 
-Beeps by ear: **1 short** = in, **1 long** = refused or reader problem,
-**3 short** = card not enrolled (or misread), send them to the desk.
+Beeps by ear (an active buzzer has one pitch, so the rhythm is the message):
+
+| Beep | Meaning |
+|---|---|
+| 1 short | in |
+| 2 short | in, but 7 days or fewer left |
+| short + medium | in, offline (decided from the cached list) |
+| 3 short | card not enrolled, or a misread: send them to the desk |
+| 2 long | dues owing |
+| 1 very long | refused (expired, frozen, not started, left) or a reader problem |
+
+Menu -> **Sound test** (or `b` on USB serial) plays short, double, very long, even
+with Sound OFF, so the buzzer wiring can be checked. Sound OFF silences every
+other beep.
 
 Results stay on screen for 3 seconds. The same card is ignored for a further
 3 seconds after the result clears so a lingering card does not double-post (the server also
@@ -130,6 +186,72 @@ records at most one visit per member per day).
 `UNKNOWN CARD` and remembers the UID. At the desk, open the member's profile
 -> **Access card** -> **Assign card**, and pick the UID under **Recent unknown
 cards** (or type it in). The next tap is checked normally.
+
+## Offline mode (fw 1.1.0)
+
+The reader keeps a copy of the allow-list in its flash (LittleFS) so the door
+keeps working when WiFi or the server is down. Sizing: 5,000 members is
+about 120 KB of the 1.5 MB data partition.
+
+- **Sync down.** As soon as WiFi is up, then every 15 minutes, the reader pulls
+  the list from the `rfid-sync` Edge Function (`GET`, 500 cards per page, one
+  page per idle pass so a tap never waits behind more than one page). Every
+  live card is on the list with its status (allowed, dues, expired, frozen,
+  not started, no membership, left); allowed ones carry the last day they may
+  enter, which is how `N Days Left` is worked out offline. The new list
+  replaces the old one only after the last page arrives. A failed sync retries after 1 minute.
+- **Decide locally.** A tap goes to the server first. Only if the server does not
+  answer (no WiFi, timeout, 5xx) does the reader check the list. After one
+  failed round trip it fails faster (5 s) for the next minute so a dead server
+  does not stall the door.
+- **Queue and upload.** Taps allowed offline are queued in flash (max 2,000, one
+  per card per day) and uploaded in batches of 50 through `rfid-sync` (`POST`)
+  once the network is back. The visit is recorded with the reader's own time as
+  `checked_in_at`, attributed to this reader, and uploads are idempotent per
+  member per day. Denied taps are not queued.
+- **Not available offline:** member names, dues amounts, "already in" detection,
+  and enrolling a new card (an unknown card shows `UNKNOWN CARD`, but is not
+  remembered for the desk).
+
+- **If the server refuses the reader** (401 unknown key / 403 disabled), on a tap,
+  a sync or an upload, the reader **throws the cached list away**: a disabled or
+  re-keyed reader must not keep opening the door whenever the network drops. It
+  then shows `OFFLINE / NOT RECORDED` until a sync succeeds again.
+- **Queue full or flash error:** an allowed offline tap still opens the door but
+  the screen says `NOT LOGGED` instead of `OFFLINE MODE`, because the visit could
+  not be queued.
+- **A dead server never stalls the door for long:** after one failed round trip
+  the reader skips background sync/upload for a minute and uses 4-5 s timeouts.
+
+**Known trade-off:** the cached list is trusted until the next sync. A card
+revoked, or a member who starts owing, can still enter while the reader is
+offline, so the exposure is as long as the outage.
+
+**Clock:** offline decisions compare against the RTC. If the RTC has lost power
+(empty battery) and WiFi is down at boot, the reader has no date; it then judges
+against the day of the last successful sync, and queued taps are uploaded without
+a time (the server stamps them at upload). Fit a CR2032 to avoid this.
+
+## WiFi settings page
+
+A small page on the reader for the same switches as the keypad menu, from a
+phone or laptop on the gym WiFi: `http://<reader IP>/` (the IP is on the K1 info
+screen and in the Serial log) or `http://rfid-reader.local/`. Set `WEB_PASSWORD`
+in `config.h` to turn it on; **an empty password turns the page off**. Username
+is `WEB_USER` (default `admin`).
+
+- **Can do:** Offline test on/off, Relay on/off, Open time, Sound, Sync now.
+  Shows firmware, clock, WiFi, cards cached, last sync, queued taps and the last
+  10 taps (time, last 4 hex of the UID, result). `/status.json` has the same
+  status for scripts.
+- **Cannot do:** open the door. There is no relay-test route; that stays on the
+  keypad and USB serial.
+- **Protection:** HTTP Basic password; 5 wrong passwords lock the page for 60 s;
+  every change needs a one-use token from the page you just loaded, so another
+  web page cannot silently post to the reader.
+- **Limit:** it is plain HTTP (the ESP32 does not serve HTTPS here), so the
+  password crosses the LAN unencrypted. Use a long password used nowhere else and
+  keep the reader's WiFi trusted.
 
 ## Security
 
@@ -158,7 +280,10 @@ cards** (or type it in). The next tap is checked normally.
 | Idle shows `Clock not set` / `--:--` | RTC lost time (coin cell flat or missing). Replace the CR2032; the clock is reset from NTP once WiFi is up. |
 | `RTC error` | DS3231 not found on I2C (0x68). Check wiring. |
 | Clock drifts or is wrong after power cuts | Replace the RTC battery. Some cheap DS3231 boards have a charging circuit meant for LIR2032 cells; with a CR2032 remove the charging diode/resistor. |
-| `OFFLINE` + `No WiFi` | Wrong SSID/password or a 5 GHz-only network. The reader retries every 15 s. |
+| `OFFLINE` + `No WiFi` | Wrong SSID/password or a 5 GHz-only network. The reader retries every 15 s. If it has synced before, taps are now decided from the cached list instead (see Offline mode). |
+| Always `OFFLINE MODE`, never a name | The server is failing. Open Serial: `[http]` shows the error. Offline decisions keep the door working meanwhile. |
+| K1 shows `C0` | No successful sync yet. Serial `[sync]` lines say why (HTTP 401 = key, 403 = disabled, anything else = network). |
+| Compile error `RFID_SYNC_ENDPOINT` | Add the `RFID_SYNC_ENDPOINT` line from `config.h.example` to your `config.h`. |
 | `OFFLINE` + `No server reply` / `HTTP 5xx` | Internet down or a server error. Check Serial for the HTTP error. |
 | `DEVICE KEY UNKNOWN` | Key mistyped, rotated, or the reader was registered on another project. Re-copy or rotate. |
 | Buzzer always on / never on | Flip `BUZZER_ACTIVE_HIGH`. A *passive* buzzer only clicks with this firmware; use an active buzzer module. |
