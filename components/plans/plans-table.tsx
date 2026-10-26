@@ -49,10 +49,13 @@ export function PlansTable({
   rows,
   branchNames,
   context,
+  planFees,
 }: {
   rows: PlanRow[]
   branchNames: Record<string, string>
   context: PlanFormContext
+  /** Names of the active fees each plan carries, by plan id. */
+  planFees: Record<string, string[]>
 }) {
   const [editing, setEditing] = useState<PlanRow | null>(null)
 
@@ -73,7 +76,11 @@ export function PlansTable({
             <TableHead>Type</TableHead>
             <TableHead>Length</TableHead>
             <TableHead className="text-right">Price</TableHead>
-            <TableHead className="text-right">Joining fee</TableHead>
+            {context.catalogueEnabled ? (
+              <TableHead>Fees</TableHead>
+            ) : (
+              <TableHead className="text-right">Joining fee</TableHead>
+            )}
             <TableHead>Branches</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="text-right">Actions</TableHead>
@@ -101,9 +108,15 @@ export function PlansTable({
                 <TableCell className="text-right tabular-nums">
                   {formatMoney(plan.price_paisa)}
                 </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {plan.signup_fee_paisa ? formatMoney(plan.signup_fee_paisa) : '--'}
-                </TableCell>
+                {context.catalogueEnabled ? (
+                  <TableCell className="text-sm text-muted-foreground">
+                    {(planFees[plan.id] ?? []).join(', ') || '--'}
+                  </TableCell>
+                ) : (
+                  <TableCell className="text-right tabular-nums">
+                    {plan.signup_fee_paisa ? formatMoney(plan.signup_fee_paisa) : '--'}
+                  </TableCell>
+                )}
                 <TableCell className="text-sm text-muted-foreground">
                   {plan.branch_ids.length === 0
                     ? 'All branches'
@@ -144,6 +157,7 @@ export function PlansTable({
         }}
         plan={editing ?? undefined}
         context={context}
+        feeNames={editing ? planFees[editing.id] : undefined}
       />
     </>
   )

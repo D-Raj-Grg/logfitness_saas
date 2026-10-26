@@ -34,6 +34,16 @@ export default async function SettingsPage() {
       </Link>
 
       <Link
+        href="/settings/fees"
+        className="rounded-lg border p-4 transition-colors hover:bg-muted/50"
+      >
+        <div className="font-medium">Fees</div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Registration, card and any other charge on top of a plan, and which plans carry it.
+        </p>
+      </Link>
+
+      <Link
         href="/settings/devices"
         className="rounded-lg border p-4 transition-colors hover:bg-muted/50"
       >

@@ -11,7 +11,7 @@ import { SavingsBanner, type SavingsItem } from '@/components/print/savings-bann
 import type { InvoiceForPrint } from '@/lib/db/documents'
 import { orgFormatters } from '@/lib/format'
 import { PAYMENT_METHOD_LABELS } from '@/lib/members'
-import { invoiceLines } from '@/lib/print/line-items'
+import { feeSavings, invoiceLines } from '@/lib/print/line-items'
 import { discountLabel, documentStrings } from '@/lib/print/strings'
 
 export function InvoiceDocument({ invoice }: { invoice: InvoiceForPrint }) {
@@ -53,10 +53,7 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceForPrint }) {
   // subtotal and the discount came off after it; the member should not have to
   // work that out to see what the sale saved them.
   const savings: SavingsItem[] = [
-    {
-      label: t.registrationFee,
-      amountPaisa: invoice.membership?.signup_fee_waived_paisa ?? 0,
-    },
+    ...feeSavings(invoice.membership),
     { label: discountName, amountPaisa: invoice.discount_paisa },
   ]
 

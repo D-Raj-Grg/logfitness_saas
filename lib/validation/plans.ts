@@ -114,6 +114,8 @@ export const planSchema = z
     durationDays: z.coerce.number().int().positive().optional().nullable(),
     sessionCount: z.coerce.number().int().positive().optional().nullable(),
     pricePaisa: rupeesSchema,
+    // Legacy joining fee: charged only while the org's fee_catalogue_enabled is
+    // false. The fees catalogue (settings/fees) replaces it.
     signupFeePaisa: optionalRupeesSchema,
     branchIds: z.array(z.uuid()).default([]),
     isActive: z.boolean().default(true),

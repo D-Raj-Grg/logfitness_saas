@@ -5,6 +5,7 @@ import { SavingsBanner, type SavingsItem } from '@/components/print/savings-bann
 import type { PaymentForPrint } from '@/lib/db/documents'
 import { orgFormatters } from '@/lib/format'
 import { INVOICE_STATUS_LABELS, PAYMENT_METHOD_LABELS } from '@/lib/members'
+import { feeSavings } from '@/lib/print/line-items'
 import { discountLabel, documentStrings } from '@/lib/print/strings'
 
 /**
@@ -40,10 +41,7 @@ export function ReceiptDocument({ payment }: { payment: PaymentForPrint }) {
     isRefund || isReversal
       ? []
       : [
-          {
-            label: t.registrationFee,
-            amountPaisa: payment.membership?.signup_fee_waived_paisa ?? 0,
-          },
+          ...feeSavings(payment.membership),
           { label: discountName, amountPaisa: payment.invoice?.discount_paisa ?? 0 },
         ]
 

@@ -18,6 +18,11 @@ export type PlanFormContext = {
   branches: PlanBranch[]
   actorRole: StaffRole
   actorBranchIds: string[]
+  /**
+   * Whether the org charges from the fees catalogue. While false the plan still
+   * carries the legacy joining fee, so the form keeps that one input.
+   */
+  catalogueEnabled: boolean
 }
 
 export function PlanDialog({
@@ -26,6 +31,7 @@ export function PlanDialog({
   plan,
   context,
   fixedBranchIds,
+  feeNames,
   onCreated,
 }: {
   open: boolean
@@ -34,6 +40,8 @@ export function PlanDialog({
   context: PlanFormContext
   /** Pins the new plan to these branches and hides the branch picker. */
   fixedBranchIds?: string[]
+  /** Names of the fees that apply to the plan being edited, for display. */
+  feeNames?: string[]
   /** Fired with the id of a plan this dialog just created, never on an edit. */
   onCreated?: (planId: string) => void
 }) {
@@ -55,6 +63,7 @@ export function PlanDialog({
             plan={plan}
             {...context}
             fixedBranchIds={fixedBranchIds}
+            feeNames={feeNames}
             onSaved={(planId) => {
               if (!plan && planId) onCreated?.(planId)
               onOpenChange(false)

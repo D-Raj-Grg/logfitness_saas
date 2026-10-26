@@ -63,6 +63,10 @@ export type DocumentStrings = {
    */
   registrationFee: string
   registrationFeeOff: string
+  /** A fee taken back off: "Card fee off". The name is the fee's own. */
+  feeOff: (name: string) => string
+  /** Why a fee came off: true even for members who joined before it existed. */
+  onlyOnFirstMembership: string
   /** Why it came off: a renewal already paid it. */
   alreadyPaidOnJoining: string
   /** Why it came off: the plan price covers it. */
@@ -129,6 +133,8 @@ const en: DocumentStrings = {
 
   registrationFee: 'Registration fee',
   registrationFeeOff: 'Registration fee off',
+  feeOff: (name) => `${name} off`,
+  onlyOnFirstMembership: 'Only on your first membership',
   alreadyPaidOnJoining: 'You paid this when you joined',
   coveredByPlan: 'Included in this plan price',
 

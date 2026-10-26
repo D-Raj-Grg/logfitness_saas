@@ -691,6 +691,56 @@ export type Database = {
           },
         ]
       }
+      fees: {
+        Row: {
+          all_plans: boolean
+          amount_paisa: number
+          charge_rule: Database["public"]["Enums"]["fee_charge_rule"]
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          org_id: string
+          plan_ids: string[]
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          all_plans?: boolean
+          amount_paisa: number
+          charge_rule?: Database["public"]["Enums"]["fee_charge_rule"]
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          org_id: string
+          plan_ids?: string[]
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          all_plans?: boolean
+          amount_paisa?: number
+          charge_rule?: Database["public"]["Enums"]["fee_charge_rule"]
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          org_id?: string
+          plan_ids?: string[]
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fees_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoices: {
         Row: {
           branch_id: string
@@ -997,6 +1047,67 @@ export type Database = {
           },
           {
             foreignKeyName: "members_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      membership_fees: {
+        Row: {
+          charge_rule: Database["public"]["Enums"]["fee_charge_rule"]
+          charged_paisa: number
+          created_at: string
+          fee_id: string | null
+          id: string
+          membership_id: string
+          name: string
+          org_id: string
+          sort_order: number
+          waived_paisa: number
+        }
+        Insert: {
+          charge_rule: Database["public"]["Enums"]["fee_charge_rule"]
+          charged_paisa?: number
+          created_at?: string
+          fee_id?: string | null
+          id?: string
+          membership_id: string
+          name: string
+          org_id: string
+          sort_order?: number
+          waived_paisa?: number
+        }
+        Update: {
+          charge_rule?: Database["public"]["Enums"]["fee_charge_rule"]
+          charged_paisa?: number
+          created_at?: string
+          fee_id?: string | null
+          id?: string
+          membership_id?: string
+          name?: string
+          org_id?: string
+          sort_order?: number
+          waived_paisa?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "membership_fees_fee_fkey"
+            columns: ["fee_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "fees"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "membership_fees_membership_fkey"
+            columns: ["membership_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "memberships"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "membership_fees_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "orgs"
@@ -1604,6 +1715,7 @@ export type Database = {
           created_at: string
           currency: string
           email: string | null
+          fee_catalogue_enabled: boolean
           id: string
           invoice_terms: string | null
           legal_name: string | null
@@ -1626,6 +1738,7 @@ export type Database = {
           created_at?: string
           currency?: string
           email?: string | null
+          fee_catalogue_enabled?: boolean
           id?: string
           invoice_terms?: string | null
           legal_name?: string | null
@@ -1648,6 +1761,7 @@ export type Database = {
           created_at?: string
           currency?: string
           email?: string | null
+          fee_catalogue_enabled?: boolean
           id?: string
           invoice_terms?: string | null
           legal_name?: string | null
@@ -3090,7 +3204,27 @@ export type Database = {
         Args: { p_card_uid: string; p_key_hash: string; p_scanned_at?: string }
         Returns: Json
       }
+      rfid_log_offline: {
+        Args: { p_events: Json; p_key_hash: string }
+        Returns: Json
+      }
+      rfid_open_ended_date: { Args: never; Returns: string }
+      rfid_sync_cards: {
+        Args: { p_after?: string; p_key_hash: string; p_limit?: number }
+        Returns: Json
+      }
       rotate_device_key: { Args: { p_device_id: string }; Returns: Json }
+      sale_fees: {
+        Args: { p_is_first: boolean; p_plan_id: string }
+        Returns: {
+          charge_rule: Database["public"]["Enums"]["fee_charge_rule"]
+          charged_paisa: number
+          fee_id: string
+          name: string
+          sort_order: number
+          waived_paisa: number
+        }[]
+      }
       seed_notification_rules: {
         Args: { p_org_id: string }
         Returns: undefined
@@ -3244,6 +3378,7 @@ export type Database = {
         | "friend_referral"
         | "corporate"
         | "other"
+      fee_charge_rule: "once" | "every_sale"
       invoice_status: "unpaid" | "partial" | "paid" | "void"
       member_gender: "male" | "female" | "other"
       member_status: "active" | "expired" | "frozen" | "left"
@@ -3441,6 +3576,7 @@ export const Constants = {
         "corporate",
         "other",
       ],
+      fee_charge_rule: ["once", "every_sale"],
       invoice_status: ["unpaid", "partial", "paid", "void"],
       member_gender: ["male", "female", "other"],
       member_status: ["active", "expired", "frozen", "left"],

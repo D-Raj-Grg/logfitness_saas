@@ -266,6 +266,27 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
+### Fees catalogue (2026-10-27)
+
+Supersedes the fixed registration + card fee columns of 2026-10-26, which never reached a staff device and are dropped.
+
+- [x] `20261027100000_fee_catalogue.sql`: `fees` (owner-managed; name, amount, `once`|`every_sale`, all plans or chosen plans, active), `membership_fees` (immutable per-sale snapshot of what each fee charged and took back off), `sale_fees()` (the one definition of the fee arithmetic), and the per-org switch `orgs.fee_catalogue_enabled` (default false).
+- [x] `20261027100100_renew_membership_fee_catalogue.sql`: `renew_membership` charges from the catalogue when the org's switch is on, and exactly as before when it is off.
+- [x] `20261027100200_drop_card_fee_columns.sql`: drops the four never-used card columns.
+- [x] `20261026100100_plan_mix_counts_fees_once.sql`: `plan_mix` counted the joining fee twice.
+- [x] `20261026100200_log_fitness_flyer_2026_10.sql`: LOG Fitness repriced to the October flyer (8 tiers); fee held as one 700 joining fee until the cutover.
+- [x] Console: Settings, Fees (owner only); plan form/table show the plan's fees; sale forms quote from the catalogue; invoice and receipt fee lines and savings banner read `membership_fees`, with a fallback for sales that predate it.
+- [x] `supabase/tests/fees.sql`.
+- [x] `20261027100300_fee_policies_authenticated_only.sql`: the fees policies are `TO authenticated` like every other table's; without it an anonymous read errored instead of returning nothing.
+- [x] `20261027100400_membership_fees_only_with_the_sale.sql`: a fee line can only be written for a membership created in the same transaction, which only `renew_membership` is. Before this any seller could add a fee line to an earlier invoice through the API (money was never affected; the printed lines were).
+- [ ] **Cutover for LOG Fitness** (not applied; gate G2 below): create the fees, assign them, set `fee_catalogue_enabled = true`.
+  - Registration fee 500 (once) and Card fee 200 (once) on the 8 flyer plans; "Registration and card" 500 (once) on `Cardio Only - 1 Month` only. Daily passes, other Cardio Only and PT plans carry nothing and print no fee lines.
+  - Apply only once the new Gym Tross build is on every LOG Fitness staff device: an older build quotes price only against the catalogue. Rollback is `update orgs set fee_catalogue_enabled = false`.
+  - Leave `membership_plans.signup_fee_paisa` and `orgs.standard_signup_fee_paisa` as they are: old builds and the rollback read them.
+- [ ] Other orgs (Lord of Gyms, demo Everest): convert each distinct non-zero plan joining fee into a fee, then flip the switch. Confirm with Lord of Gyms first: its other plans stop printing off-pairs. Use Everest as the canary.
+- [ ] Later cleanup: remove the legacy fee branch from `renew_membership`, default `fee_catalogue_enabled` to true, zero the legacy plan and org fee columns, only after every org is switched and a minimum app version exists.
+- [ ] Pre-existing, unrelated: `supabase/tests/discount_reason.sql` cannot run over the MCP role (`must be owner of table invoices`); `supabase/tests/daily_collection_summary.sql` step 9b still expects the 300000 shortfall from before `adjust_membership_discount` re-priced the sale to 90000 (should be 270000).
+
 - [x] **2026-09-27** "Reset password" on Suraj's row said "They have not signed
       up yet" although the table showed him Active. Deactivate -> Reactivate
       writes `active` without checking `auth_user_id`, so an invited row loses

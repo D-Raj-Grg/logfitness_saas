@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useActionState, useEffect, useState } from 'react'
 
 import { createPlan, updatePlan, type PlanFormState } from '@/app/(app)/plans/actions'
@@ -32,6 +33,8 @@ export function PlanForm({
   branches,
   actorRole,
   actorBranchIds,
+  catalogueEnabled,
+  feeNames,
   onSaved,
   fixedBranchIds,
 }: {
@@ -39,6 +42,9 @@ export function PlanForm({
   branches: PlanBranch[]
   actorRole: StaffRole
   actorBranchIds: string[]
+  catalogueEnabled: boolean
+  /** Fees that apply to this plan, by name; shown read-only. */
+  feeNames?: string[]
   onSaved?: (planId?: string) => void
   /**
    * When set, the plan is scoped to exactly these branches and the picker is
@@ -173,17 +179,37 @@ export function PlanForm({
           <FieldError messages={state.fieldErrors?.pricePaisa} />
         </div>
 
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="signupFeePaisa">Joining fee (NPR, optional)</Label>
-          <Input
-            id="signupFeePaisa"
-            name="signupFeePaisa"
-            inputMode="decimal"
-            defaultValue={rupees(plan?.signup_fee_paisa)}
-          />
-          <FieldError messages={state.fieldErrors?.signupFeePaisa} />
-        </div>
+        {catalogueEnabled ? null : (
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="signupFeePaisa">Joining fee (NPR, optional)</Label>
+            <Input
+              id="signupFeePaisa"
+              name="signupFeePaisa"
+              inputMode="decimal"
+              defaultValue={rupees(plan?.signup_fee_paisa)}
+            />
+            <FieldError messages={state.fieldErrors?.signupFeePaisa} />
+          </div>
+        )}
       </div>
+
+      {catalogueEnabled ? (
+        <div className="flex flex-col gap-1 rounded-lg bg-muted/40 p-3 text-sm">
+          <span className="font-medium">Fees on this plan</span>
+          <span className="text-muted-foreground">
+            {feeNames && feeNames.length > 0
+              ? feeNames.join(', ')
+              : plan
+                ? 'None.'
+                : 'None yet.'}{' '}
+            Registration, card and other fees are set up under{' '}
+            <Link href="/settings/fees" className="underline">
+              Settings, Fees
+            </Link>
+            .
+          </span>
+        </div>
+      ) : null}
 
       <fieldset className="flex flex-col gap-2">
         <legend className="text-sm font-medium">Branches</legend>

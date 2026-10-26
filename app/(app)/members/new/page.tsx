@@ -2,6 +2,7 @@ import { MemberForm, type MemberPrefill } from '@/components/members/member-form
 import type { PlanFormContext } from '@/components/plans/plan-dialog'
 import { requireRole } from '@/lib/auth'
 import { listBranches } from '@/lib/db/branches'
+import { getFeeContext } from '@/lib/db/fees'
 import { getVisitor } from '@/lib/db/visitors'
 import { visitorIdSchema } from '@/lib/validation/visitors'
 
@@ -46,6 +47,7 @@ export default async function NewMemberPage({
     branches: branches.map(({ id, name }) => ({ id, name })),
     actorRole: staff.role,
     actorBranchIds: staff.branchIds,
+    catalogueEnabled: (await getFeeContext(staff.orgId)).catalogueEnabled,
   }
 
   return (
