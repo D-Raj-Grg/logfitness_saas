@@ -174,6 +174,18 @@ begin
   get diagnostics n = row_count;
   assert n = 0, format('the API deleted %s membership_fees rows', n);
 
+  -- And the API cannot add a fee line to a sale after the fact. The rule is that
+  -- a row is only accepted for a membership created in the same transaction,
+  -- which only the sale function is. A single DO block is one transaction, so
+  -- this file can only pin the rule's text; the behaviour is the two-request
+  -- check in the migration 20261027100400's notes (sell in one request, try to
+  -- add a fee line in the next: refused).
+  select pg_get_expr(p.polwithcheck, p.polrelid) into txt
+  from pg_policy p
+  where p.polrelid = 'public.membership_fees'::regclass and p.polcmd = 'a';
+  assert position('created_at = now()' in txt) > 0,
+    format('membership_fees insert no longer ties a fee line to its own sale: %s', txt);
+
   -- Even the table owner is stopped by the trigger.
   execute 'reset role';
   begin

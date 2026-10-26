@@ -278,6 +278,7 @@ Supersedes the fixed registration + card fee columns of 2026-10-26, which never 
 - [x] Console: Settings, Fees (owner only); plan form/table show the plan's fees; sale forms quote from the catalogue; invoice and receipt fee lines and savings banner read `membership_fees`, with a fallback for sales that predate it.
 - [x] `supabase/tests/fees.sql`.
 - [x] `20261027100300_fee_policies_authenticated_only.sql`: the fees policies are `TO authenticated` like every other table's; without it an anonymous read errored instead of returning nothing.
+- [x] `20261027100400_membership_fees_only_with_the_sale.sql`: a fee line can only be written for a membership created in the same transaction, which only `renew_membership` is. Before this any seller could add a fee line to an earlier invoice through the API (money was never affected; the printed lines were).
 - [ ] **Cutover for LOG Fitness** (not applied; gate G2 below): create the fees, assign them, set `fee_catalogue_enabled = true`.
   - Registration fee 500 (once) and Card fee 200 (once) on the 8 flyer plans; "Registration and card" 500 (once) on `Cardio Only - 1 Month` only. Daily passes, other Cardio Only and PT plans carry nothing and print no fee lines.
   - Apply only once the new Gym Tross build is on every LOG Fitness staff device: an older build quotes price only against the catalogue. Rollback is `update orgs set fee_catalogue_enabled = false`.
