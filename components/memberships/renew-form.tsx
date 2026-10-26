@@ -26,7 +26,13 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { formatDate, formatMoney, todayInTimezone } from '@/lib/format'
 import { continueFromDate } from '@/lib/renewal-start'
-import { paisaOrZero, planTerm, rupees, signupFeeSplit } from '@/lib/plan-pricing'
+import {
+  feeQuote,
+  paisaOrZero,
+  planTerm,
+  rupees,
+  type CatalogueFee,
+} from '@/lib/plan-pricing'
 import {
   DISCOUNT_REASONS,
   DISCOUNT_REASON_LABELS,
@@ -62,6 +68,8 @@ export function RenewForm({
 
   const [branchId, setBranchId] = useState(defaultBranchId)
   const [plans, setPlans] = useState<PlanOption[]>([])
+  const [fees, setFees] = useState<CatalogueFee[]>([])
+  const [catalogueEnabled, setCatalogueEnabled] = useState(false)
   const [standardFee, setStandardFee] = useState(0)
   const [discountReason, setDiscountReason] = useState<DiscountReason | ''>('')
   const [discountNote, setDiscountNote] = useState('')
@@ -80,6 +88,8 @@ export function RenewForm({
     startLoadingPlans(async () => {
       const result = await loadPlansForBranch(branchId)
       setPlans(result.plans)
+      setFees(result.fees)
+      setCatalogueEnabled(result.catalogueEnabled)
       setStandardFee(result.standardSignupFeePaisa)
       setPlanId((current) => {
         if (result.plans.some((plan) => plan.id === current)) return current
@@ -90,7 +100,14 @@ export function RenewForm({
       // The prefilled plan skips choosePlan, so seed paid-in-full here. Only
       // when nothing is typed yet, and the discount is never carried over.
       const prefill = result.plans.find((plan) => plan.id === lastMembership?.plan_id)
-      if (prefill) setPaid((typed) => (typed === '' ? fullAmount(prefill, '') : typed))
+      if (prefill) {
+        const loaded = {
+          fees: result.fees,
+          catalogueEnabled: result.catalogueEnabled,
+          standardFee: result.standardSignupFeePaisa,
+        }
+        setPaid((typed) => (typed === '' ? fullAmount(prefill, '', loaded) : typed))
+      }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchId])
@@ -100,26 +117,43 @@ export function RenewForm({
   }, [state.success, state.document, onSuccess])
 
   const plan = plans.find((item) => item.id === planId) ?? null
-  // A renewal is the common case for a waiver: the fee applied once and was
-  // taken then, so it is not taken again -- and the member should see that.
-  const fee = signupFeeSplit({
-    planSignupFeePaisa: plan?.signup_fee_paisa ?? 0,
-    orgStandardFeePaisa: standardFee,
+  // The fee lines this sale carries. A renewal is the common case for a fee
+  // taken back off: a once-fee applied when the member joined, so it is not
+  // charged again -- and the member should see that.
+  const quote = feeQuote({
+    plan,
+    fees,
+    catalogueEnabled,
+    standardSignupFeePaisa: standardFee,
     isFirstMembership,
   })
-  const signupFee = plan ? fee.charged : 0
-  const waivedFee = plan ? fee.waived : 0
-  const subtotal = plan ? plan.price_paisa + signupFee : 0
+  const subtotal = plan ? plan.price_paisa + quote.chargedPaisa : 0
   const discountPaisa = Math.min(paisaOrZero(discount), subtotal)
   const total = subtotal - discountPaisa
   const paidPaisa = payment === 'unpaid' ? 0 : Math.min(paisaOrZero(paid), total)
   const dueAfter = total - paidPaisa
 
-  /** The full price of a plan after a discount -- what "paid in full" means. */
-  function fullAmount(target: PlanOption | null, discountValue: string) {
+  /**
+   * The full price of a plan after a discount -- what "paid in full" means.
+   * `loaded` is for the first load, which runs before the fee state it just
+   * set has rendered; every later call reads the state.
+   */
+  function fullAmount(
+    target: PlanOption | null,
+    discountValue: string,
+    loaded?: { fees: CatalogueFee[]; catalogueEnabled: boolean; standardFee: number }
+  ) {
     if (!target) return ''
-    const fee = isFirstMembership ? target.signup_fee_paisa : 0
-    return rupees(Math.max(target.price_paisa + fee - paisaOrZero(discountValue), 0))
+    const targetQuote = feeQuote({
+      plan: target,
+      fees: loaded?.fees ?? fees,
+      catalogueEnabled: loaded?.catalogueEnabled ?? catalogueEnabled,
+      standardSignupFeePaisa: loaded?.standardFee ?? standardFee,
+      isFirstMembership,
+    })
+    return rupees(
+      Math.max(target.price_paisa + targetQuote.chargedPaisa - paisaOrZero(discountValue), 0)
+    )
   }
 
   function choosePlan(nextPlanId: string) {
@@ -361,10 +395,14 @@ export function RenewForm({
             <div className="flex justify-between">
               <span className="text-muted-foreground">
                 {plan.name}
-                {signupFee > 0 ? ` + joining fee ${formatMoney(signupFee)}` : ''}
-                {waivedFee > 0
-                  ? ` · joining fee ${formatMoney(waivedFee)} waived`
-                  : ''}
+                {quote.rows
+                  .filter((row) => row.chargedPaisa > 0)
+                  .map((row) => ` + ${row.name.toLowerCase()} ${formatMoney(row.chargedPaisa)}`)
+                  .join('')}
+                {quote.rows
+                  .filter((row) => row.waivedPaisa > 0)
+                  .map((row) => ` · ${row.name.toLowerCase()} ${formatMoney(row.waivedPaisa)} off`)
+                  .join('')}
                 {discountPaisa > 0 ? ` − discount ${formatMoney(discountPaisa)}` : ''}
               </span>
               <span className="font-medium">Total {formatMoney(total)}</span>

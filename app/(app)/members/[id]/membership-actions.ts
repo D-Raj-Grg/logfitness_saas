@@ -17,9 +17,10 @@ import {
   refundPayment as refundPaymentRow,
   reversePayment as reversePaymentRow,
 } from '@/lib/db/payments'
-import { getOrgStandardSignupFee } from '@/lib/db/orgs'
+import { getFeeContext, listActiveFees } from '@/lib/db/fees'
 import { listPlansForBranch } from '@/lib/db/plans'
 import { formatDate, formatMoney } from '@/lib/format'
+import type { CatalogueFee } from '@/lib/plan-pricing'
 import { rpcErrorMessage } from '@/lib/rpc-error'
 import {
   adjustMembershipDatesSchema,
@@ -66,23 +67,44 @@ function optional(formData: FormData, key: string) {
 export async function loadPlansForBranch(branchId: string) {
   const staff = await requireRole(...CASHIER_ROLES)
 
-  const parsed = z.uuid().safeParse(branchId)
-  if (!parsed.success) return { plans: [], standardSignupFeePaisa: 0 }
-
-  if (staff.role !== 'owner' && !staff.branchIds.includes(parsed.data)) {
-    return { plans: [], standardSignupFeePaisa: 0 }
+  const empty = {
+    plans: [],
+    fees: [] as CatalogueFee[],
+    catalogueEnabled: false,
+    standardSignupFeePaisa: 0,
   }
 
-  // The list fee travels with the plans because the counter has to show the
-  // same waiver the invoice will print, and a plan priced without a fee of its
-  // own has no other source for the amount.
-  const [plans, standardSignupFeePaisa] = await Promise.all([
+  const parsed = z.uuid().safeParse(branchId)
+  if (!parsed.success) return empty
+
+  if (staff.role !== 'owner' && !staff.branchIds.includes(parsed.data)) {
+    return empty
+  }
+
+  // The fee setup travels with the plans because the counter has to quote the
+  // same total the RPC will charge and the invoice will print. Fees are fetched
+  // once for the org and matched to the chosen plan on the client, so picking a
+  // different plan needs no round trip.
+  const [plans, fees, feeContext] = await Promise.all([
     listPlansForBranch(parsed.data),
-    getOrgStandardSignupFee(staff.orgId),
+    listActiveFees(),
+    getFeeContext(staff.orgId),
   ])
 
   return {
-    standardSignupFeePaisa,
+    catalogueEnabled: feeContext.catalogueEnabled,
+    standardSignupFeePaisa: feeContext.standardSignupFeePaisa,
+    fees: fees.map(
+      (fee): CatalogueFee => ({
+        id: fee.id,
+        name: fee.name,
+        charge_rule: fee.charge_rule,
+        amount_paisa: fee.amount_paisa,
+        all_plans: fee.all_plans,
+        plan_ids: fee.plan_ids,
+        sort_order: fee.sort_order,
+      })
+    ),
     plans: plans.map((plan) => ({
       id: plan.id,
       name: plan.name,

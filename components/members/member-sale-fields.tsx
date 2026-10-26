@@ -28,7 +28,13 @@ import {
   type DiscountReason,
   type PaymentMethod,
 } from '@/lib/members'
-import { paisaOrZero, planTerm, rupees, signupFeeSplit } from '@/lib/plan-pricing'
+import {
+  feeQuote,
+  paisaOrZero,
+  planTerm,
+  rupees,
+  type CatalogueFee,
+} from '@/lib/plan-pricing'
 
 type PlanOption = Awaited<ReturnType<typeof loadPlansForBranch>>['plans'][number]
 
@@ -60,6 +66,8 @@ export function MemberSaleFields({
 }) {
   const [selling, setSelling] = useState(false)
   const [plans, setPlans] = useState<PlanOption[]>([])
+  const [fees, setFees] = useState<CatalogueFee[]>([])
+  const [catalogueEnabled, setCatalogueEnabled] = useState(false)
   const [standardFee, setStandardFee] = useState(0)
   const [planId, setPlanId] = useState('')
   const [discount, setDiscount] = useState('')
@@ -92,6 +100,8 @@ export function MemberSaleFields({
       pendingPlanId.current = null
 
       setPlans(result.plans)
+      setFees(result.fees)
+      setCatalogueEnabled(result.catalogueEnabled)
       setStandardFee(result.standardSignupFeePaisa)
       setPlanId((current) => {
         // A plan just created in the dialog wins; otherwise keep the current
@@ -107,7 +117,16 @@ export function MemberSaleFields({
         ? (result.plans.find((plan) => plan.id === justCreated) ?? null)
         : null
       if (created && payment === 'full') {
-        setPaid(rupees(Math.max(created.price_paisa + created.signup_fee_paisa, 0)))
+        // This runs before the fee state set above has rendered, so the
+        // quote is taken from what was just loaded, not from state.
+        const createdQuote = feeQuote({
+          plan: created,
+          fees: result.fees,
+          catalogueEnabled: result.catalogueEnabled,
+          standardSignupFeePaisa: result.standardSignupFeePaisa,
+          isFirstMembership: true,
+        })
+        setPaid(rupees(Math.max(created.price_paisa + createdQuote.chargedPaisa, 0)))
       }
     })
     // `payment` is read inside the transaction but deliberately not a
@@ -118,14 +137,16 @@ export function MemberSaleFields({
 
   const plan = plans.find((item) => item.id === planId) ?? null
 
-  // A member being registered has never paid a joining fee, so it always
-  // applies -- no need for the renew form's isFirstMembership flag.
-  const fee = signupFeeSplit({
-    planSignupFeePaisa: plan?.signup_fee_paisa ?? 0,
-    orgStandardFeePaisa: standardFee,
+  // A member being registered has never paid a fee, so every once-fee applies
+  // -- no need for the renew form's isFirstMembership flag.
+  const quote = feeQuote({
+    plan,
+    fees,
+    catalogueEnabled,
+    standardSignupFeePaisa: standardFee,
     isFirstMembership: true,
   })
-  const subtotal = plan ? plan.price_paisa + plan.signup_fee_paisa : 0
+  const subtotal = plan ? plan.price_paisa + quote.chargedPaisa : 0
   const discountPaisa = Math.min(paisaOrZero(discount), subtotal)
   const total = subtotal - discountPaisa
   const paidPaisa = payment === 'unpaid' ? 0 : Math.min(paisaOrZero(paid), total)
@@ -137,9 +158,16 @@ export function MemberSaleFields({
     discountValue: string
   ) {
     if (!target) return ''
+    const targetQuote = feeQuote({
+      plan: target,
+      fees,
+      catalogueEnabled,
+      standardSignupFeePaisa: standardFee,
+      isFirstMembership: true,
+    })
     return rupees(
       Math.max(
-        target.price_paisa + target.signup_fee_paisa - paisaOrZero(discountValue),
+        target.price_paisa + targetQuote.chargedPaisa - paisaOrZero(discountValue),
         0
       )
     )
@@ -192,7 +220,7 @@ export function MemberSaleFields({
           <span className="font-medium">Also sell a plan now</span>
           <span className="text-xs text-muted-foreground">
             {branchId
-              ? `Sold at ${branchName ?? 'this branch'}. The joining fee is added automatically.`
+              ? `Sold at ${branchName ?? 'this branch'}. The registration and card fees are added automatically.`
               : 'Pick a home branch first.'}
           </span>
         </span>
@@ -353,27 +381,31 @@ export function MemberSaleFields({
                 <dt>{plan.name}</dt>
                 <dd className="tabular-nums">{formatMoney(plan.price_paisa)}</dd>
               </div>
-              {fee.charged > 0 ? (
-                <div className="flex justify-between text-muted-foreground">
-                  <dt>Joining fee</dt>
-                  <dd className="tabular-nums">{formatMoney(fee.charged)}</dd>
+              {quote.rows.map((row) => (
+                <div key={`${row.feeId ?? 'legacy'}-charged`}>
+                  {row.chargedPaisa > 0 ? (
+                    <div className="flex justify-between text-muted-foreground">
+                      <dt>{row.name}</dt>
+                      <dd className="tabular-nums">{formatMoney(row.chargedPaisa)}</dd>
+                    </div>
+                  ) : null}
+                  {/* Taken back off is a memo, not a discount: it nets to
+                      nothing and leaves the total alone. It is shown so the
+                      desk can say out loud what the invoice will print. */}
+                  {row.waivedPaisa > 0 ? (
+                    <>
+                      <div className="flex justify-between text-muted-foreground">
+                        <dt>{row.name}</dt>
+                        <dd className="tabular-nums">{formatMoney(row.waivedPaisa)}</dd>
+                      </div>
+                      <div className="flex justify-between text-muted-foreground">
+                        <dt>{row.name} off</dt>
+                        <dd className="tabular-nums">-{formatMoney(row.waivedPaisa)}</dd>
+                      </div>
+                    </>
+                  ) : null}
                 </div>
-              ) : null}
-              {/* The waiver is a memo, not a discount: it nets to nothing and
-                  leaves the total alone. It is shown so the desk can say out
-                  loud what the invoice will print. */}
-              {fee.waived > 0 ? (
-                <>
-                  <div className="flex justify-between text-muted-foreground">
-                    <dt>Joining fee</dt>
-                    <dd className="tabular-nums">{formatMoney(fee.waived)}</dd>
-                  </div>
-                  <div className="flex justify-between text-muted-foreground">
-                    <dt>Joining fee waived</dt>
-                    <dd className="tabular-nums">-{formatMoney(fee.waived)}</dd>
-                  </div>
-                </>
-              ) : null}
+              ))}
               {discountPaisa > 0 ? (
                 <div className="flex justify-between text-muted-foreground">
                   <dt>Discount</dt>

@@ -46,6 +46,9 @@ function membership(over: Partial<Membership> = {}): Membership {
     price_paisa: 660000,
     signup_fee_paisa: 0,
     signup_fee_waived_paisa: 50000,
+    // Legacy sale: no membership_fees rows, so the one joining fee prints from
+    // the signup_fee columns. Catalogue sales override `fees` below.
+    fees: [],
     discount_paisa: 0,
     previous_membership_id: null,
     seller: { full_name: 'Ashish' },
@@ -80,6 +83,24 @@ function invoice(over: Partial<InvoiceForPrint> = {}): InvoiceForPrint {
     payments: [],
     ...over,
   } as InvoiceForPrint
+}
+
+type FeeRow = NonNullable<Membership['fees']>[number]
+
+function fee(
+  name: string,
+  rule: FeeRow['charge_rule'],
+  charged: number,
+  waived: number,
+  sort: number
+): FeeRow {
+  return {
+    name,
+    charge_rule: rule,
+    charged_paisa: charged,
+    waived_paisa: waived,
+    sort_order: sort,
+  }
 }
 
 const CASES: { title: string; node: React.ReactNode }[] = [
@@ -150,6 +171,81 @@ const CASES: { title: string; node: React.ReactNode }[] = [
               collector: { full_name: 'Ashish' },
             },
           ],
+        } as Partial<InvoiceForPrint>)}
+      />
+    ),
+  },
+  {
+    title: 'Invoice — fee catalogue, first sale: registration, card and a repeating locker fee',
+    node: (
+      <InvoiceDocument
+        invoice={invoice({
+          invoice_no: 'INV000040',
+          subtotal_paisa: 380000,
+          total_paisa: 380000,
+          due_paisa: 380000,
+          membership: membership({
+            plan_name: 'Gym + Cardio - 1 Month',
+            start_date: '2026-11-01',
+            end_date: '2026-11-30',
+            price_paisa: 380000,
+            signup_fee_paisa: 0,
+            signup_fee_waived_paisa: 0,
+            fees: [
+              fee('Registration fee', 'once', 50000, 0, 0),
+              fee('Card fee', 'once', 20000, 0, 1),
+              fee('Locker', 'every_sale', 10000, 0, 2),
+            ],
+          }),
+        } as Partial<InvoiceForPrint>)}
+      />
+    ),
+  },
+  {
+    title: 'Invoice — fee catalogue, renewal: both once-fees off, the locker repeats, the banner sums the savings',
+    node: (
+      <InvoiceDocument
+        invoice={invoice({
+          invoice_no: 'INV000041',
+          subtotal_paisa: 310000,
+          total_paisa: 310000,
+          due_paisa: 310000,
+          membership: membership({
+            plan_name: 'Gym + Cardio - 1 Month',
+            start_date: '2026-12-01',
+            end_date: '2026-12-30',
+            price_paisa: 310000,
+            signup_fee_paisa: 0,
+            signup_fee_waived_paisa: 0,
+            previous_membership_id: '00000000-0000-4000-8000-0000000000ff',
+            fees: [
+              fee('Registration fee', 'once', 0, 50000, 0),
+              fee('Card fee', 'once', 0, 20000, 1),
+              fee('Locker', 'every_sale', 10000, 0, 2),
+            ],
+          }),
+        } as Partial<InvoiceForPrint>)}
+      />
+    ),
+  },
+  {
+    title: 'Invoice — fee catalogue, a plan that carries no fees prints none',
+    node: (
+      <InvoiceDocument
+        invoice={invoice({
+          invoice_no: 'INV000042',
+          subtotal_paisa: 25000,
+          total_paisa: 25000,
+          due_paisa: 25000,
+          membership: membership({
+            plan_name: 'Gym + Cardio - Daily Pass',
+            start_date: '2026-11-02',
+            end_date: '2026-11-02',
+            price_paisa: 25000,
+            signup_fee_paisa: 0,
+            signup_fee_waived_paisa: 0,
+            fees: [],
+          }),
         } as Partial<InvoiceForPrint>)}
       />
     ),
