@@ -42,6 +42,8 @@ to **offline mode** (below) using a copy of the allow-list it keeps in flash.
 | Keypad | K3 | GPIO16 | the `#` button |
 | Keypad | K4 | GPIO17 | the `*` button |
 | Relay | IN | GPIO26 | energised when HIGH (`RELAY_ACTIVE_HIGH`) |
+| Exit switch | button 1 | GPIO32 | momentary NO button to GND (`EXIT_BTN_PIN`); GPIO16/17 stay K3/K4 |
+| Exit switch | button 2 (optional) | GPIO33 | second inside button on its own wire (`EXIT_BTN2_PIN`, `-1` = unused) |
 | Relay | VCC / GND | VIN (5 V) / GND | **5 V, not 3V3**: the coil is a 5 V part |
 
 The OLED board's header is `GND VCC SCL SDA K4 K3 K2 K1`. Only the first four
@@ -64,6 +66,30 @@ offline-not-recorded and device errors never open it.
 - Background sync/upload is held off while the relay is open, so a slow request
   cannot stretch the open time.
 - Inverted module (opto-isolated "low-level trigger")? Set `RELAY_ACTIVE_HIGH 0`.
+
+## Exit switch (button inside the door)
+
+A doorbell-style momentary button wired between GPIO32 and GND (internal
+pull-up, no resistor) releases the door **without a card**: people inside press
+it and the relay opens for the **Exit time** (menu "Exit time" or the web page:
+3 / 5 / 10 s, default 5 s, separate from the card-tap open time). Several
+buttons can be wired in parallel on one pin; GPIO33 is an optional second input.
+
+- The OLED shows **GATE OPEN** with a "Closing in Ns" countdown and a draining
+  bar until the relay releases, then returns to the clock screen. A card tapped
+  meanwhile is still judged normally.
+- Purely local: no network call, so it works with WiFi down and during the
+  offline test. Works from any screen, including the settings menu.
+- One release per press (holding does nothing more); presses within 1 s of the
+  last one are ignored.
+- The master **Relay** setting still applies: Relay OFF = the exit switch does
+  nothing. Presses show in the web page's recent list as `EXIT SWITCH n` (RAM
+  only, not uploaded; there is no card, so no attendance row).
+- Long wire runs inside walls can pick up noise: use twisted pair and, if the
+  door opens by itself, a 100 nF capacitor across the button.
+- This is a convenience, not certified fire egress. Whether the strike is
+  fail-safe or fail-secure is still a hardware choice.
+
 - Check it: menu -> **Relay test**, or send `r` over USB serial.
 
 ## Settings menu
