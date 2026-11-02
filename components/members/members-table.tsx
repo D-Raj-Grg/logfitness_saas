@@ -16,6 +16,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import type { MemberOverviewRow } from '@/lib/db/members'
+import type { LastPayment } from '@/lib/db/payments'
 import { formatDate, formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { MemberSort, MemberSortDir } from '@/lib/validation/members'
@@ -86,6 +87,7 @@ export function MembersTable({
   rows,
   filtered,
   photoUrls,
+  lastPayments,
   sort,
   dir,
   params,
@@ -98,6 +100,8 @@ export function MembersTable({
   filtered: boolean
   /** Signed URLs keyed by storage path, minted once for the whole page. */
   photoUrls: Record<string, string>
+  /** Each member's latest payment keyed by member id; absent = never paid. */
+  lastPayments: Record<string, LastPayment>
   sort: MemberSort
   dir: MemberSortDir
   /** Current query, so a sort click keeps the search, filter and branch scope. */
@@ -150,6 +154,7 @@ export function MembersTable({
               <SortHeader column="expiry" label="Plan" sort={sort} dir={dir} params={params} />
             </TableHead>
             <TableHead>Status</TableHead>
+            <TableHead>Last payment</TableHead>
             <TableHead className="text-right">
               <SortHeader column="dues" label="Dues" sort={sort} dir={dir} params={params} />
             </TableHead>
@@ -209,6 +214,18 @@ export function MembersTable({
                       these rows are missing from every other view. */}
                   {row.archived_at ? <Badge variant="outline">Archived</Badge> : null}
                 </div>
+              </TableCell>
+              <TableCell>
+                {lastPayments[row.id] ? (
+                  <>
+                    <span className="block">{formatDate(lastPayments[row.id].paid_at)}</span>
+                    <span className="block text-xs tabular-nums text-muted-foreground">
+                      {formatMoney(lastPayments[row.id].amount_paisa)}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-muted-foreground">--</span>
+                )}
               </TableCell>
               <TableCell
                 className={cn(

@@ -119,7 +119,7 @@ export function MemberForm({
                 required
                 autoFocus
                 autoComplete="off"
-                defaultValue={member?.full_name ?? prefill?.fullName ?? ''}
+                defaultValue={state.values?.fullName ?? member?.full_name ?? prefill?.fullName ?? ''}
               />
               <FieldError messages={state.fieldErrors?.fullName} />
             </div>
@@ -132,7 +132,7 @@ export function MemberForm({
                 inputMode="tel"
                 required
                 autoComplete="off"
-                defaultValue={member?.phone ?? prefill?.phone ?? ''}
+                defaultValue={state.values?.phone ?? member?.phone ?? prefill?.phone ?? ''}
               />
               <FieldError messages={state.fieldErrors?.phone} />
             </div>
@@ -161,7 +161,7 @@ export function MemberForm({
                 name="email"
                 type="email"
                 autoComplete="off"
-                defaultValue={member?.email ?? ''}
+                defaultValue={state.values?.email ?? member?.email ?? ''}
               />
               <FieldError messages={state.fieldErrors?.email} />
             </div>
@@ -172,7 +172,7 @@ export function MemberForm({
                 id="dateOfBirth"
                 name="dateOfBirth"
                 type="date"
-                defaultValue={member?.date_of_birth ?? ''}
+                defaultValue={state.values?.dateOfBirth ?? member?.date_of_birth ?? ''}
               />
               <FieldError messages={state.fieldErrors?.dateOfBirth} />
             </div>
@@ -205,7 +205,7 @@ export function MemberForm({
                 id="address"
                 name="address"
                 autoComplete="off"
-                defaultValue={member?.address ?? ''}
+                defaultValue={state.values?.address ?? member?.address ?? ''}
               />
               <FieldError messages={state.fieldErrors?.address} />
             </div>
@@ -217,7 +217,7 @@ export function MemberForm({
                 name="emergencyContactName"
                 placeholder="Name"
                 autoComplete="off"
-                defaultValue={member?.emergency_contact_name ?? ''}
+                defaultValue={state.values?.emergencyContactName ?? member?.emergency_contact_name ?? ''}
               />
               <FieldError messages={state.fieldErrors?.emergencyContactName} />
             </div>
@@ -229,14 +229,14 @@ export function MemberForm({
                 name="emergencyContactPhone"
                 inputMode="tel"
                 autoComplete="off"
-                defaultValue={member?.emergency_contact_phone ?? ''}
+                defaultValue={state.values?.emergencyContactPhone ?? member?.emergency_contact_phone ?? ''}
               />
               <FieldError messages={state.fieldErrors?.emergencyContactPhone} />
             </div>
 
             <div className="flex flex-col gap-2 sm:col-span-2">
               <Label htmlFor="notes">Notes (optional)</Label>
-              <Textarea id="notes" name="notes" defaultValue={member?.notes ?? ''} />
+              <Textarea id="notes" name="notes" defaultValue={state.values?.notes ?? member?.notes ?? ''} />
               <FieldError messages={state.fieldErrors?.notes} />
             </div>
 

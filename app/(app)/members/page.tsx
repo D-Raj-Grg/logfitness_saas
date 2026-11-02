@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { requireRole, type CurrentStaff } from '@/lib/auth'
 import { listBranches } from '@/lib/db/branches'
 import { listMembers } from '@/lib/db/members'
+import { lastPaymentsForMembers } from '@/lib/db/payments'
 import { memberPhotoUrls } from '@/lib/db/photos'
 import { resolveBranchScope } from '@/lib/scope'
 import { memberListQuerySchema } from '@/lib/validation/members'
@@ -46,7 +47,10 @@ async function MembersList({
   ])
 
   // One signing round trip for the page, not one per row.
-  const photoUrls = await memberPhotoUrls(result.rows.map((row) => row.photo_path))
+  const [photoUrls, lastPayments] = await Promise.all([
+    memberPhotoUrls(result.rows.map((row) => row.photo_path)),
+    lastPaymentsForMembers(result.rows.map((row) => row.id)),
+  ])
 
   // The quick-edit dialog's branch picker. One query for the page, shared by
   // every row. requireRole above has already kept trainers off this screen,
@@ -64,6 +68,7 @@ async function MembersList({
         rows={result.rows}
         filtered={filtered}
         photoUrls={photoUrls}
+        lastPayments={lastPayments}
         sort={query.sort}
         dir={query.dir}
         params={listParams}

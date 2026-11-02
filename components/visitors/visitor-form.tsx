@@ -72,7 +72,14 @@ export function VisitorForm({
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="fullName">Name</Label>
-        <Input id="fullName" name="fullName" required maxLength={120} autoFocus />
+        <Input
+          id="fullName"
+          name="fullName"
+          required
+          maxLength={120}
+          autoFocus
+          defaultValue={state.values?.fullName ?? ''}
+        />
         <FieldError messages={state.fieldErrors?.fullName} />
       </div>
 
@@ -85,6 +92,7 @@ export function VisitorForm({
           inputMode="tel"
           required
           maxLength={32}
+          defaultValue={state.values?.phone ?? ''}
         />
         <FieldError messages={state.fieldErrors?.phone} />
       </div>
@@ -116,7 +124,12 @@ export function VisitorForm({
           <Label htmlFor="visitedOn">Date</Label>
           {/* Defaults to today and stays editable: yesterday's walk-in gets
               written up this morning more often than anyone admits. */}
-          <Input id="visitedOn" name="visitedOn" type="date" defaultValue={today} />
+          <Input
+            id="visitedOn"
+            name="visitedOn"
+            type="date"
+            defaultValue={state.values?.visitedOn ?? today}
+          />
           <FieldError messages={state.fieldErrors?.visitedOn} />
         </div>
 
@@ -183,6 +196,7 @@ export function VisitorForm({
           name="note"
           rows={2}
           maxLength={1000}
+          defaultValue={state.values?.note ?? ''}
           placeholder="What they asked about, when to call back."
         />
         <FieldError messages={state.fieldErrors?.note} />

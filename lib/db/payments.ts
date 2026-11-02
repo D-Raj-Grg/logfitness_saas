@@ -9,6 +9,39 @@ function unwrap<T>(result: { data: unknown; error: { message: string; code?: str
   return result.data as T
 }
 
+export type LastPayment = { paid_at: string; amount_paisa: number }
+
+/**
+ * Each member's most recent payment (refunds excluded), keyed by member id.
+ * Members with no payment are absent from the map. One query for the whole
+ * page of the members list rather than one per row; paid_at can be backdated,
+ * so "last" is by paid_at, not insertion.
+ */
+export async function lastPaymentsForMembers(memberIds: string[]) {
+  const latest: Record<string, LastPayment> = {}
+  if (memberIds.length === 0) return latest
+
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from('payments')
+    .select('member_id, paid_at, amount_paisa')
+    .in('member_id', memberIds)
+    .eq('kind', 'payment')
+    .order('paid_at', { ascending: false })
+    .order('id', { ascending: false })
+
+  if (error) throw error
+
+  // Newest first, so the first row seen for a member is their last payment.
+  for (const row of data ?? []) {
+    if (!(row.member_id in latest)) {
+      latest[row.member_id] = { paid_at: row.paid_at, amount_paisa: row.amount_paisa }
+    }
+  }
+  return latest
+}
+
 /** Payments and refunds for one member, newest first. */
 export async function listPaymentsForMember(memberId: string) {
   const supabase = await createClient()

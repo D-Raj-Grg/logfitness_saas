@@ -118,6 +118,16 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
         open time, relay test, sound, sync. Code done and flashed; the OLED
         board's K1..K4 pins were not connected to the ESP32. Wire K1..K4 to
         GPIO13/14/16/17 and test the menu.
+  - [x] Exit switch (2026-11-02): fw 1.2.0. Doorbell-style button(s) inside the
+        door on GPIO32 (+ optional GPIO33) release the relay for a separate
+        "Exit time" (3/5/10 s, default 5; menu + web page). No card, no network;
+        obeys the Relay ON/OFF master switch. GPIO16/17 stay K3/K4. Compiles on
+        core 2.0.17. Settings magic bumped (LOS3): `/settings.bin` resets once.
+    - [x] Bench-tested on the real reader (2026-11-02): exit press opens the relay. OLED
+          now shows GATE OPEN + countdown bar (ST_EXIT) while the door is released.
+    - [ ] Walk the rest of the checklist: hold = one release, WiFi off still
+          opens, Relay OFF ignores it, works from the settings menu, K3/K4 still
+          work, then fit the real doorbell button.
 
 ## Phase 3 — Chain layer
 
@@ -265,6 +275,13 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 - [ ] iOS App Store and Google Play release pipeline
 
 ## Discovered
+
+### Web fixes (2026-11-02)
+
+- [x] Members list: "Last payment" column (date + amount, refunds excluded) via `lastPaymentsForMembers`, one query per page.
+- [x] Visitors: refuse a second log entry for a phone already in the log (`findVisitorByPhone`, matches with/without spaces and hyphens) -- field error on the phone input.
+- [x] Visitor + member forms: typed text survives a refused submit (action echoes `values`; inputs use them as `defaultValue`). File input (photo) cannot be refilled by the browser.
+- [ ] Duplicate-visitor check is app-level; add a DB unique index on `(org_id, normalized phone)` after existing duplicates are merged, to close the race between two simultaneous submits.
 
 ### Fees catalogue (2026-10-27)
 

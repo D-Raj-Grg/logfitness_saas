@@ -63,6 +63,18 @@
 // How long the door stays released after an allowed tap (menu: 1/3/5/10 s).
 #define RELAY_OPEN_MS      3000
 
+// ---- Exit switch (button inside the door) --------------------------------
+// A momentary normally-open button, e.g. a doorbell button, between the pin
+// and GND. Pressing it releases the door for the "Exit time" setting (menu /
+// web page: 3, 5 or 10 s) with no card, and it works with WiFi down. The
+// "Relay" setting still applies: Relay OFF = the exit switch does nothing.
+// Several buttons can be wired in parallel to the same pin. The second pin is
+// optional (e.g. a second inside button on its own wire); -1 = not connected.
+// Use pins with an internal pull-up (not 34-39). 16/17 are K3/K4 above.
+#define EXIT_BTN_PIN   32
+#define EXIT_BTN2_PIN  33
+#define EXIT_OPEN_MS   5000
+
 // ---- Settings menu lock --------------------------------------------------
 // After holding K4, press this code on the keypad: digits 1..4 = K1..K4.
 // An empty string ("") opens the menu without a code. Change the default!

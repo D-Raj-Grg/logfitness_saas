@@ -90,6 +90,19 @@
 #define RELAY_OPEN_MS 3000
 #endif
 
+// Exit switch: momentary button(s) inside the door (doorbell style), button to
+// GND, read active-low with INPUT_PULLUP. Pressing one releases the door for the
+// "Exit time" setting with no card and no network. -1 = not connected.
+#ifndef EXIT_BTN_PIN
+#define EXIT_BTN_PIN  -1
+#endif
+#ifndef EXIT_BTN2_PIN
+#define EXIT_BTN2_PIN -1
+#endif
+#ifndef EXIT_OPEN_MS
+#define EXIT_OPEN_MS  5000
+#endif
+
 // WiFi settings page (plain HTTP, LAN only). An empty WEB_PASSWORD disables it.
 #ifndef WEB_USER
 #define WEB_USER "admin"
@@ -111,7 +124,7 @@
 // ---------------------------------------------------------------------------
 // Behaviour
 // ---------------------------------------------------------------------------
-#define FW_VERSION            "1.1.0"
+#define FW_VERSION            "1.2.0"
 #define TZ_OFFSET_SEC         (5 * 3600 + 45 * 60)  // Nepal, UTC+5:45, no DST
 #define HTTP_TIMEOUT_MS       8000
 #define HTTP_TIMEOUT_DOWN_MS  5000UL   // after a failure, fail faster (TLS alone can take 2-3 s)
@@ -149,7 +162,8 @@
 #define MENU_IDLE_TIMEOUT_MS  30000UL
 #define PIN_IDLE_TIMEOUT_MS   15000UL
 #define SETTINGS_FILE         "/settings.bin"
-#define SETTINGS_MAGIC        0x4C4F5332UL  // "LOS2"
+#define SETTINGS_MAGIC        0x4C4F5333UL  // "LOS3" (v1.2.0 added exitMs; old files reset to defaults)
+#define EXIT_LOCKOUT_MS       1000UL   // ignore further exit presses this long after one
 #define WEB_MAX_FAILS         5
 #define WEB_LOCKOUT_MS        60000UL
 #define TAP_LOG_N             10
@@ -158,7 +172,7 @@
 // ---------------------------------------------------------------------------
 // Types (declared before any function so the IDE's auto-prototypes compile)
 // ---------------------------------------------------------------------------
-enum ReaderState { ST_IDLE, ST_RESULT, ST_INFO, ST_PIN, ST_MENU };
+enum ReaderState { ST_IDLE, ST_RESULT, ST_INFO, ST_PIN, ST_MENU, ST_EXIT };
 
 enum ResultKind {
   RES_ALLOW,      // 200 + decision "allow"
@@ -214,12 +228,14 @@ struct Settings {
   uint8_t relayOn;
   uint8_t soundOn;
   uint16_t openMs;
+  uint16_t exitMs;      // how long the exit switch releases the door
 };
 
 enum MenuItem {
   MI_OFFLINE_TEST,
   MI_RELAY,
   MI_OPEN_TIME,
+  MI_EXIT_TIME,
   MI_RELAY_TEST,
   MI_SOUND,
   MI_SOUND_TEST,
@@ -281,7 +297,7 @@ char lastUid[21] = "";
 uint32_t lastUidMs = 0;
 
 // Settings, relay, keypad, menu
-Settings settings = { SETTINGS_MAGIC, 1, 1, (uint16_t)RELAY_OPEN_MS };
+Settings settings = { SETTINGS_MAGIC, 1, 1, (uint16_t)RELAY_OPEN_MS, (uint16_t)EXIT_OPEN_MS };
 bool testOffline = false;         // menu "Offline test": skip the server, decide from the cache
 bool relayActive = false;
 uint32_t relayUntilMs = 0;
@@ -291,6 +307,13 @@ bool btnDown[4] = { false, false, false, false };
 uint32_t btnChangeMs[4] = { 0, 0, 0, 0 };
 uint32_t btnDownSinceMs[4] = { 0, 0, 0, 0 };
 bool k4LongFired = false;         // set once per hold, consumed by loop()
+
+const int8_t EXIT_PINS[2] = { EXIT_BTN_PIN, EXIT_BTN2_PIN };
+bool exitDown[2] = { false, false };
+uint32_t exitChangeMs[2] = { 0, 0 };
+uint32_t lastExitMs = 0;
+bool exitEverFired = false;
+uint32_t lastExitDrawMs = 0;
 uint8_t menuIdx = 0;
 uint32_t menuLastKeyMs = 0;
 char pinEntered[9] = "";
@@ -557,6 +580,34 @@ void drawInfo() {
   snprintf(line, sizeof(line), "FW %s C%lu Q%lu", FW_VERSION,
            (unsigned long)cardsCached, (unsigned long)eventsQueued);
   display.print(line);
+  display.display();
+}
+
+// "GATE OPEN" screen while the exit switch holds the door, with a countdown
+// and a bar that drains as the relay time runs out.
+void drawExit() {
+  uint32_t now = millis();
+  int32_t left = relayActive ? (int32_t)(relayUntilMs - now) : 0;
+  if (left < 0) left = 0;
+  uint32_t total = settings.exitMs ? settings.exitMs : 1;
+  if ((uint32_t)left > total) total = (uint32_t)left;  // a longer card pulse can be running
+  char line[22];
+  snprintf(line, sizeof(line), "Closing in %lus", (unsigned long)((left + 999) / 1000));
+  if (!oledOk) return;
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  char label[22];
+  copyDisplayText(label, sizeof(label), DEVICE_LABEL, 20);
+  display.print(label);
+  printCentered("GATE OPEN", 14, 2);   // 9 chars x 12 px = 108 px wide, y 14..29
+  printCentered(line, 36, 1);          // y 36..43
+  // Bar: full when the door has just been released, empty when it re-locks.
+  const int16_t barW = OLED_W - 8;
+  int16_t fill = (int16_t)(((uint32_t)left * (uint32_t)barW) / total);
+  display.drawRect(4, 50, barW, 10, SSD1306_WHITE);
+  if (fill > 4) display.fillRect(6, 52, fill - 4, 6, SSD1306_WHITE);
   display.display();
 }
 
@@ -1427,7 +1478,7 @@ void loadSettings() {
   if (!f) return;
   Settings t;
   if (f.read((uint8_t *)&t, sizeof(t)) == sizeof(t) && t.magic == SETTINGS_MAGIC &&
-      t.openMs >= 200 && t.openMs <= 30000) {
+      t.openMs >= 200 && t.openMs <= 30000 && t.exitMs >= 200 && t.exitMs <= 30000) {
     settings = t;
   }
   f.close();
@@ -1466,6 +1517,37 @@ uint8_t pollButtons() {
   return pressed;
 }
 
+// Exit switch(es): one release of the door per press (not while held), with a
+// short lockout against button spam. Runs in every state and never touches the
+// network, so it works offline and even mid-screen or inside the settings menu.
+// The master "Relay" setting still applies: OFF = no switch opens the door.
+void pollExitButtons() {
+  uint32_t now = millis();
+  for (uint8_t i = 0; i < 2; i++) {
+    if (EXIT_PINS[i] < 0) continue;
+    bool down = digitalRead(EXIT_PINS[i]) == LOW;
+    if (down == exitDown[i] || now - exitChangeMs[i] <= BTN_DEBOUNCE_MS) continue;
+    exitChangeMs[i] = now;
+    exitDown[i] = down;
+    if (!down) continue;  // released
+    if (exitEverFired && now - lastExitMs < EXIT_LOCKOUT_MS) continue;
+    lastExitMs = now;
+    exitEverFired = true;
+    if (!settings.relayOn) {
+      Serial.printf("[exit] switch %u pressed, Relay is OFF: ignored\n", (unsigned)(i + 1));
+      continue;
+    }
+    relayOpen(settings.exitMs);
+    state = ST_EXIT;  // show GATE OPEN from any screen (idle, result, info, menu)
+    stateSinceMs = now;
+    lastExitDrawMs = now;
+    drawExit();
+    logExit(i);
+    startBeep(BEEP_SHORT, PATTERN_LEN(BEEP_SHORT));
+    Serial.printf("[exit] switch %u pressed\n", (unsigned)(i + 1));
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Settings menu (hold K4, enter the code; K1 up, K2 down, K3 change, K4 back)
 // ---------------------------------------------------------------------------
@@ -1474,6 +1556,7 @@ void menuValue(uint8_t item, char *out, size_t outSize) {
     case MI_OFFLINE_TEST: snprintf(out, outSize, "%s", testOffline ? "ON" : "OFF"); break;
     case MI_RELAY:        snprintf(out, outSize, "%s", settings.relayOn ? "ON" : "OFF"); break;
     case MI_OPEN_TIME:    snprintf(out, outSize, "%us", (unsigned)(settings.openMs / 1000)); break;
+    case MI_EXIT_TIME:    snprintf(out, outSize, "%us", (unsigned)(settings.exitMs / 1000)); break;
     case MI_SOUND:        snprintf(out, outSize, "%s", settings.soundOn ? "ON" : "OFF"); break;
     case MI_RELAY_TEST:
     case MI_SOUND_TEST:
@@ -1484,7 +1567,7 @@ void menuValue(uint8_t item, char *out, size_t outSize) {
 
 void drawMenu() {
   static const char *const LABELS[MI_COUNT] = {
-    "Offline test", "Relay", "Open time", "Relay test", "Sound", "Sound test", "Sync now", "Back"
+    "Offline test", "Relay", "Open time", "Exit time", "Relay test", "Sound", "Sound test", "Sync now", "Back"
   };
   if (!oledOk) return;
   display.clearDisplay();
@@ -1564,6 +1647,14 @@ void menuAction(uint8_t item) {
       saveSettings();
       break;
     }
+    case MI_EXIT_TIME: {
+      static const uint16_t EXIT_CHOICES[] = { 3000, 5000, 10000 };
+      uint8_t next = 0;
+      for (uint8_t i = 0; i < 3; i++) if (settings.exitMs == EXIT_CHOICES[i]) next = (i + 1) % 3;
+      settings.exitMs = EXIT_CHOICES[next];
+      saveSettings();
+      break;
+    }
     case MI_RELAY_TEST:
       relayOpen(settings.openMs);  // works even with Relay OFF: it is a wiring check
       break;
@@ -1638,8 +1729,9 @@ void serialCommands() {
     } else if (c == 's') {
       menuAction(MI_SYNC_NOW);
     } else if (c == 'i') {
-      Serial.printf("[status] fw %s offlineTest=%d relay=%d open=%ums sound=%d cache=%lu queue=%lu wifi=%d\n",
+      Serial.printf("[status] fw %s offlineTest=%d relay=%d open=%ums exit=%ums sound=%d cache=%lu queue=%lu wifi=%d\n",
                     FW_VERSION, testOffline, settings.relayOn, (unsigned)settings.openMs,
+                    (unsigned)settings.exitMs,
                     settings.soundOn, (unsigned long)cardsCached, (unsigned long)eventsQueued,
                     WiFi.status() == WL_CONNECTED);
     }
@@ -1665,6 +1757,17 @@ void logTap(const char *uid, const CheckResult &r) {
     case RES_DISABLED:      snprintf(t.what, sizeof(t.what), "READER DISABLED"); break;
     default:                snprintf(t.what, sizeof(t.what), "NO REPLY"); break;
   }
+  tapLogHead = (tapLogHead + 1) % TAP_LOG_N;
+  if (tapLogCount < TAP_LOG_N) tapLogCount++;
+}
+
+// Exit-switch presses go in the same on-reader list (RAM only; no card, so
+// nothing is queued or uploaded).
+void logExit(uint8_t which) {
+  TapLog &t = tapLog[tapLogHead];
+  t.localSecs = (rtcOk && rtcTimeValid) ? rtcUnixUtc() + (uint32_t)TZ_OFFSET_SEC : 0;
+  snprintf(t.tail, sizeof(t.tail), "EXIT");
+  snprintf(t.what, sizeof(t.what), "EXIT SWITCH %u", (unsigned)(which + 1));
   tapLogHead = (tapLogHead + 1) % TAP_LOG_N;
   if (tapLogCount < TAP_LOG_N) tapLogCount++;
 }
@@ -1802,6 +1905,22 @@ void webRoot() {
     h += "s</button> ";
   }
   h += "</form></div>";
+
+  h += "<div class=row><div>Exit time <b>";
+  h += String((unsigned)(settings.exitMs / 1000));
+  h += " s</b><br><small>inside exit switch</small></div><form method=post action=/set><input type=hidden name=t value=";
+  h += webToken;
+  h += ">";
+  static const uint16_t EXIT_CHOICES[] = { 3000, 5000, 10000 };
+  for (uint8_t i = 0; i < 3; i++) {
+    h += "<button name=exit_ms value=";
+    h += String((unsigned)EXIT_CHOICES[i]);
+    if (settings.exitMs == EXIT_CHOICES[i]) h += " class=on";
+    h += ">";
+    h += String((unsigned)(EXIT_CHOICES[i] / 1000));
+    h += "s</button> ";
+  }
+  h += "</form></div>";
   h += "<div class=row><div>Card list<br><small>fetch it from the server now</small></div>"
        "<form method=post action=/set><input type=hidden name=t value=";
   h += webToken;
@@ -1849,6 +1968,14 @@ void webSet() {
       Serial.printf("[web] open time %ld ms\n", ms);
     }
   }
+  if ((v = web.arg("exit_ms")) != "") {
+    long ms = v.toInt();
+    if (ms == 3000 || ms == 5000 || ms == 10000) {
+      settings.exitMs = (uint16_t)ms;
+      saveSettings();
+      Serial.printf("[web] exit time %ld ms\n", ms);
+    }
+  }
   if (web.arg("sync") == "1") {
     syncDue = true;
     syncBackoffOn = false;
@@ -1871,6 +1998,7 @@ void webStatus() {
   j += "\"offline_test\":"; j += testOffline ? "true" : "false"; j += ",";
   j += "\"relay_on\":"; j += settings.relayOn ? "true" : "false"; j += ",";
   j += "\"relay_open_ms\":"; j += String((unsigned)settings.openMs); j += ",";
+  j += "\"exit_ms\":"; j += String((unsigned)settings.exitMs); j += ",";
   j += "\"sound_on\":"; j += settings.soundOn ? "true" : "false"; j += ",";
   j += "\"cards_cached\":"; j += String((unsigned long)cardsCached); j += ",";
   j += "\"last_sync_day\":"; j += String((unsigned long)cacheSyncDay); j += ",";
@@ -1930,6 +2058,9 @@ void setup() {
     // No effect on GPIO34-39 (input-only): those need an external pull-up.
     if (BTN_PINS[i] >= 0) pinMode(BTN_PINS[i], INPUT_PULLUP);
   }
+  for (uint8_t i = 0; i < 2; i++) {
+    if (EXIT_PINS[i] >= 0) pinMode(EXIT_PINS[i], INPUT_PULLUP);
+  }
 
   Wire.begin(I2C_SDA, I2C_SCL);
   Serial.printf("[i2c] OLED 0x%02X %s, DS3231 0x68 %s\n", OLED_ADDR,
@@ -1985,6 +2116,7 @@ void loop() {
 
   updateBeep();
   updateRelay();
+  pollExitButtons();
   maintainWifi();
   updateNtp();
   serialCommands();
@@ -2037,6 +2169,16 @@ void loop() {
       k4LongFired = false;
       if (now - menuLastKeyMs >= MENU_IDLE_TIMEOUT_MS) { enterState(ST_IDLE); break; }
       handleMenuKeys(keys);
+      break;
+
+    case ST_EXIT:
+      k4LongFired = false;
+      if (!relayActive) { enterState(ST_IDLE); break; }  // relay released: back to normal
+      if (now - lastExitDrawMs >= 100) {
+        lastExitDrawMs = now;
+        drawExit();
+      }
+      handleCard();  // a member tapping meanwhile is still judged (shows the result)
       break;
 
     case ST_RESULT:
