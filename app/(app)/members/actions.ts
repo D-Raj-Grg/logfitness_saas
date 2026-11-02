@@ -55,6 +55,34 @@ export type MemberFormState = {
   error?: string
   success?: string
   fieldErrors?: Record<string, string[]>
+  /**
+   * The text the user typed, echoed back on a refusal. React 19 resets an
+   * uncontrolled form after every action -- failed ones included -- so without
+   * this a rejected submit wipes the whole form.
+   */
+  values?: Record<string, string>
+}
+
+const ECHOED_MEMBER_FIELDS = [
+  'fullName',
+  'phone',
+  'email',
+  'dateOfBirth',
+  'address',
+  'emergencyContactName',
+  'emergencyContactPhone',
+  'notes',
+] as const
+
+/** Hands the typed text back with a refusal so the form can refill itself. */
+function withValues(state: MemberFormState, formData: FormData): MemberFormState {
+  if (state.success) return state
+  const values: Record<string, string> = {}
+  for (const key of ECHOED_MEMBER_FIELDS) {
+    const value = formData.get(key)
+    if (typeof value === 'string') values[key] = value
+  }
+  return { ...state, values }
 }
 
 type DbError = { code?: string; message?: string; hint?: string }
@@ -191,6 +219,13 @@ function mapRegisterError(error: unknown): MemberFormState {
 }
 
 export async function createMember(
+  prevState: MemberFormState,
+  formData: FormData
+): Promise<MemberFormState> {
+  return withValues(await createMemberImpl(prevState, formData), formData)
+}
+
+async function createMemberImpl(
   _prevState: MemberFormState,
   formData: FormData
 ): Promise<MemberFormState> {
@@ -296,6 +331,13 @@ export async function createMember(
 }
 
 export async function updateMember(
+  prevState: MemberFormState,
+  formData: FormData
+): Promise<MemberFormState> {
+  return withValues(await updateMemberImpl(prevState, formData), formData)
+}
+
+async function updateMemberImpl(
   _prevState: MemberFormState,
   formData: FormData
 ): Promise<MemberFormState> {

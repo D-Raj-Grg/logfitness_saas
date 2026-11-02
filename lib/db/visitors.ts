@@ -101,6 +101,29 @@ export async function getVisitor(visitorId: string) {
  * answer for a seed and for the mobile app. The generated Insert type cannot
  * know about the trigger.
  */
+/**
+ * An existing visitor with this number, if any. RLS bounds the search to the
+ * org. Numbers are typed by hand, so "98123 45678" and "9812345678" are the
+ * same person: both spellings are tried.
+ */
+export async function findVisitorByPhone(phone: string) {
+  const supabase = await createClient()
+
+  const trimmed = phone.trim()
+  const compact = trimmed.replace(/[\s-]/g, '')
+  const spellings = [...new Set([trimmed, compact])]
+
+  const { data, error } = await supabase
+    .from('visitors')
+    .select('id, full_name')
+    .in('phone', spellings)
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw error
+  return data
+}
+
 export async function insertVisitor(
   values: Omit<VisitorInsert, 'visited_on'> & { visited_on?: string }
 ) {

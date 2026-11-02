@@ -276,6 +276,13 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
+### Web fixes (2026-11-02)
+
+- [x] Members list: "Last payment" column (date + amount, refunds excluded) via `lastPaymentsForMembers`, one query per page.
+- [x] Visitors: refuse a second log entry for a phone already in the log (`findVisitorByPhone`, matches with/without spaces and hyphens) -- field error on the phone input.
+- [x] Visitor + member forms: typed text survives a refused submit (action echoes `values`; inputs use them as `defaultValue`). File input (photo) cannot be refilled by the browser.
+- [ ] Duplicate-visitor check is app-level; add a DB unique index on `(org_id, normalized phone)` after existing duplicates are merged, to close the race between two simultaneous submits.
+
 ### Fees catalogue (2026-10-27)
 
 Supersedes the fixed registration + card fee columns of 2026-10-26, which never reached a staff device and are dropped.

@@ -7,6 +7,7 @@ import { requireStaff } from '@/lib/auth'
 import {
   deleteVisitor as deleteVisitorRow,
   getVisitor,
+  findVisitorByPhone,
   insertVisitor,
   updateVisitor,
 } from '@/lib/db/visitors'
@@ -21,6 +22,8 @@ export type VisitorFormState = {
   error?: string
   success?: string
   fieldErrors?: Record<string, string[]>
+  /** Typed text echoed back on a refusal; React resets the form after every action. */
+  values?: Record<string, string>
 }
 
 function readVisitorFields(formData: FormData) {
@@ -58,6 +61,21 @@ function dbErrorMessage(error: unknown) {
 }
 
 export async function createVisitor(
+  prevState: VisitorFormState,
+  formData: FormData
+): Promise<VisitorFormState> {
+  const state = await createVisitorImpl(prevState, formData)
+  if (state.success) return state
+
+  const values: Record<string, string> = {}
+  for (const key of ['fullName', 'phone', 'visitedOn', 'note']) {
+    const value = formData.get(key)
+    if (typeof value === 'string') values[key] = value
+  }
+  return { ...state, values }
+}
+
+async function createVisitorImpl(
   _prevState: VisitorFormState,
   formData: FormData
 ): Promise<VisitorFormState> {
@@ -74,6 +92,23 @@ export async function createVisitor(
     return {
       fieldErrors: { branchId: ['You can only log a visitor at your own branch.'] },
     }
+  }
+
+  // One log entry per number. The same person walking in twice is one lead,
+  // not two rows to call back.
+  try {
+    const existing = await findVisitorByPhone(parsed.data.phone)
+    if (existing) {
+      return {
+        fieldErrors: {
+          phone: [
+            `${existing.full_name} is already in the visitor log with this number.`,
+          ],
+        },
+      }
+    }
+  } catch (error) {
+    return { error: dbErrorMessage(error) }
   }
 
   try {
