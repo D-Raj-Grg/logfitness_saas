@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { Suspense } from 'react'
 
 import { ChartSkeleton, TableSkeleton } from '@/components/app/skeletons'
@@ -14,9 +15,31 @@ import {
 } from '@/components/ui/table'
 import { requireRole } from '@/lib/auth'
 import { attendanceTrend } from '@/lib/db/reports'
-import { formatDate } from '@/lib/format'
+import { addDays, formatDate } from '@/lib/format'
 import { resolvePeriod, type ResolvedPeriod } from '@/lib/reports/period'
 import { resolveBranchScope } from '@/lib/scope'
+
+/**
+ * The list of people behind one row. The row's branch rides along so the list
+ * matches the number; a week or month row opens the whole bucket, clipped to
+ * the range being viewed so it never lists days outside what was asked for.
+ */
+function whoCameHref(
+  row: { period: string; branch_id: string },
+  period: ResolvedPeriod
+) {
+  let end = row.period
+  if (period.groupBy === 'week') end = addDays(row.period, 6)
+  if (period.groupBy === 'month') {
+    const [year, month] = row.period.split('-').map(Number)
+    end = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10)
+  }
+  const start = row.period < period.from ? period.from : row.period
+  const last = end > period.to ? period.to : end
+  const query = new URLSearchParams({ on: start, branch: row.branch_id })
+  if (last !== start) query.set('to', last)
+  return `/check-in/history?${query.toString()}`
+}
 
 export default async function AttendanceTrendPage({
   searchParams,
@@ -32,9 +55,9 @@ export default async function AttendanceTrendPage({
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Attendance trend</h1>
+          <h1 className="text-2xl font-semibold">Attendance</h1>
           <p className="text-sm text-muted-foreground print:hidden">
-            Check-ins and distinct members by {period.groupBy} and branch, for {scope.label}{' '}
+            How many members came each {period.groupBy}, for {scope.label}{' '}
             between {formatDate(period.from)} and {formatDate(period.to)}.
           </p>
         </div>
@@ -98,23 +121,40 @@ async function AttendanceBody({
     )
   }
 
+  const totalCheckIns = rows.reduce((sum, row) => sum + row.check_ins, 0)
+  const periodsWithVisits = new Set(rows.map((row) => row.period)).size
+
   return (
     <>
+      <p className="text-sm text-muted-foreground">
+        <span className="font-medium text-foreground tabular-nums">{totalCheckIns}</span>{' '}
+        check-ins across {periodsWithVisits} {period.groupBy}
+        {periodsWithVisits === 1 ? '' : 's'} with visits. A {period.groupBy} with no
+        check-ins is not listed. Click a date to see who came.
+      </p>
+
       <AttendanceTrendChart points={rows} />
 
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Period</TableHead>
+            <TableHead>{period.groupBy === 'day' ? 'Date' : 'Starting'}</TableHead>
             <TableHead>Branch</TableHead>
-            <TableHead className="text-right">Check-ins</TableHead>
-            <TableHead className="text-right">Distinct members</TableHead>
+            <TableHead className="text-right">Visits</TableHead>
+            <TableHead className="text-right">Different members</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.map((row, index) => (
             <TableRow key={`${row.period}-${row.branch_id}-${index}`}>
-              <TableCell>{formatDate(row.period)}</TableCell>
+              <TableCell>
+                <Link
+                  href={whoCameHref(row, period)}
+                  className="font-medium underline-offset-4 hover:underline"
+                >
+                  {formatDate(row.period)}
+                </Link>
+              </TableCell>
               <TableCell>{row.branch_name}</TableCell>
               <TableCell className="text-right tabular-nums">{row.check_ins}</TableCell>
               <TableCell className="text-right tabular-nums">{row.distinct_members}</TableCell>

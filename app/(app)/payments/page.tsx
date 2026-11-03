@@ -13,7 +13,7 @@ import {
   dailyCollectionSummary,
 } from '@/lib/db/payments'
 import { discountReport } from '@/lib/db/reports'
-import { addDays, todayInTimezone } from '@/lib/format'
+import { addDays, daysBetween, todayInTimezone } from '@/lib/format'
 import { resolveBranchScope } from '@/lib/scope'
 import { arrearsQuerySchema, collectionQuerySchema } from '@/lib/validation/payments'
 
@@ -52,6 +52,8 @@ export default async function PaymentsPage({
           <PaymentsFilters
             view={view}
             on={todayInTimezone()}
+            to={todayInTimezone()}
+            today={todayInTimezone()}
             branchId={branchId}
             bucket={bucket}
             branches={scope.options}
@@ -70,9 +72,15 @@ export default async function PaymentsPage({
 
   const query = collectionQuerySchema.safeParse({
     on: first(params.on),
+    to: first(params.to),
     branchId: branchId ?? undefined,
   })
-  const on = (query.success && query.data.on) || todayInTimezone()
+  const today = todayInTimezone()
+  let on = (query.success && query.data.on) || today
+  let to = (query.success && query.data.to) || on
+  // A backwards range is a typo, not a question: swap rather than show an
+  // empty sheet that reads as "nothing collected".
+  if (on > to) [on, to] = [to, on]
 
   return (
     <div className="flex flex-col gap-6">
@@ -88,6 +96,8 @@ export default async function PaymentsPage({
         <PaymentsFilters
           view={view}
           on={on}
+          to={to}
+          today={today}
           branchId={branchId}
           bucket={null}
           branches={scope.options}
@@ -95,10 +105,10 @@ export default async function PaymentsPage({
         />
       </Suspense>
       <Suspense
-        key={`collection:${on}:${scope.label}`}
+        key={`collection:${on}:${to}:${scope.label}`}
         fallback={<TableSkeleton rows={10} columns={6} />}
       >
-        <Collection on={on} branchIds={scope.branchIds} />
+        <Collection on={on} to={to} branchIds={scope.branchIds} />
       </Suspense>
     </div>
   )
@@ -123,22 +133,29 @@ async function Arrears({
 
 async function Collection({
   on,
+  to,
   branchIds,
 }: {
   on: string
+  to: string
   branchIds: string[] | null
 }) {
-  // Five single-day, index-covered queries in parallel. Yesterday is a second
-  // call of the same function rather than a parameter on it: the function stays
-  // one question, and the CSV route -- which shows no comparison -- does not
-  // pay for one. addDays does UTC-safe string maths; new Date(on) would slide
-  // the day backwards in an evening timezone.
+  // Five index-covered queries in parallel. The comparison is a second call of
+  // the same function over the window of equal length that ends the day before
+  // this one starts -- yesterday for a single day -- rather than a parameter on
+  // it, so the CSV route, which shows no comparison, does not pay for one.
+  // addDays does UTC-safe string maths; new Date(on) would slide the day
+  // backwards in an evening timezone.
+  const length = daysBetween(on, to) + 1
+  const previousTo = addDays(on, -1)
+  const previousOn = addDays(on, -length)
+  const against = length === 1 ? 'yesterday' : `previous ${length} days`
   const [rows, summaries, previousSummaries, detail, discounts] = await Promise.all([
-    dailyCollection({ on, branchIds }),
-    dailyCollectionSummary({ on, branchIds }),
-    dailyCollectionSummary({ on: addDays(on, -1), branchIds }),
-    dailyCollectionDetail({ on, branchIds }),
-    discountReport({ branchIds, from: on, to: on }),
+    dailyCollection({ on, to, branchIds }),
+    dailyCollectionSummary({ on, to, branchIds }),
+    dailyCollectionSummary({ on: previousOn, to: previousTo, branchIds }),
+    dailyCollectionDetail({ on, to, branchIds }),
+    discountReport({ branchIds, from: on, to }),
   ])
 
   // The totals row is the one with no branch on it.
@@ -153,6 +170,8 @@ async function Collection({
       previous={previousTotals}
       discounts={discounts}
       on={on}
+      to={to}
+      against={against}
     />
   )
 }

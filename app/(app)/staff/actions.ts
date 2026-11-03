@@ -8,10 +8,19 @@ import {
   enqueueNotification,
   previewNotificationTemplate,
 } from '@/lib/db/notifications'
+import {
+  assignStaffCard as assignStaffCardRpc,
+  revokeStaffCard as revokeStaffCardRpc,
+} from '@/lib/db/staff-cards'
+import { rpcErrorMessage } from '@/lib/rpc-error'
 import { assignableRoles } from '@/lib/roles'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { siteOrigin } from '@/lib/site-origin'
 import { createClient } from '@/lib/supabase/server'
+import {
+  assignStaffCardSchema,
+  revokeStaffCardSchema,
+} from '@/lib/validation/staff-cards'
 import {
   inviteStaffSchema,
   resetStaffPasswordSchema,
@@ -199,6 +208,7 @@ export async function setStaffStatus(
   }
 
   revalidatePath('/staff')
+  revalidatePath(`/staff/${parsed.data.staffId}`)
   return { success: 'Updated.' }
 }
 
@@ -284,6 +294,7 @@ export async function updateStaffAssignment(
   }
 
   revalidatePath('/staff')
+  revalidatePath(`/staff/${parsed.data.staffId}`)
   return { success: 'Saved. It takes effect the next time they sign in.' }
 }
 
@@ -399,6 +410,7 @@ export async function resetStaffPassword(
       redirectTo: `${siteOrigin()}/auth/callback?next=/reset-password`,
     })
     revalidatePath('/staff')
+    revalidatePath(`/staff/${target.id}`)
     return {
       success: `${target.full_name} already had an account with ${target.email}, so it was linked and a password reset email was sent to them instead.`,
     }
@@ -414,10 +426,68 @@ export async function resetStaffPassword(
   }
 
   revalidatePath('/staff')
+  revalidatePath(`/staff/${target.id}`)
 
   return {
     success: created
       ? `Account created. ${target.full_name} can sign in with ${target.email} and this password.`
       : 'Password changed. They can sign in with it straight away.',
   }
+}
+
+/**
+ * Hand a staff member an RFID card. The UID comes from a recent tap on a reader
+ * (the picker) or is typed in; it is normalised and checked here and again in
+ * assign_staff_card(), which also enforces who may card whom (a manager only
+ * their own front desk and trainers) and refuses a card that is live for
+ * someone else. Its sentences are written for the person at the screen.
+ */
+export async function assignStaffCard(
+  _prevState: StaffFormState,
+  formData: FormData
+): Promise<StaffFormState> {
+  await requireRole('owner', 'manager')
+
+  const parsed = assignStaffCardSchema.safeParse({
+    staffId: formData.get('staffId'),
+    cardUid: formData.get('cardUid') ?? '',
+    replace: formData.get('replace') ?? undefined,
+  })
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+  }
+
+  try {
+    await assignStaffCardRpc(parsed.data)
+  } catch (error) {
+    return { error: rpcErrorMessage(error, 'The card could not be assigned.') }
+  }
+
+  revalidatePath(`/staff/${parsed.data.staffId}`)
+  return { success: 'Card assigned. Tapping it at the door now clocks them in or out.' }
+}
+
+/** Lost, stolen, handed back. The reason is kept on the card's history row. */
+export async function revokeStaffCard(
+  _prevState: StaffFormState,
+  formData: FormData
+): Promise<StaffFormState> {
+  await requireRole('owner', 'manager')
+
+  const parsed = revokeStaffCardSchema.safeParse({
+    staffId: formData.get('staffId'),
+    reason: formData.get('reason'),
+  })
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+  }
+
+  try {
+    await revokeStaffCardRpc(parsed.data)
+  } catch (error) {
+    return { error: rpcErrorMessage(error, 'The card could not be revoked.') }
+  }
+
+  revalidatePath(`/staff/${parsed.data.staffId}`)
+  return { success: 'Card revoked. The reader refuses it from now on.' }
 }

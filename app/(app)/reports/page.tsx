@@ -37,9 +37,10 @@ const REPORTS = [
     description: 'New, renewed, expired and churned members, by period and branch.',
   },
   {
-    title: 'Attendance trend',
+    title: 'Attendance (visits per day)',
     href: '/reports/attendance',
-    description: 'Check-ins and distinct members over time, across branches.',
+    description:
+      'How many members came each day, week or month, for any date range. Pick the dates on the report.',
   },
   {
     title: 'Trainer utilization',

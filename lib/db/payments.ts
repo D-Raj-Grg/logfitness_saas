@@ -171,12 +171,13 @@ export async function reversePayment(args: {
 
 /** The drawer sheet: one row per branch, collector, method, and kind. */
 export async function dailyCollection(
-  args: { on?: string; branchIds?: string[] | null } = {}
+  args: { on?: string; to?: string; branchIds?: string[] | null } = {}
 ) {
   const supabase = await createClient()
 
   const { data, error } = await supabase.rpc('daily_collection', {
     p_on: args.on ?? undefined,
+    p_to: args.to ?? undefined,
     p_branch_ids: args.branchIds ?? undefined,
   })
 
@@ -193,12 +194,13 @@ export async function dailyCollection(
  * The totals row is the one with a null branch_id.
  */
 export async function dailyCollectionSummary(
-  args: { on?: string; branchIds?: string[] | null } = {}
+  args: { on?: string; to?: string; branchIds?: string[] | null } = {}
 ) {
   const supabase = await createClient()
 
   const { data, error } = await supabase.rpc('daily_collection_summary', {
     p_on: args.on ?? undefined,
+    p_to: args.to ?? undefined,
     p_branch_ids: args.branchIds ?? undefined,
   })
 
@@ -212,12 +214,13 @@ export async function dailyCollectionSummary(
  * round trip per click.
  */
 export async function dailyCollectionDetail(
-  args: { on?: string; branchIds?: string[] | null } = {}
+  args: { on?: string; to?: string; branchIds?: string[] | null } = {}
 ) {
   const supabase = await createClient()
 
   const { data, error } = await supabase.rpc('daily_collection_detail', {
     p_on: args.on ?? undefined,
+    p_to: args.to ?? undefined,
     p_branch_ids: args.branchIds ?? undefined,
   })
 

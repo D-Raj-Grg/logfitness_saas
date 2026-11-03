@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/table'
 import { ATTENDANCE_METHOD_LABELS, attendanceActorLabel } from '@/lib/attendance'
 import type { AttendanceDetailRow } from '@/lib/db/attendance'
-import { formatMoney, formatTime } from '@/lib/format'
+import { formatDate, formatMoney, formatTime } from '@/lib/format'
 
 /**
  * The day's log at this branch. Read top to bottom it is the shift handover:
@@ -19,10 +19,13 @@ import { formatMoney, formatTime } from '@/lib/format'
 export function AttendanceLogTable({
   rows,
   showBranch,
+  showDate = false,
 }: {
   rows: AttendanceDetailRow[]
   /** Owners looking at every branch need the column; a single branch does not. */
   showBranch: boolean
+  /** A list spanning several days needs the date beside the time. */
+  showDate?: boolean
 }) {
   if (rows.length === 0) {
     return (
@@ -40,6 +43,7 @@ export function AttendanceLogTable({
       <Table>
         <TableHeader>
           <TableRow>
+            {showDate ? <TableHead className="w-28">Date</TableHead> : null}
             <TableHead className="w-24">In</TableHead>
             <TableHead className="w-24">Out</TableHead>
             <TableHead>Member</TableHead>
@@ -52,6 +56,9 @@ export function AttendanceLogTable({
         <TableBody>
           {rows.map((row) => (
             <TableRow key={row.id}>
+              {showDate ? (
+                <TableCell className="whitespace-nowrap">{formatDate(row.checked_in_at)}</TableCell>
+              ) : null}
               <TableCell className="whitespace-nowrap tabular-nums">
                 {formatTime(row.checked_in_at)}
               </TableCell>

@@ -13,26 +13,31 @@ export function CollectionDelta({
   current,
   previous,
   kind = 'money',
+  against = 'yesterday',
 }: {
   current: number
   previous: number
   kind?: 'money' | 'count'
+  /** What `previous` is: "yesterday" for one day, "previous 7 days" for a range. */
+  against?: string
 }) {
   const show = (value: number) =>
     kind === 'money' ? formatMoney(Math.abs(value)) : String(Math.abs(value))
 
+  const when = against === 'yesterday' ? against : `in the ${against}`
+
   if (previous === 0 && current === 0) {
-    return <span className="text-xs text-muted-foreground">Nothing yesterday either</span>
+    return <span className="text-xs text-muted-foreground">Nothing {when} either</span>
   }
 
   if (previous === 0) {
-    return <span className="text-xs text-muted-foreground">Nothing yesterday</span>
+    return <span className="text-xs text-muted-foreground">Nothing {when}</span>
   }
 
   const change = current - previous
 
   if (change === 0) {
-    return <span className="text-xs text-muted-foreground">Same as yesterday</span>
+    return <span className="text-xs text-muted-foreground">Same as {against}</span>
   }
 
   // Against a negative previous day -- a day that refunded more than it took --
@@ -42,7 +47,7 @@ export function CollectionDelta({
   return (
     <span className="text-xs text-muted-foreground tabular-nums">
       {change > 0 ? '↑' : '↓'} {show(change)}
-      {pct !== null ? ` (${Math.abs(pct)}%)` : ''} vs yesterday
+      {pct !== null ? ` (${Math.abs(pct)}%)` : ''} vs {against}
     </span>
   )
 }

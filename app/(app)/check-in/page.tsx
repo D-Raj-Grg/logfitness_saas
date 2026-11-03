@@ -141,11 +141,19 @@ export default async function CheckInPage({
       </div>
 
       <div className="flex flex-col gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">Latest check-ins</h2>
-          <p className="text-sm text-muted-foreground">
-            The 25 most recent arrivals{branchName ? ` at ${branchName}` : ''}.
-          </p>
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-semibold">Latest check-ins</h2>
+            <p className="text-sm text-muted-foreground">
+              The 25 most recent arrivals{branchName ? ` at ${branchName}` : ''}.
+            </p>
+          </div>
+          <Link
+            href={`/check-in/history${branchId ? `?branch=${branchId}` : ''}`}
+            className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            See who came on another day →
+          </Link>
         </div>
         <AttendanceLogTable rows={log.rows} showBranch={!branchId} />
       </div>

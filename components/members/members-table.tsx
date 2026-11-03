@@ -17,7 +17,8 @@ import {
 } from '@/components/ui/table'
 import type { MemberOverviewRow } from '@/lib/db/members'
 import type { LastPayment } from '@/lib/db/payments'
-import { formatDate, formatMoney } from '@/lib/format'
+import { formatDate, formatMoney, todayInTimezone } from '@/lib/format'
+import { lastVisitLabel } from '@/lib/last-visit'
 import { cn } from '@/lib/utils'
 import type { MemberSort, MemberSortDir } from '@/lib/validation/members'
 
@@ -137,6 +138,10 @@ export function MembersTable({
     )
   }
 
+  // Server-side, from the gym's own calendar day, so "3 days ago" does not
+  // depend on the browser's timezone.
+  const today = todayInTimezone()
+
   return (
     <div className="overflow-x-auto rounded-lg border">
       <Table>
@@ -154,6 +159,7 @@ export function MembersTable({
               <SortHeader column="expiry" label="Plan" sort={sort} dir={dir} params={params} />
             </TableHead>
             <TableHead>Status</TableHead>
+            <TableHead>Last visit</TableHead>
             <TableHead>Last payment</TableHead>
             <TableHead className="text-right">
               <SortHeader column="dues" label="Dues" sort={sort} dir={dir} params={params} />
@@ -214,6 +220,21 @@ export function MembersTable({
                       these rows are missing from every other view. */}
                   {row.archived_at ? <Badge variant="outline">Archived</Badge> : null}
                 </div>
+              </TableCell>
+              <TableCell>
+                {(() => {
+                  const visit = lastVisitLabel(row.last_visit_on, today)
+                  return visit.never ? (
+                    <span className="text-muted-foreground">Never</span>
+                  ) : (
+                    <>
+                      <span className="block">{visit.label}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {formatDate(row.last_visit_on as string)}
+                      </span>
+                    </>
+                  )
+                })()}
               </TableCell>
               <TableCell>
                 {lastPayments[row.id] ? (

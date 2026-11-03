@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { isRealIsoDate } from '@/lib/format'
+
 export const attendanceMethodSchema = z.enum(['manual', 'qr', 'card', 'biometric'])
 
 const notesSchema = z
@@ -62,7 +64,21 @@ export const attendanceLogQuerySchema = z.object({
     .string()
     .trim()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine(isRealIsoDate, 'That is not a real date')
     .optional(),
+  /** End of an inclusive window starting at `on`. Omitted = just `on`. */
+  to: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine(isRealIsoDate, 'That is not a real date')
+    .optional(),
+  /** Only this member's visits. */
+  memberId: z.uuid().optional(),
+  /** Only visits this staff member checked in at the desk (attendance.checked_in_by). */
+  checkedInBy: z.uuid().optional(),
+  /** Every branch the caller covers; `branchId` wins when both are given. */
+  branchIds: z.array(z.uuid()).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(10).max(100).default(25),
 })

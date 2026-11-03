@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import { ARREARS_BUCKETS, type ArrearsBucket } from '@/components/payments/arrears-buckets'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -13,10 +14,17 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { addDays } from '@/lib/format'
 
 export type PaymentsView = 'collection' | 'arrears'
 
 const ALL = 'all'
+
+const QUICK_RANGES = [
+  { label: 'Today', days: 1 },
+  { label: 'Last 7 days', days: 7 },
+  { label: 'Last 30 days', days: 30 },
+]
 
 type Branch = { id: string; name: string }
 
@@ -27,6 +35,8 @@ type Branch = { id: string; name: string }
 export function PaymentsFilters({
   view,
   on,
+  to,
+  today,
   branchId,
   bucket,
   branches,
@@ -34,6 +44,10 @@ export function PaymentsFilters({
 }: {
   view: PaymentsView
   on: string
+  /** End of the collection window; equals `on` for a single day. */
+  to: string
+  /** The org's today, for the quick ranges. */
+  today: string
   branchId: string | null
   bucket: ArrearsBucket | null
   branches: Branch[]
@@ -67,16 +81,46 @@ export function PaymentsFilters({
 
       <div className="flex flex-wrap items-end gap-4">
         {view === 'collection' ? (
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="collection-date">Date</Label>
-            <Input
-              id="collection-date"
-              type="date"
-              value={on}
-              onChange={(event) => navigate({ on: event.target.value })}
-              className="w-44"
-            />
-          </div>
+          <>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="collection-date">From</Label>
+              <Input
+                id="collection-date"
+                type="date"
+                value={on}
+                max={to}
+                onChange={(event) => navigate({ on: event.target.value })}
+                className="w-44"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="collection-date-to">To</Label>
+              <Input
+                id="collection-date-to"
+                type="date"
+                value={to}
+                min={on}
+                onChange={(event) => navigate({ to: event.target.value })}
+                className="w-44"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {QUICK_RANGES.map((range) => (
+                <Button
+                  key={range.label}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const end = today
+                    navigate({ on: addDays(end, -(range.days - 1)), to: range.days === 1 ? null : end })
+                  }}
+                >
+                  {range.label}
+                </Button>
+              ))}
+            </div>
+          </>
         ) : null}
 
         <div className="flex flex-col gap-2">

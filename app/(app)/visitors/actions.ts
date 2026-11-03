@@ -172,12 +172,12 @@ export async function deleteVisitor(
   _prevState: VisitorFormState,
   formData: FormData
 ): Promise<VisitorFormState> {
-  // Owner-only in RLS too; the refusal is restated here so it reads as a rule
-  // rather than as a write that quietly touched nothing.
+  // Owner or manager in RLS too (managers at their own branches); the refusal
+  // is restated here so it reads as a rule, not a write that touched nothing.
   const staff = await requireStaff()
 
-  if (staff.role !== 'owner') {
-    return { error: 'Only an owner can delete a visitor record.' }
+  if (staff.role !== 'owner' && staff.role !== 'manager') {
+    return { error: 'Only an owner or manager can delete a visitor record.' }
   }
 
   const parsed = visitorIdSchema.safeParse({ visitorId: formData.get('visitorId') })

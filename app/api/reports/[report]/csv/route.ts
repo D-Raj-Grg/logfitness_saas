@@ -15,7 +15,7 @@ import {
   revenueReport,
 } from '@/lib/db/reports'
 import { trainerUtilization } from '@/lib/db/trainer-utilization'
-import { formatDateTime, formatMoney, todayInTimezone } from '@/lib/format'
+import { formatDateTime, formatMoney, isRealIsoDate, todayInTimezone } from '@/lib/format'
 import { resolvePeriod, type ResolvedPeriod } from '@/lib/reports/period'
 import { resolveBranchScope, type BranchScope } from '@/lib/scope'
 
@@ -43,8 +43,22 @@ type ReportDefinition = {
  * database first and then apply the same filter the page applies, exactly as
  * the page itself does, so the file matches what is on screen.
  */
-/** Reports that cover a single day rather than resolvePeriod's window. */
+/**
+ * Reports that take their own `on` (start) and optional `to` (end) rather than
+ * resolvePeriod's window.
+ */
 const DAY_SCOPED_REPORTS = new Set(['collection', 'collection-detail'])
+
+/** The collection window from ?on= and ?to=, start-first, `to` defaulting to `on`. */
+function collectionWindow(searchParams: SearchParams) {
+  const today = todayInTimezone()
+  const rawOn = first(searchParams.on)
+  const rawTo = first(searchParams.to)
+  let on = isRealIsoDate(rawOn) ? rawOn : today
+  let to = isRealIsoDate(rawTo) ? rawTo : on
+  if (on > to) [on, to] = [to, on]
+  return { on, to }
+}
 
 const REPORTS: Record<string, ReportDefinition> = {
   revenue: {
@@ -193,12 +207,12 @@ const REPORTS: Record<string, ReportDefinition> = {
 
   collection: {
     fetch: async ({ scope, searchParams }) => {
-      const on = first(searchParams.on) || todayInTimezone()
-      const rows = await dailyCollection({ on, branchIds: scope.branchIds })
+      const { on, to } = collectionWindow(searchParams)
+      const rows = await dailyCollection({ on, to, branchIds: scope.branchIds })
       return rows.map((row) => ({
         // The day the sheet covers. The filename carries it too, but a
         // filename survives exactly one rename, and this file gets renamed.
-        on,
+        on: on === to ? on : `${on} to ${to}`,
         branch_name: row.branch_name,
         staff_name: row.staff_name,
         method: row.method,
@@ -226,10 +240,10 @@ const REPORTS: Record<string, ReportDefinition> = {
    */
   'collection-detail': {
     fetch: async ({ scope, searchParams }) => {
-      const on = first(searchParams.on) || todayInTimezone()
-      const rows = await dailyCollectionDetail({ on, branchIds: scope.branchIds })
+      const { on, to } = collectionWindow(searchParams)
+      const rows = await dailyCollectionDetail({ on, to, branchIds: scope.branchIds })
       return rows.map((row) => ({
-        on,
+        on: on === to ? on : `${on} to ${to}`,
         paid_at: formatDateTime(row.paid_at),
         branch_name: row.branch_name,
         staff_name: row.staff_name,
@@ -365,11 +379,14 @@ export async function GET(
   const body = toCsv(rows, definition.columns)
 
   const branchPart = scope.selectedId ? 'branch' : 'all'
-  // The collection reports cover one day, which resolvePeriod knows nothing
+  // The collection reports have their own window, which resolvePeriod knows nothing
   // about: naming those files after a 30-day window is how a sheet for the 1st
   // goes into a folder as "to-2026-09-21".
-  const datePart = DAY_SCOPED_REPORTS.has(report)
-    ? first(searchParams.on) || todayInTimezone()
+  const window = DAY_SCOPED_REPORTS.has(report) ? collectionWindow(searchParams) : null
+  const datePart = window
+    ? window.on === window.to
+      ? window.on
+      : `${window.on}-to-${window.to}`
     : `${period.from}-to-${period.to}`
   const filename = `${report}-${branchPart}-${datePart}.csv`
 

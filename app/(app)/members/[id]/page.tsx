@@ -10,20 +10,25 @@ import { MemberRecordActions } from '@/components/members/member-record-actions'
 import { MemberStatusActions } from '@/components/members/member-status-actions'
 import { MemberPhoto } from '@/components/members/member-photo'
 import { MemberStatusBadge } from '@/components/members/member-status-badge'
+import { StatTile } from '@/components/app/stat-tile'
 import { MemberActionPanel } from '@/components/memberships/member-action-panel'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { requireStaff } from '@/lib/auth'
-import { listAttendanceForMember } from '@/lib/db/attendance'
+import { listAttendance, listAttendanceForMember } from '@/lib/db/attendance'
 import { listBranches } from '@/lib/db/branches'
+import { countAttendanceForMember } from '@/lib/db/member-attendance'
 import { listMemberCards, listUnassignedCardScans } from '@/lib/db/member-cards'
 import { getMember, getMemberOverview } from '@/lib/db/members'
 import { listInvoicesForMember, listMembershipsForMember } from '@/lib/db/memberships'
 import { listNotificationsForMember } from '@/lib/db/notifications'
 import { listPaymentsForMember } from '@/lib/db/payments'
 import { memberPhotoUrl } from '@/lib/db/photos'
-import { formatDate, formatMoney } from '@/lib/format'
+import { formatDate, formatMoney, isRealIsoDate, todayInTimezone } from '@/lib/format'
+import { lastVisitLabel } from '@/lib/last-visit'
 import { GENDER_LABELS } from '@/lib/members'
+
+const ATTENDANCE_PAGE_SIZE = 25
 
 function Detail({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -43,11 +48,45 @@ export default async function MemberProfilePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ invoice?: string; action?: string }>
+  searchParams: Promise<{
+    invoice?: string
+    action?: string
+    tab?: string
+    att_from?: string
+    att_to?: string
+    att_page?: string
+  }>
 }) {
   const staff = await requireStaff()
   const { id } = await params
-  const { invoice: soldInvoiceId, action } = await searchParams
+  const {
+    invoice: soldInvoiceId,
+    action,
+    tab,
+    att_from: rawFrom,
+    att_to: rawTo,
+    att_page: rawPage,
+  } = await searchParams
+
+  // The Attendance tab's own window and page. They live under their own names
+  // so they cannot collide with ?action= or ?invoice=, and anything that is not
+  // a real date or a positive page is ignored rather than trusted.
+  let attFrom = isRealIsoDate(rawFrom) ? rawFrom : undefined
+  let attTo = isRealIsoDate(rawTo) ? rawTo : undefined
+  if (attFrom && !attTo) attTo = attFrom
+  if (attTo && !attFrom) attFrom = attTo
+  // A backwards range is a typo, not a question.
+  if (attFrom && attTo && attFrom > attTo) [attFrom, attTo] = [attTo, attFrom]
+  const attPage = Math.max(1, Math.floor(Number(rawPage)) || 1)
+  const attendanceFiltered = Boolean(attFrom)
+
+  // Opens on the tab a link asked for. Any date or page in the URL means the
+  // reader is in the middle of looking at attendance, so stay there.
+  const TABS = ['memberships', 'payments', 'invoices', 'attendance', 'messages'] as const
+  type HistoryTab = (typeof TABS)[number]
+  const defaultTab: HistoryTab =
+    TABS.find((value) => value === tab) ??
+    (attendanceFiltered || rawPage ? 'attendance' : 'memberships')
 
   // The member list's row menu links here for the membership forms. Anything
   // else in the parameter is ignored, and the panel re-checks the one that is
@@ -65,7 +104,9 @@ export default async function MemberProfilePage({
     memberships,
     invoices,
     payments,
-    attendance,
+    recentVisits,
+    attendancePage,
+    attendanceTotal,
     branches,
     messages,
     cards,
@@ -76,7 +117,19 @@ export default async function MemberProfilePage({
     listMembershipsForMember(id),
     listInvoicesForMember(id),
     listPaymentsForMember(id),
+    // Only used to tell the action panel which memberships have been checked
+    // in on -- the tab below reads its own, uncapped, filtered page.
     listAttendanceForMember(id),
+    listAttendance({
+      memberId: id,
+      on: attFrom,
+      to: attTo,
+      page: attPage,
+      pageSize: ATTENDANCE_PAGE_SIZE,
+    }),
+    // The true lifetime count. With no filter the page query's total already is
+    // that, so only pay for a second count when a window narrows it.
+    attendanceFiltered ? countAttendanceForMember(id) : Promise.resolve(null),
     listBranches(),
     listNotificationsForMember(id),
     // A failed card read must not take the whole profile down: null renders
@@ -106,7 +159,8 @@ export default async function MemberProfilePage({
   const branchNames = Object.fromEntries(branches.map((branch) => [branch.id, branch.name]))
   const left = overview.status === 'left'
   const archived = Boolean(member.archived_at)
-  const lastSeen = attendance[0] ?? null
+  const today = todayInTimezone()
+  const lastVisit = lastVisitLabel(overview.last_visit_on, today)
 
   return (
     <div className="flex flex-col gap-6">
@@ -136,9 +190,6 @@ export default async function MemberProfilePage({
             <span className="tabular-nums">{overview.phone}</span>
             <span>{overview.home_branch_name}</span>
             <span>Joined {formatDate(overview.joined_on)}</span>
-            <span>
-              {lastSeen ? `Last seen ${formatDate(lastSeen.attended_on)}` : 'Never checked in'}
-            </span>
             {left && overview.left_on ? <span>Left {formatDate(overview.left_on)}</span> : null}
           </p>
           </div>
@@ -166,6 +217,19 @@ export default async function MemberProfilePage({
             />
           </div>
         ) : null}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <StatTile
+          label="Last visit"
+          value={lastVisit.label}
+          href={`/members/${id}?tab=attendance`}
+          hint={
+            lastVisit.never
+              ? 'Never checked in'
+              : `${formatDate(overview.last_visit_on as string)} · see all visits`
+          }
+        />
       </div>
 
       {archived ? (
@@ -302,7 +366,19 @@ export default async function MemberProfilePage({
             memberships={memberships}
             invoices={invoices}
             payments={payments}
-            attendance={attendance}
+            attendance={attendancePage.rows}
+            attendanceTotal={attendanceTotal ?? attendancePage.total}
+            attendanceMatches={attendancePage.total}
+            attendancePage={attendancePage.page}
+            attendancePageSize={ATTENDANCE_PAGE_SIZE}
+            attendanceFrom={attFrom ?? null}
+            attendanceTo={attTo ?? null}
+            today={today}
+            memberId={id}
+            // The tab state lives inside the component, so a link that changes
+            // ?tab= or the window must remount it or the old tab stays open.
+            key={`${defaultTab}:${attFrom ?? ''}:${attTo ?? ''}:${attendancePage.page}`}
+            defaultTab={defaultTab}
             messages={messages}
             branchNames={branchNames}
           />
@@ -322,7 +398,7 @@ export default async function MemberProfilePage({
             initialAction={initialAction}
             checkedInMembershipIds={[
               ...new Set(
-                attendance
+                recentVisits
                   .map((visit) => visit.membership_id)
                   .filter((id): id is string => Boolean(id))
               ),

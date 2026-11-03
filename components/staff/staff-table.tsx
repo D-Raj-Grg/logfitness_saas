@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useActionState } from 'react'
 
 import { setStaffStatus, type StaffFormState } from '@/app/(app)/staff/actions'
@@ -28,13 +30,13 @@ export type StaffListRow = {
   accepted_at: string | null
 }
 
-const STATUS_LABELS: Record<StaffListRow['status'], string> = {
+export const STATUS_LABELS: Record<StaffListRow['status'], string> = {
   invited: 'Awaiting signup',
   active: 'Active',
   inactive: 'Deactivated',
 }
 
-function StatusToggle({ row }: { row: StaffListRow }) {
+export function StatusToggle({ row }: { row: StaffListRow }) {
   const [state, formAction, pending] = useActionState<StaffFormState, FormData>(
     setStaffStatus,
     {}
@@ -56,6 +58,11 @@ function StatusToggle({ row }: { row: StaffListRow }) {
   )
 }
 
+/** Clicks that belong to a button, link or open dialog must not also open the row. */
+function isInteractiveTarget(target: EventTarget | null) {
+  return target instanceof Element && target.closest('button, a, input, [role="dialog"]') !== null
+}
+
 export function StaffTable({
   rows,
   branchNames,
@@ -71,6 +78,8 @@ export function StaffTable({
   actorRole: StaffRole
   actorBranchIds: string[]
 }) {
+  const router = useRouter()
+
   if (rows.length === 0) {
     return (
       <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
@@ -92,9 +101,25 @@ export function StaffTable({
       </TableHeader>
       <TableBody>
         {rows.map((row) => (
-          <TableRow key={row.id}>
+          <TableRow
+            key={row.id}
+            className="cursor-pointer"
+            onClick={(event) => {
+              // Dialogs and select menus are portaled out of the row but their
+              // events still bubble through it; only clicks physically inside
+              // the row may open the page.
+              if (!event.currentTarget.contains(event.target as Node)) return
+              if (isInteractiveTarget(event.target)) return
+              router.push(`/staff/${row.id}`)
+            }}
+          >
             <TableCell>
-              <span className="block font-medium">{row.full_name}</span>
+              <Link
+                href={`/staff/${row.id}`}
+                className="block font-medium underline-offset-4 hover:underline"
+              >
+                {row.full_name}
+              </Link>
               <span className="block text-xs text-muted-foreground">{row.email}</span>
             </TableCell>
             <TableCell>{ROLE_LABELS[row.role]}</TableCell>

@@ -19,10 +19,15 @@ export function CollectionSummary({
   summary,
   previous,
   on,
+  to,
+  against,
 }: {
   summary: SummaryRow
   previous: SummaryRow | null
   on: string
+  to: string
+  /** What `previous` covers, in words: "yesterday" or "previous 7 days". */
+  against: string
 }) {
   const returned = summary.refunds_paisa + summary.reversals_paisa
   const previousReturned = previous
@@ -30,12 +35,13 @@ export function CollectionSummary({
     : 0
 
   const delta = (current: number, prior: number, kind?: 'money' | 'count') =>
-    previous ? <CollectionDelta current={current} previous={prior} kind={kind} /> : null
+    previous ? <CollectionDelta current={current} previous={prior} kind={kind} against={against} /> : null
 
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
         {formatDate(on)}
+        {to !== on ? ` – ${formatDate(to)}` : null}
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 print:grid-cols-5">

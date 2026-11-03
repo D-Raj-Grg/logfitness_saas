@@ -127,6 +127,8 @@ export function CollectionSheet({
   previous,
   discounts,
   on,
+  to,
+  against,
 }: {
   rows: Row[]
   detail: Detail[]
@@ -135,13 +137,15 @@ export function CollectionSheet({
   previous: SummaryRow | null
   discounts: DiscountRow[]
   on: string
+  to: string
+  against: string
 }) {
   const groups = groupRows(rows, detail)
 
   if (groups.length === 0 && (!summary || summary.invoice_count === 0)) {
     return (
       <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-        Nothing collected on {formatDate(on)}.
+        Nothing collected {to === on ? `on ${formatDate(on)}` : `from ${formatDate(on)} to ${formatDate(to)}`}.
       </p>
     )
   }
@@ -149,7 +153,13 @@ export function CollectionSheet({
   return (
     <div className="flex flex-col gap-6">
       {summary ? (
-        <CollectionSummary summary={summary} previous={previous} on={on} />
+        <CollectionSummary
+          summary={summary}
+          previous={previous}
+          on={on}
+          to={to}
+          against={against}
+        />
       ) : null}
 
       <CollectionDiscounts rows={discounts} />
