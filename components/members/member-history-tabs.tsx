@@ -1,6 +1,8 @@
 import Link from 'next/link'
+import { Suspense } from 'react'
 import { Printer } from 'lucide-react'
 
+import { DayRangePicker } from '@/components/attendance/day-range-picker'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -94,18 +96,87 @@ function EmptyTab({ children }: { children: React.ReactNode }) {
   )
 }
 
+function AttendancePager({
+  memberId,
+  page,
+  pages,
+  from,
+  to,
+}: {
+  memberId: string
+  page: number
+  pages: number
+  from: string | null
+  to: string | null
+}) {
+  function href(target: number) {
+    const query = new URLSearchParams({ tab: 'attendance' })
+    if (from) query.set('att_from', from)
+    if (to) query.set('att_to', to)
+    if (target > 1) query.set('att_page', String(target))
+    return `/members/${memberId}?${query.toString()}`
+  }
+
+  return (
+    <div className="flex items-center justify-between text-sm">
+      {page > 1 ? (
+        <Link href={href(page - 1)} className="underline-offset-4 hover:underline">
+          ← Newer
+        </Link>
+      ) : (
+        <span />
+      )}
+      <span className="text-muted-foreground">
+        Page {page} of {pages}
+      </span>
+      {page < pages ? (
+        <Link href={href(page + 1)} className="underline-offset-4 hover:underline">
+          Older →
+        </Link>
+      ) : (
+        <span />
+      )}
+    </div>
+  )
+}
+
+export type HistoryTab = 'memberships' | 'payments' | 'invoices' | 'attendance' | 'messages'
+
 export function MemberHistoryTabs({
   memberships,
   invoices,
   payments,
   attendance,
+  attendanceTotal,
+  attendanceMatches,
+  attendancePage,
+  attendancePageSize,
+  attendanceFrom,
+  attendanceTo,
+  today,
+  memberId,
+  defaultTab = 'memberships',
   messages,
   branchNames,
 }: {
   memberships: Memberships
   invoices: Invoices
   payments: Payments
+  /** One page of the member's check-ins, newest first. */
   attendance: AttendanceDetailRow[]
+  /** Every check-in they have ever had, whatever the date filter says. */
+  attendanceTotal: number
+  /** How many match the date filter (equals the total with no filter). */
+  attendanceMatches: number
+  attendancePage: number
+  attendancePageSize: number
+  /** The filter window, or null for "all time". */
+  attendanceFrom: string | null
+  attendanceTo: string | null
+  /** The gym's today, for the quick ranges and the picker's upper limit. */
+  today: string
+  memberId: string
+  defaultTab?: HistoryTab
   /** What this member has been told, by a sweep or by the desk. */
   messages: Messages
   branchNames: Record<string, string>
@@ -115,7 +186,7 @@ export function MemberHistoryTabs({
   const netPaid = payments.reduce((sum, row) => sum + row.amount_paisa, 0)
 
   return (
-    <Tabs defaultValue="memberships">
+    <Tabs defaultValue={defaultTab}>
       {/* Five labels with counts do not fit a phone. They scroll sideways
           rather than wrapping into a second row of pills, which would push the
           table down and read as two separate rows of controls. */}
@@ -124,7 +195,7 @@ export function MemberHistoryTabs({
           <TabsTrigger value="memberships">Memberships ({memberships.length})</TabsTrigger>
           <TabsTrigger value="payments">Payments ({payments.length})</TabsTrigger>
           <TabsTrigger value="invoices">Invoices ({invoices.length})</TabsTrigger>
-          <TabsTrigger value="attendance">Attendance ({attendance.length})</TabsTrigger>
+          <TabsTrigger value="attendance">Attendance ({attendanceTotal})</TabsTrigger>
           <TabsTrigger value="messages">Messages ({messages.length})</TabsTrigger>
         </TabsList>
       </div>
@@ -348,9 +419,57 @@ export function MemberHistoryTabs({
       </TabsContent>
 
       <TabsContent value="attendance">
-        {attendance.length === 0 ? (
-          <EmptyTab>No check-ins recorded yet.</EmptyTab>
-        ) : (
+        <div className="flex flex-col gap-4">
+          <Suspense>
+            <DayRangePicker
+              on={attendanceFrom ?? today}
+              to={attendanceTo ?? today}
+              today={today}
+              params={{
+                on: 'att_from',
+                to: 'att_to',
+                page: 'att_page',
+                fixed: { tab: 'attendance' },
+              }}
+            />
+          </Suspense>
+
+          <p className="text-sm text-muted-foreground">
+            {attendanceFrom && attendanceTo ? (
+              <>
+                <span className="font-medium text-foreground tabular-nums">
+                  {attendanceMatches}
+                </span>{' '}
+                {attendanceMatches === 1 ? 'visit' : 'visits'}{' '}
+                {attendanceFrom === attendanceTo
+                  ? `on ${formatDate(attendanceFrom)}`
+                  : `between ${formatDate(attendanceFrom)} and ${formatDate(attendanceTo)}`}
+                . {attendanceTotal} in total.{' '}
+                <Link
+                  href={`/members/${memberId}?tab=attendance`}
+                  className="underline-offset-4 hover:underline"
+                >
+                  Show all
+                </Link>
+              </>
+            ) : (
+              <>
+                <span className="font-medium text-foreground tabular-nums">
+                  {attendanceTotal}
+                </span>{' '}
+                {attendanceTotal === 1 ? 'visit' : 'visits'} in total. Pick dates to narrow it
+                down.
+              </>
+            )}
+          </p>
+
+          {attendance.length === 0 ? (
+            <EmptyTab>
+              {attendanceFrom
+                ? 'No check-ins in these dates. Try a wider range.'
+                : 'No check-ins recorded yet.'}
+            </EmptyTab>
+          ) : (
           <div className="overflow-x-auto rounded-lg border">
             <Table>
               <TableHeader>
@@ -406,7 +525,18 @@ export function MemberHistoryTabs({
               </TableBody>
             </Table>
           </div>
-        )}
+          )}
+
+          {attendanceMatches > attendancePageSize ? (
+            <AttendancePager
+              memberId={memberId}
+              page={attendancePage}
+              pages={Math.ceil(attendanceMatches / attendancePageSize)}
+              from={attendanceFrom}
+              to={attendanceTo}
+            />
+          ) : null}
+        </div>
       </TabsContent>
       <TabsContent value="messages">
         {messages.length === 0 ? (

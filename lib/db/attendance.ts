@@ -1,4 +1,5 @@
 import type { CheckInBanner } from '@/lib/attendance'
+import { isRangeNotSatisfiable, lastPageFor } from '@/lib/db/paging'
 import { createClient } from '@/lib/supabase/server'
 import type { Database } from '@/lib/types/database'
 import type { AttendanceLogQuery } from '@/lib/validation/attendance'
@@ -239,29 +240,49 @@ export async function listAttendance(
 ): Promise<AttendanceLogResult> {
   const supabase = await createClient()
 
-  let request = supabase
-    .from('attendance_detail')
-    .select('*', { count: 'exact' })
+  // Built as a function so a page past the end can be re-asked for the last
+  // real page with the same filters.
+  const build = (from: number, to: number) => {
+    let request = supabase
+      .from('attendance_detail')
+      .select('*', { count: 'exact' })
 
-  if (query.branchId) request = request.eq('branch_id', query.branchId)
-  if (query.on) request = request.eq('attended_on', query.on)
+    if (query.memberId) request = request.eq('member_id', query.memberId)
+    if (query.checkedInBy) request = request.eq('checked_in_by', query.checkedInBy)
+    if (query.branchId) request = request.eq('branch_id', query.branchId)
+    else if (query.branchIds) request = request.in('branch_id', query.branchIds)
+    if (query.on && query.to && query.to !== query.on) {
+      request = request.gte('attended_on', query.on).lte('attended_on', query.to)
+    } else if (query.on) {
+      request = request.eq('attended_on', query.on)
+    }
 
-  const from = (query.page - 1) * query.pageSize
-  const to = from + query.pageSize - 1
+    return request
+      .order('checked_in_at', { ascending: false })
+      // Two people can be checked in at the same instant, and a paged list needs
+      // a unique last sort key or the boundary between pages is undefined.
+      .order('id', { ascending: false })
+      .range(from, to)
+  }
 
-  const { data, error, count } = await request
-    .order('checked_in_at', { ascending: false })
-    // Two people can be checked in at the same instant, and a paged list needs
-    // a unique last sort key or the boundary between pages is undefined.
-    .order('id', { ascending: false })
-    .range(from, to)
+  let page = query.page
+  let result = await build((page - 1) * query.pageSize, page * query.pageSize - 1)
 
+  if (isRangeNotSatisfiable(result.error)) {
+    // Past the end: count with a one-row read, then show the last real page.
+    const probe = await build(0, 0)
+    if (probe.error) throw probe.error
+    page = lastPageFor(probe.count ?? 0, query.pageSize)
+    result = await build((page - 1) * query.pageSize, page * query.pageSize - 1)
+  }
+
+  const { data, error, count } = result
   if (error) throw error
 
   return {
     rows: (data ?? []) as AttendanceDetailRow[],
     total: count ?? 0,
-    page: query.page,
+    page,
     pageSize: query.pageSize,
   }
 }

@@ -2127,6 +2127,140 @@ export type Database = {
           },
         ]
       }
+      staff_attendance: {
+        Row: {
+          attended_on: string
+          auto_closed: boolean
+          branch_id: string
+          clocked_in_at: string
+          clocked_out_at: string | null
+          created_at: string
+          device_id: string | null
+          id: string
+          in_source: string
+          notes: string | null
+          org_id: string
+          out_source: string | null
+          staff_id: string
+        }
+        Insert: {
+          attended_on: string
+          auto_closed?: boolean
+          branch_id: string
+          clocked_in_at?: string
+          clocked_out_at?: string | null
+          created_at?: string
+          device_id?: string | null
+          id?: string
+          in_source?: string
+          notes?: string | null
+          org_id: string
+          out_source?: string | null
+          staff_id: string
+        }
+        Update: {
+          attended_on?: string
+          auto_closed?: boolean
+          branch_id?: string
+          clocked_in_at?: string
+          clocked_out_at?: string | null
+          created_at?: string
+          device_id?: string | null
+          id?: string
+          in_source?: string
+          notes?: string | null
+          org_id?: string
+          out_source?: string | null
+          staff_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_attendance_branch_fkey"
+            columns: ["branch_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "staff_attendance_device_fkey"
+            columns: ["device_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "staff_attendance_staff_fkey"
+            columns: ["staff_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id", "org_id"]
+          },
+        ]
+      }
+      staff_cards: {
+        Row: {
+          assigned_at: string
+          assigned_by: string | null
+          card_uid: string
+          created_at: string
+          id: string
+          org_id: string
+          revoke_reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          staff_id: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_at?: string
+          assigned_by?: string | null
+          card_uid: string
+          created_at?: string
+          id?: string
+          org_id: string
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          staff_id: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by?: string | null
+          card_uid?: string
+          created_at?: string
+          id?: string
+          org_id?: string
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          staff_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_cards_assigned_by_fkey"
+            columns: ["assigned_by", "org_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "staff_cards_revoked_by_fkey"
+            columns: ["revoked_by", "org_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "staff_cards_staff_fkey"
+            columns: ["staff_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id", "org_id"]
+          },
+        ]
+      }
       unassigned_card_scans: {
         Row: {
           branch_id: string
@@ -2428,6 +2562,7 @@ export type Database = {
           home_branch_name: string | null
           id: string | null
           joined_on: string | null
+          last_visit_on: string | null
           left_on: string | null
           member_code: string | null
           membership_end_date: string | null
@@ -2456,6 +2591,48 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "orgs"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_attendance_detail: {
+        Row: {
+          attended_on: string | null
+          auto_closed: boolean | null
+          branch_id: string | null
+          branch_name: string | null
+          clocked_in_at: string | null
+          clocked_out_at: string | null
+          device_id: string | null
+          device_name: string | null
+          id: string | null
+          in_source: string | null
+          notes: string | null
+          org_id: string | null
+          out_source: string | null
+          staff_id: string | null
+          staff_name: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_attendance_branch_fkey"
+            columns: ["branch_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "staff_attendance_device_fkey"
+            columns: ["device_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "staff_attendance_staff_fkey"
+            columns: ["staff_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id", "org_id"]
           },
         ]
       }
@@ -2573,6 +2750,28 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "member_cards"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      assign_staff_card: {
+        Args: { p_card_uid: string; p_replace?: boolean; p_staff_id: string }
+        Returns: {
+          assigned_at: string
+          assigned_by: string | null
+          card_uid: string
+          created_at: string
+          id: string
+          org_id: string
+          revoke_reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          staff_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "staff_cards"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -2722,7 +2921,7 @@ export type Database = {
       }
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
       daily_collection: {
-        Args: { p_branch_ids?: string[]; p_on?: string }
+        Args: { p_branch_ids?: string[]; p_on?: string; p_to?: string }
         Returns: {
           amount_paisa: number
           branch_id: string
@@ -2735,7 +2934,7 @@ export type Database = {
         }[]
       }
       daily_collection_detail: {
-        Args: { p_branch_ids?: string[]; p_on?: string }
+        Args: { p_branch_ids?: string[]; p_on?: string; p_to?: string }
         Returns: {
           amount_paisa: number
           branch_id: string
@@ -2758,7 +2957,7 @@ export type Database = {
         }[]
       }
       daily_collection_summary: {
-        Args: { p_branch_ids?: string[]; p_on?: string }
+        Args: { p_branch_ids?: string[]; p_on?: string; p_to?: string }
         Returns: {
           billed_discount_paisa: number
           billed_due_paisa: number
@@ -3200,6 +3399,28 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      revoke_staff_card: {
+        Args: { p_reason: string; p_staff_id: string }
+        Returns: {
+          assigned_at: string
+          assigned_by: string | null
+          card_uid: string
+          created_at: string
+          id: string
+          org_id: string
+          revoke_reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          staff_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "staff_cards"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       rfid_check_in: {
         Args: { p_card_uid: string; p_key_hash: string; p_scanned_at?: string }
         Returns: Json
@@ -3284,6 +3505,19 @@ export type Database = {
       settle_invoice: { Args: { p_invoice_id: string }; Returns: undefined }
       storage_object_member: { Args: { object_name: string }; Returns: string }
       storage_object_org: { Args: { object_name: string }; Returns: string }
+      staff_attendance_summary: {
+        Args: { p_from?: string; p_staff_id: string; p_to?: string }
+        Returns: {
+          days_in_range: number
+          forgotten_shifts_in_range: number
+          last_attended_on: string
+          last_clock_in_at: string
+          lifetime_days: number
+          minutes_in_range: number
+          on_shift: boolean
+          open_shifts_in_range: number
+        }[]
+      }
       sweep_membership_expiry: {
         Args: never
         Returns: {

@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { isRealIsoDate } from '@/lib/format'
+
 import {
   discountNoteSchema,
   discountReasonSchema,
@@ -167,6 +169,13 @@ export const collectionQuerySchema = z.object({
     .string()
     .trim()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine(isRealIsoDate, 'That is not a real date')
+    .optional(),
+  to: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine(isRealIsoDate, 'That is not a real date')
     .optional(),
   branchId: z.uuid().optional(),
 })

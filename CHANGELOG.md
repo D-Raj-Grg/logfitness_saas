@@ -17,6 +17,68 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-11-04 — Staff cards and clock-in, staff screen, last visit, date ranges
+
+### Added
+
+- **Staff cards**: a staff member can hold an RFID card. Tapping it at the door
+  opens the door for active staff at their own branches (owners anywhere) and
+  clocks them in; a later tap clocks them out. Shifts live in `staff_attendance`,
+  separate from member attendance. A shift open for 16 hours is closed as
+  "no clock-out recorded" instead of inventing an end time, and a tap within two
+  minutes of clocking in is ignored so a door double-tap cannot clock out.
+- **Staff screen** (`/staff/[id]`): click a row in Staff. Details, card panel,
+  Edit / Reset password (shown as Activate for staff awaiting signup) and
+  Deactivate, plus tabs for their own Attendance, Check-ins they did, Payments
+  collected and Trainer work, each with a date filter.
+- **Last visit**: a column on the members list, a tile on the member screen, and
+  an Attendance tab that is no longer capped at 60 rows (true total, date filter,
+  paging).
+- **Who came** (`/check-in/history`): the people behind any day or range of
+  attendance, reached by clicking a date in Reports → Attendance.
+- **Daily collection date range**: From / To with Today / Last 7 / Last 30
+  shortcuts; the CSV exports follow it.
+- **Staff Activate**: set a password for someone awaiting signup and they are
+  Active at once, no email needed.
+
+### Changed
+
+- Automatic messages (was "Reminders") are grouped by purpose and each says what
+  it is and when it goes out.
+- Reports → Attendance says it counts visits per day, with a range total.
+
+### Database
+
+- `daily_collection*` functions take an optional `p_to`.
+- `member_overview.last_visit_on`; index `attendance (checked_in_by, attended_on)`.
+- `staff_cards`, `staff_attendance`, `staff_attendance_detail`,
+  `assign_staff_card`, `revoke_staff_card`, `staff_attendance_summary`,
+  `staff_clock_tap`, `assert_card_uid_free` (one holder per UID across members
+  and staff). `rfid_check_in` gained step 2b for staff cards; the member path is
+  unchanged. `clear_unassigned_card_scans` now also recognises staff cards.
+
+### Planned next (Phase 3, nothing built yet)
+
+Written up in full in `TASKS.md` under "Staff cards, Phase 3". In short:
+
+- **Offline readers learn staff cards.** `rfid_sync_cards` sends staff UIDs as
+  status `S` (active staff who may enter that branch), in the same global
+  card-UID order as members. `rfid_log_offline` replays offline staff taps in
+  time order through `staff_clock_tap`, stamped with the tap time, source
+  `offline_card`, and reports a `staff_clocked` count.
+- **`staff_clock_tap` takes the tap time** (`p_at`) instead of always using now(),
+  so a batch uploaded in the evening does not stamp a 9 am tap as 6 pm.
+- **Firmware 1.3.0**: `S` in the cache, "STAFF" on the offline screen, no
+  one-per-day event dedupe for staff (it would drop the clock-out), and
+  "CLOCKED IN / CLOCKED OUT" on the reader for online staff taps. Every reader
+  must be re-flashed; the server changes ship first and old readers keep working.
+- **Until then:** an offline reader answers a staff tap as an unknown card, and
+  an online clock-out shows "WELCOME" on the reader (the web screen is correct).
+- **Also open:** a manual correction for forgotten clock-outs, staff cards in the
+  Flutter app, and staff hours in reports.
+
+---
+
 ## 2026-10-06 — Personal training, attendance and trainer utilization
 
 ### Added

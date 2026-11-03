@@ -93,6 +93,24 @@ export function daysUntil(value: string | Date, timeZone: string = DEFAULT_TIMEZ
  * the database stores are plain days, and putting one through a local Date is
  * how "07 Sept" becomes "06 Sept" in the evening.
  */
+/**
+ * True only for a date that exists on the calendar, not just a string shaped
+ * like one. `2026-13-45` and `2026-02-31` match YYYY-MM-DD but are not dates;
+ * parsing and checking the parts round-trip is the only reliable test (JS rolls
+ * them into a neighbouring month instead of failing). Anything read from a URL
+ * and handed to a date column or a time-zone formatter goes through this first.
+ */
+export function isRealIsoDate(value: string | null | undefined): value is string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const [year, month, day] = value.split('-').map(Number)
+  const parsed = new Date(Date.UTC(year, month - 1, day))
+  return (
+    parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === month - 1 &&
+    parsed.getUTCDate() === day
+  )
+}
+
 export function addDays(isoDate: string, days: number) {
   const [year, month, day] = isoDate.split('-').map(Number)
   return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)

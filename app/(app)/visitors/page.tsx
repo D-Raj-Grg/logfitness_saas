@@ -101,7 +101,7 @@ export default async function VisitorsPage({
         branchNames={branchNames}
         showBranch={branches.length > 1}
         planNames={planNames}
-        canDelete={staff.role === 'owner'}
+        canDelete={staff.role === 'owner' || staff.role === 'manager'}
         // The desk chases callbacks; a trainer logs the walk-in and stops
         // there. `visitor_message_target` draws the same line.
         canMessage={

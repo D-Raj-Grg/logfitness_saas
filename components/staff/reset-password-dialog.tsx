@@ -69,13 +69,14 @@ function ResetPasswordForm({
       </div>
 
       <p className="text-sm text-muted-foreground">
-        Share the new password with them directly. Their old one stops working
-        immediately.
+        {row.status === 'invited'
+          ? 'Share this password with them directly. They can sign in with it straight away, no email needed.'
+          : 'Share the new password with them directly. Their old one stops working immediately.'}
       </p>
 
       <div>
         <Button type="submit" disabled={pending || Boolean(state.success)}>
-          {pending ? 'Saving...' : row.status === 'invited' ? 'Create account' : 'Set password'}
+          {pending ? 'Saving...' : row.status === 'invited' ? 'Activate' : 'Set password'}
         </Button>
       </div>
     </form>
@@ -88,14 +89,16 @@ export function ResetPasswordDialog({ row }: { row: StaffListRow }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button variant="ghost" size="sm" />}>
-        Reset password
+        {row.status === 'invited' ? 'Activate' : 'Reset password'}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Reset password for {row.full_name}</DialogTitle>
+          <DialogTitle>
+            {row.status === 'invited' ? 'Activate' : 'Reset password for'} {row.full_name}
+          </DialogTitle>
           <DialogDescription>
             {row.status === 'invited'
-              ? 'They have not signed up yet. This creates their account with the password you choose.'
+              ? 'They have not signed up yet. This creates their account now with the password you choose and marks them Active, so nobody has to wait for an email.'
               : 'Use this when they have forgotten it. They can change it again themselves from the sign-in page.'}
           </DialogDescription>
         </DialogHeader>

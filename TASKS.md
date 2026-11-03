@@ -1384,10 +1384,118 @@ Supersedes the fixed registration + card fee columns of 2026-10-26, which never 
       (and plan for its rotation) before a gym runs a reader on a shared
       network.
 
-- [ ] **2026-10-12** Staff cards are unsupported. `member_cards` is members
+- [x] **2026-10-12** Staff cards are unsupported. `member_cards` is members
       only; a trainer tapping in gets `unknown_card` and lands in the
       unassigned inbox. Staff attendance by card needs its own table and a
       decision about what a staff "check-in" means.
+      **Done 2026-11-04 (online taps):** `staff_cards` + `staff_attendance`,
+      `assign_staff_card` / `revoke_staff_card`, `rfid_check_in` step 2b, the
+      staff screen's Card panel and Attendance tab. A tap clocks in; a later tap
+      (after 2 minutes) clocks out; a shift open for 16 h is closed as forgotten
+      with no invented clock-out time. Test: `supabase/tests/staff_cards.sql`.
+### Staff cards, Phase 3: offline readers and firmware 1.3.0 (not started)
+
+Phase 2 shipped the online path (2026-11-04). Until this phase is done an
+**offline reader answers a staff tap as `UNKNOWN CARD`** (staff UIDs are not in
+its cached list), and a staff **clock-out shows "ALLOW / WELCOME"**, same as a
+clock-in. Everything below needs every reader re-flashed (USB, one at a time) and
+the server changes applied BEFORE the firmware ships, so an old reader keeps
+working against the new server throughout.
+
+**Why the order is safe.** `rfid_sync_cards` sends each card as
+`[uid, until YYYYMMDD, code]`. Firmware 1.2.0's `cacheLookup()` treats any
+status letter it does not know as expired (`default: return CV_EXPIRED`), so a
+new staff code `S` is read by old readers as "expired" (deny), which is exactly
+today's behaviour. New server first, firmware second, nothing breaks.
+
+**1. Server: `rfid_sync_cards` sends staff UIDs** (new migration, redefine from
+`20261014100200_rfid_offline_review_fixes.sql`; keep signature and
+service_role-only grants):
+- Emit a line `[uid, <open-ended date>, 'S']` for each LIVE `staff_cards` row
+  whose staff member is `status = 'active'` AND (role `owner` OR the device's
+  branch is in `staff.branch_ids`). Use `rfid_open_ended_date()` for the date.
+  Staff who may not enter at this branch get no line, so that reader answers
+  unknown, same as online `staff_wrong_branch` would deny.
+- Paging is by `card_uid > p_after order by card_uid limit v_limit + 1` over
+  `member_cards`. Staff lines must come out in the SAME global `card_uid` order
+  or `last_uid`/`more` break. Build the loop over a `union all` of the member
+  rows and the staff rows, then `order by card_uid`. Do not page them as two
+  passes.
+- A deactivated or revoked staff card drops out at the next sync (the reader
+  re-syncs on its schedule). The exposure window is the same as for members: the
+  length of an outage plus the sync interval. Say so in the README.
+
+**2. Server: `rfid_log_offline` replays staff taps** (same migration):
+- Resolve the UID against `staff_cards` first, then `member_cards`
+  (`assert_card_uid_free` guarantees at most one).
+- Staff taps must be replayed **in `ts` order per person**, through
+  `staff_clock_tap`. **`staff_clock_tap` currently uses `now()` for everything**
+  (the 2-minute double-tap rule, the 16 h forgotten-shift rule, `clocked_in_at`,
+  `clocked_out_at`). Add an optional `p_at timestamptz default null` and use
+  `coalesce(p_at, now())` throughout, with `in_source`/`out_source` =
+  `'offline_card'`. Without this a batch uploaded at 6 pm would stamp a 9 am tap
+  as 6 pm.
+- Guard: ignore a staff tap whose `p_at` is earlier than that person's latest
+  `clocked_in_at` (an online tap already recorded after the outage). Count it as
+  `duplicate`.
+- Same clamp as members: a `ts` more than 5 min in the future or 7 days in the
+  past becomes `now()` and counts as `clamped`.
+- Return a new `staff_clocked` counter beside `accepted/duplicate/unknown/clamped/bad_uid`.
+- Do NOT write staff taps into `attendance`, and do not add them to
+  `unassigned_card_scans`.
+- Edge Function `supabase/functions/rfid-sync/index.ts`: update the header
+  comment for the new `S` code and the `staff_clocked` counter, check it passes
+  the RPC reply through unchanged, and redeploy via the Supabase MCP.
+
+**3. Firmware `firmware/rfid-check-in/rfid-check-in.ino` -> 1.3.0:**
+- Bump `FW_VERSION` (line ~127) to `"1.3.0"` and the version text in
+  `firmware/rfid-check-in/README.md` (it also documents the offline section,
+  "Offline mode (fw 1.1.0)").
+- `cacheLookup()` (~line 971): add `case 'S': return CV_STAFF;` and add
+  `CV_STAFF` to the `CacheVerdict` enum (~line 187). A staff line has no real
+  expiry, so do not compute `days` for it.
+- `applyOfflineFallback()` (~line 1072): treat `CV_STAFF` like `CV_ALLOW`
+  (`RES_OFFLINE_ALLOW`, door opens) but show `STAFF` instead of `N Days Left`
+  (`r.hasDays = false`), and enqueue the tap.
+- **`enqueueEvent()` (~line 1015) dedupes to one event per card per day.** That
+  is right for a member and WRONG for staff: it would drop the clock-out. Skip
+  that dedupe for staff UIDs; use a short window instead (ignore a repeat of the
+  same UID within 60 s, matching the server's 2-minute guard). `EventRec` has no
+  kind field and does not need one: the server decides staff vs member by UID.
+- Optional but wanted: when the online reply has `kind: 'staff'`, `drawResult()`
+  (~line 632) shows `CLOCKED IN` / `CLOCKED OUT` (from `clock`) instead of
+  `WELCOME`. `reason` is `staff_in | staff_out | staff_already_in`; the OLED has
+  21 characters per line.
+- `/cards.bin` records (`CardRec`: uid, until, st char) already hold any status
+  letter, so the file format does not change and no settings-magic bump is needed.
+
+**4. Tests and rollout:**
+- Extend `supabase/tests/staff_cards.sql` (or add `staff_cards_offline.sql` and
+  list it in `package.json` `db:test`): staff UIDs appear in `rfid_sync_cards`
+  with `S`, only for active staff with access to that device's branch, in global
+  `card_uid` order across page boundaries; `rfid_log_offline` replays a staff
+  in/out pair with the TAP time not the upload time, drops a stale tap, counts
+  `staff_clocked`, never writes `attendance`.
+- `supabase/tests/rfid_offline_sync.sql` exists but is NOT in the `db:test` list;
+  run it and add it while you are in here.
+- On a real reader: sync, pull the network, tap a staff card twice a few minutes
+  apart (expect two events), restore the network, check `staff_attendance` shows
+  in and out at the tap times with source `offline_card`. Then tap a member card
+  offline to confirm members are unchanged.
+- Flash order: apply the migration, deploy the edge function, then flash readers
+  one at a time. Old firmware keeps denying staff offline until flashed.
+
+**Related, not Phase 3:**
+- [ ] Forgotten clock-outs need a manual correction (owner or manager, reason
+      required, audited). A shift nobody clocked out of shows "No clock-out
+      recorded" and counts toward no hours. Add a `correct_staff_attendance`
+      RPC and a button on the staff Attendance tab. `staff_attendance` is
+      immutable except `clocked_out_at` / `out_source` / `notes` (guard trigger),
+      so a correction closes the shift; it cannot rewrite a clock-in.
+- [ ] Staff cards in the Flutter app (`../logfitness_flutter`): assign/revoke on
+      a staff screen, mirroring `member_card_sheet.dart`. Web only today.
+- [ ] Staff attendance in reports (hours per person per month, late/absent). Not
+      requested; this phase only records presence. Payroll/HR stays out of scope.
 
 ## Open questions (from the PRD)
 
