@@ -379,6 +379,42 @@ begin
 
   card := public.revoke_staff_card(st_desk1, 'Lost it');
   assert card.revoked_by = st_mgr and card.revoke_reason = 'Lost it', 'the revoke did not record who and why';
+  assert card.revoked_at > now() - interval '1 minute', 'a revocation was not stamped with the server time';
+
+  -- direct writes through the API cannot be better than the RPC
+  select count(*) into n from public.staff_cards where staff_id = st_owner;
+  assert n = 0, 'a manager read an owner''s card';
+  select count(*) into n from public.staff_cards where staff_id = st_desk2;
+  assert n = 0, 'a manager read a card at a branch they do not cover';
+  select count(*) into n from public.staff_cards where staff_id = st_desk1;
+  assert n >= 1, 'a manager could not read their own front desk''s cards';
+
+  failed := false;
+  begin
+    insert into public.staff_cards (org_id, staff_id, card_uid, assigned_by, revoked_at, revoked_by, revoke_reason)
+    values (org_a, st_desk1, 'DD00DD00DD06', st_mgr, now(), st_mgr, 'x');
+  exception when insufficient_privilege or check_violation then failed := true;
+  end;
+  assert failed, 'a manager inserted a card that was already revoked';
+
+  failed := false;
+  begin
+    insert into public.staff_cards (org_id, staff_id, card_uid, assigned_by)
+    values (org_a, st_gone, 'DD00DD00DD06', st_mgr);
+  exception when check_violation then failed := true;
+  end;
+  assert failed, 'a manager inserted a card for a deactivated person';
+
+  insert into public.staff_cards (org_id, staff_id, card_uid, assigned_by, assigned_at, created_at)
+  values (org_a, st_desk1, 'DD00DD00DD07', st_mgr, '2020-01-01', '2020-01-01')
+  returning * into card;
+  assert card.assigned_at > now() - interval '1 minute', 'a card assignment was backdated';
+
+  update public.staff_cards
+  set revoked_at = '2020-01-01', revoked_by = st_mgr, revoke_reason = 'Backdated'
+  where staff_id = st_desk1 and revoked_at is null
+  returning * into card;
+  assert card.revoked_at > now() - interval '1 minute', 'a revocation was backdated';
 
   execute 'reset role';
   perform set_config('request.jwt.claims', null, true);
