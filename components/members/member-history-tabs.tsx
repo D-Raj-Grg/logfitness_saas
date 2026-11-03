@@ -149,6 +149,7 @@ export function MemberHistoryTabs({
   attendance,
   attendanceTotal,
   attendanceMatches,
+  trackCheckOut,
   attendancePage,
   attendancePageSize,
   attendanceFrom,
@@ -168,6 +169,8 @@ export function MemberHistoryTabs({
   attendanceTotal: number
   /** How many match the date filter (equals the total with no filter). */
   attendanceMatches: number
+  /** Off unless the gym records check-out: hides the Out and Duration columns. */
+  trackCheckOut: boolean
   attendancePage: number
   attendancePageSize: number
   /** The filter window, or null for "all time". */
@@ -476,8 +479,8 @@ export function MemberHistoryTabs({
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>In</TableHead>
-                  <TableHead>Out</TableHead>
-                  <TableHead>Duration</TableHead>
+                  {trackCheckOut ? <TableHead>Out</TableHead> : null}
+                  {trackCheckOut ? <TableHead>Duration</TableHead> : null}
                   <TableHead>Branch</TableHead>
                   <TableHead>Method</TableHead>
                   <TableHead>Checked in by</TableHead>
@@ -504,16 +507,20 @@ export function MemberHistoryTabs({
                       <TableCell className="whitespace-nowrap tabular-nums">
                         {formatTime(row.checked_in_at)}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
-                        {row.checked_out_at ? formatTime(row.checked_out_at) : '--'}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap tabular-nums">
-                        {minutes === null ? (
-                          <span className="text-muted-foreground">In the gym</span>
-                        ) : (
-                          formatMinutesIn(minutes)
-                        )}
-                      </TableCell>
+                      {trackCheckOut ? (
+                        <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
+                          {row.checked_out_at ? formatTime(row.checked_out_at) : '--'}
+                        </TableCell>
+                      ) : null}
+                      {trackCheckOut ? (
+                        <TableCell className="whitespace-nowrap tabular-nums">
+                          {minutes === null ? (
+                            <span className="text-muted-foreground">In the gym</span>
+                          ) : (
+                            formatMinutesIn(minutes)
+                          )}
+                        </TableCell>
+                      ) : null}
                       <TableCell className="text-muted-foreground">{row.branch_name}</TableCell>
                       <TableCell>{ATTENDANCE_METHOD_LABELS[row.method]}</TableCell>
                       <TableCell className="text-muted-foreground">

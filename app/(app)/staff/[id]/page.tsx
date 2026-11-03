@@ -32,6 +32,7 @@ import {
   listClassesTaughtBy,
   listPaymentsCollectedBy,
 } from '@/lib/db/staff-activity'
+import { getTrackCheckOut } from '@/lib/db/orgs'
 import { getStaff } from '@/lib/db/staff'
 import { getStaffAttendanceSummary, listStaffAttendance } from '@/lib/db/staff-attendance'
 import { listStaffCards, listUnassignedCardScansForStaff } from '@/lib/db/staff-cards'
@@ -197,6 +198,7 @@ export default async function StaffProfilePage({
       />
     )
   } else if (active === 'checkins') {
+    const trackCheckOut = await getTrackCheckOut(actor.orgId)
     const log = await listAttendance({
       checkedInBy: target.id,
       branchIds: scope ?? undefined,
@@ -215,6 +217,7 @@ export default async function StaffProfilePage({
         to={to}
         today={today}
         showBranch={showBranchColumn}
+        showOut={trackCheckOut}
         hrefFor={hrefFor}
       />
     )

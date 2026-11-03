@@ -8,6 +8,7 @@ import { InGymNow } from '@/components/attendance/in-gym-now'
 import { Card, CardContent } from '@/components/ui/card'
 import { requireStaff } from '@/lib/auth'
 import { attendanceDaySummary, inGymNow, listAttendance } from '@/lib/db/attendance'
+import { getTrackCheckOut } from '@/lib/db/orgs'
 import { memberPhotoUrls } from '@/lib/db/photos'
 import { resolveBranchScope } from '@/lib/scope'
 
@@ -55,8 +56,12 @@ export default async function CheckInPage({
   // whenever the member's home branch differed from the desk's own.
   const branchId = scope.options.length === 1 ? scope.options[0].id : scope.selectedId
 
+  // Off unless the owner turned it on in Settings. Without check-outs the
+  // "In the gym now" roster only ever grows, so it is not even queried.
+  const trackCheckOut = await getTrackCheckOut(staff.orgId)
+
   const [inGym, summary, log] = await Promise.all([
-    inGymNow(branchIds),
+    trackCheckOut ? inGymNow(branchIds) : Promise.resolve([]),
     attendanceDaySummary({ branchIds }),
     listAttendance({ branchId: branchId ?? undefined, page: 1, pageSize: 25 }),
   ])
@@ -105,18 +110,20 @@ export default async function CheckInPage({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className={`grid gap-3 ${trackCheckOut ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
         <StatTile label="Check-ins today" value={String(checkIns)} />
         <StatTile
           label="Distinct members"
           value={String(distinctMembers)}
           hint={summary.length > 1 ? 'Summed across branches' : undefined}
         />
-        <StatTile label="In the gym now" value={String(inGym.length)} hint="Not yet checked out" />
+        {trackCheckOut ? (
+          <StatTile label="In the gym now" value={String(inGym.length)} hint="Not yet checked out" />
+        ) : null}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+        <div className={trackCheckOut ? 'lg:col-span-2' : 'lg:col-span-3'}>
           {canCheckIn ? (
             <CheckInConsole
               branchId={branchId ?? null}
@@ -127,17 +134,18 @@ export default async function CheckInPage({
             <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-10 text-center">
               <p className="text-sm font-medium">View only</p>
               <p className="text-sm text-muted-foreground">
-                Trainers can see who is in the gym, but check-ins are recorded by the
-                front desk.
+                Check-ins are recorded by the front desk.
               </p>
             </div>
           )}
         </div>
 
-        <div className="flex flex-col gap-3 lg:col-span-1">
-          <h2 className="text-sm font-medium">In the gym now</h2>
-          <InGymNow rows={inGym} photoUrls={photoUrls} canCheckOut={canCheckIn} />
-        </div>
+        {trackCheckOut ? (
+          <div className="flex flex-col gap-3 lg:col-span-1">
+            <h2 className="text-sm font-medium">In the gym now</h2>
+            <InGymNow rows={inGym} photoUrls={photoUrls} canCheckOut={canCheckIn} />
+          </div>
+        ) : null}
       </div>
 
       <div className="flex flex-col gap-3">
@@ -155,7 +163,7 @@ export default async function CheckInPage({
             See who came on another day →
           </Link>
         </div>
-        <AttendanceLogTable rows={log.rows} showBranch={!branchId} />
+        <AttendanceLogTable rows={log.rows} showBranch={!branchId} showOut={trackCheckOut} />
       </div>
     </div>
   )

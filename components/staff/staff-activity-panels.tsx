@@ -232,6 +232,7 @@ export function CheckinsPanel({
   to,
   today,
   showBranch,
+  showOut,
   hrefFor,
 }: {
   name: string
@@ -242,6 +243,7 @@ export function CheckinsPanel({
   to: string
   today: string
   showBranch: boolean
+  showOut: boolean
   hrefFor: (page: number) => string
 }) {
   return (
@@ -257,7 +259,12 @@ export function CheckinsPanel({
       {rows.length === 0 ? (
         <Empty>No desk check-ins {rangeText(on, to)}.</Empty>
       ) : (
-        <AttendanceLogTable rows={rows} showBranch={showBranch} showDate={on !== to} />
+        <AttendanceLogTable
+          rows={rows}
+          showBranch={showBranch}
+          showDate={on !== to}
+          showOut={showOut}
+        />
       )}
       <Pager page={page} total={total} pageSize={ACTIVITY_PAGE_SIZE} hrefFor={hrefFor} />
     </div>

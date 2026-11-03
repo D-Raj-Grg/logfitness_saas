@@ -17,6 +17,32 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-11-05 — Check-out is a setting, off by default
+
+### Added
+
+- **Settings → Preferences → "Record when members leave (check-out)"**, owner
+  only, **off by default** (no stored value reads as off, so every existing gym
+  starts with it off). While it is off the web console hides the Check out
+  button, the "In the gym now" list and tile, and the Out and Duration columns
+  (desk log, "who came" list, member Attendance tab, a staff member's
+  check-ins tab). Visits are still recorded either way, and the desk refuses a
+  stray check-out request. Without an exit reader nobody was ever checked out, so
+  "In the gym now" only grew and every visit looked unfinished.
+- Staff clock-out (their own shifts) is a separate feature and is not affected.
+
+### Database
+
+- `set_org_setting` accepts `track_check_out` (boolean). Test:
+  `supabase/tests/track_check_out_setting.sql`.
+
+### Not yet
+
+- The Flutter staff app still shows its own check-out; it does not read this
+  setting. See `TASKS.md`.
+
+---
+
 ## 2026-11-04 — Staff cards and clock-in, staff screen, last visit, date ranges
 
 ### Added
