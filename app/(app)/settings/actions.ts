@@ -127,6 +127,8 @@ export async function updateOrgPreferences(
   const parsed = orgPreferencesSchema.safeParse({
     classCancellationWindowMinutes: formData.get('classCancellationWindowMinutes'),
     notificationLocale: formData.get('notificationLocale'),
+    // An unticked checkbox is simply absent from the form.
+    trackCheckOut: formData.get('trackCheckOut') === 'on',
   })
 
   if (!parsed.success) {
@@ -139,12 +141,17 @@ export async function updateOrgPreferences(
       parsed.data.classCancellationWindowMinutes
     )
     await setOrgSetting('notification_locale', parsed.data.notificationLocale)
+    await setOrgSetting('track_check_out', parsed.data.trackCheckOut)
   } catch (error) {
     const { message } = (error ?? {}) as DbError
     return { error: message ?? 'Something went wrong. Please try again.' }
   }
 
   revalidatePath('/settings')
+  // The desk, the attendance lists and the member screen all read the switch.
+  revalidatePath('/check-in')
+  revalidatePath('/members', 'layout')
+  revalidatePath('/staff', 'layout')
 
   return { success: 'Preferences saved.' }
 }

@@ -39,6 +39,24 @@ export async function getOrgProfile(orgId: string) {
   return data
 }
 
+/**
+ * Does this gym record check-OUT? Off unless the owner turned it on: a gym with
+ * no exit reader never records one, so showing the Check out button, the "In the
+ * gym now" list and an Out column would only show a roster that never empties.
+ * No stored value means off. Staff clock-out (their own shifts) is a separate
+ * feature and is not affected.
+ */
+export async function getTrackCheckOut(orgId: string): Promise<boolean> {
+  const org = await getOrgProfile(orgId)
+  const bag = org?.settings
+  return (
+    typeof bag === 'object' &&
+    bag !== null &&
+    !Array.isArray(bag) &&
+    (bag as Record<string, unknown>).track_check_out === true
+  )
+}
+
 /** Writes are owner-only; "owners update their own org" is what enforces it. */
 export async function updateOrgProfile(orgId: string, values: OrgUpdate) {
   const supabase = await createClient()

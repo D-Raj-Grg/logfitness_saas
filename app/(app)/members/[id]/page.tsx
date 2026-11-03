@@ -24,6 +24,7 @@ import { listInvoicesForMember, listMembershipsForMember } from '@/lib/db/member
 import { listNotificationsForMember } from '@/lib/db/notifications'
 import { listPaymentsForMember } from '@/lib/db/payments'
 import { memberPhotoUrl } from '@/lib/db/photos'
+import { getTrackCheckOut } from '@/lib/db/orgs'
 import { formatDate, formatMoney, isRealIsoDate, todayInTimezone } from '@/lib/format'
 import { lastVisitLabel } from '@/lib/last-visit'
 import { GENDER_LABELS } from '@/lib/members'
@@ -97,6 +98,7 @@ export default async function MemberProfilePage({
       : null
 
   const canManage = staff.role !== 'trainer'
+  const trackCheckOut = await getTrackCheckOut(staff.orgId)
 
   const [
     overview,
@@ -375,6 +377,7 @@ export default async function MemberProfilePage({
             attendanceTo={attTo ?? null}
             today={today}
             memberId={id}
+            trackCheckOut={trackCheckOut}
             // The tab state lives inside the component, so a link that changes
             // ?tab= or the window must remount it or the old tab stays open.
             key={`${defaultTab}:${attFrom ?? ''}:${attTo ?? ''}:${attendancePage.page}`}

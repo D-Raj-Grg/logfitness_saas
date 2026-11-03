@@ -67,6 +67,7 @@ export const orgPreferencesSchema = z.object({
       'At most 10080 minutes (7 days)'
     ),
   notificationLocale: z.enum(['en', 'ne'], 'Choose a language'),
+  trackCheckOut: z.boolean(),
 })
 
 export type OrgPreferencesInput = z.infer<typeof orgPreferencesSchema>

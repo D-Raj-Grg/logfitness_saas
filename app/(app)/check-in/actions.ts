@@ -11,6 +11,7 @@ import {
 } from '@/lib/db/attendance'
 import { searchMembersForCheckIn } from '@/lib/db/members'
 import { rpcErrorMessage } from '@/lib/rpc-error'
+import { getTrackCheckOut } from '@/lib/db/orgs'
 import { checkInSchema, checkOutSchema } from '@/lib/validation/attendance'
 
 export type CheckInActionState = {
@@ -118,7 +119,13 @@ export async function checkOut(
   _prevState: CheckOutActionState,
   formData: FormData
 ): Promise<CheckOutActionState> {
-  await requireRole(...DESK_ROLES)
+  const staff = await requireRole(...DESK_ROLES)
+
+  // A gym that does not record check-out has no Check out button; refuse a
+  // stale tab or a hand-made request rather than writing a half-tracked visit.
+  if (!(await getTrackCheckOut(staff.orgId))) {
+    return { error: 'Check-out is turned off for this gym.' }
+  }
 
   const parsed = checkOutSchema.safeParse({
     attendanceId: formData.get('attendanceId'),

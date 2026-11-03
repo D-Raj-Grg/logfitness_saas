@@ -34,6 +34,8 @@ function readSettings(settings: Json) {
         ? window
         : DEFAULT_CANCELLATION_WINDOW_MINUTES,
     locale: locale === 'ne' ? 'ne' : 'en',
+    // Off unless the owner turned it on.
+    trackCheckOut: bag.track_check_out === true,
   }
 }
 
@@ -52,8 +54,8 @@ export function OrgPreferencesForm({ settings }: { settings: Json }) {
         <CardHeader>
           <CardTitle>Preferences</CardTitle>
           <CardDescription>
-            How class cancellations are handled and which language automatic messages
-            use.
+            How class cancellations are handled, which language automatic messages use, and
+            whether check-out is recorded.
           </CardDescription>
         </CardHeader>
 
@@ -91,6 +93,28 @@ export function OrgPreferencesForm({ settings }: { settings: Json }) {
               <option value="ne">Nepali</option>
             </select>
             <FieldError messages={state.fieldErrors?.notificationLocale} />
+          </div>
+
+          <div className="flex flex-col gap-2 sm:col-span-2">
+            <div className="flex items-start gap-3">
+              <input
+                id="trackCheckOut"
+                name="trackCheckOut"
+                type="checkbox"
+                defaultChecked={current.trackCheckOut}
+                className="mt-1 size-4 rounded border-input accent-primary"
+              />
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="trackCheckOut">Record when members leave (check-out)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Turn this on only if your gym has a way to check people out, such as an exit
+                  reader. While it is off, the Check out button, the &ldquo;In the gym now&rdquo;
+                  list, and the Out and Duration columns are hidden, because without check-outs
+                  everyone who came in would look like they never left. Visits are still recorded
+                  either way.
+                </p>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>

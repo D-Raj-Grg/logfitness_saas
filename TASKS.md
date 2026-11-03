@@ -1393,6 +1393,19 @@ Supersedes the fixed registration + card fee columns of 2026-10-26, which never 
       staff screen's Card panel and Attendance tab. A tap clocks in; a later tap
       (after 2 minutes) clocks out; a shift open for 16 h is closed as forgotten
       with no invented clock-out time. Test: `supabase/tests/staff_cards.sql`.
+### Check-out setting (shipped 2026-11-05, web only)
+
+- [x] `orgs.settings.track_check_out`, owner-only in Settings, default off.
+- [ ] The Flutter staff app (`../logfitness_flutter`) still shows check-out
+      everywhere and calls `check_out_member`. Teach it to read
+      `orgs.settings.track_check_out` and hide the same things (in-gym roster,
+      check-out button, out/duration) when it is not `true`.
+- [ ] Nothing records a check-out at the door yet. Turning the setting on only
+      brings back the desk's manual Check out. A real exit reader would need its
+      own device kind (a reader that answers "out" instead of "in"), a
+      `rfid_check_out` path beside `rfid_check_in`, and `check_out_member` for the
+      card's member. Not designed; the setting is the switch for when it exists.
+
 ### Staff cards, Phase 3: offline readers and firmware 1.3.0 (not started)
 
 Phase 2 shipped the online path (2026-11-04). Until this phase is done an

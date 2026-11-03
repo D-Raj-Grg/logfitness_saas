@@ -7,6 +7,7 @@ import { DayRangePicker } from '@/components/attendance/day-range-picker'
 import { Card, CardContent } from '@/components/ui/card'
 import { requireStaff } from '@/lib/auth'
 import { listAttendance } from '@/lib/db/attendance'
+import { getTrackCheckOut } from '@/lib/db/orgs'
 import { formatDate, todayInTimezone } from '@/lib/format'
 import { resolveBranchScope } from '@/lib/scope'
 import { attendanceLogQuerySchema } from '@/lib/validation/attendance'
@@ -45,6 +46,8 @@ export default async function AttendanceHistoryPage({
   const requestedPage = parsed.success ? parsed.data.page : 1
 
   const branchId = scope.options.length === 1 ? scope.options[0].id : scope.selectedId
+
+  const trackCheckOut = await getTrackCheckOut(staff.orgId)
 
   const log = await listAttendance({
     branchId: branchId ?? undefined,
@@ -126,7 +129,12 @@ export default async function AttendanceHistoryPage({
           Nobody checked in {on === to ? `on ${formatDate(on)}` : `from ${formatDate(on)} to ${formatDate(to)}`}.
         </p>
       ) : (
-        <AttendanceLogTable rows={log.rows} showBranch={!branchId} showDate={on !== to} />
+        <AttendanceLogTable
+          rows={log.rows}
+          showBranch={!branchId}
+          showDate={on !== to}
+          showOut={trackCheckOut}
+        />
       )}
 
       {pages > 1 ? (

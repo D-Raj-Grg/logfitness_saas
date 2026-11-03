@@ -20,12 +20,15 @@ export function AttendanceLogTable({
   rows,
   showBranch,
   showDate = false,
+  showOut = true,
 }: {
   rows: AttendanceDetailRow[]
   /** Owners looking at every branch need the column; a single branch does not. */
   showBranch: boolean
   /** A list spanning several days needs the date beside the time. */
   showDate?: boolean
+  /** Hidden for gyms that do not record check-out: the column would be empty dashes. */
+  showOut?: boolean
 }) {
   if (rows.length === 0) {
     return (
@@ -45,7 +48,7 @@ export function AttendanceLogTable({
           <TableRow>
             {showDate ? <TableHead className="w-28">Date</TableHead> : null}
             <TableHead className="w-24">In</TableHead>
-            <TableHead className="w-24">Out</TableHead>
+            {showOut ? <TableHead className="w-24">Out</TableHead> : null}
             <TableHead>Member</TableHead>
             {showBranch ? <TableHead>Branch</TableHead> : null}
             <TableHead>Method</TableHead>
@@ -62,9 +65,11 @@ export function AttendanceLogTable({
               <TableCell className="whitespace-nowrap tabular-nums">
                 {formatTime(row.checked_in_at)}
               </TableCell>
-              <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
-                {row.checked_out_at ? formatTime(row.checked_out_at) : '--'}
-              </TableCell>
+              {showOut ? (
+                <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">
+                  {row.checked_out_at ? formatTime(row.checked_out_at) : '--'}
+                </TableCell>
+              ) : null}
               <TableCell>
                 <Link
                   href={`/members/${row.member_id}`}
