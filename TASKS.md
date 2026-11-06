@@ -276,6 +276,14 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
+- [ ] **2026-11-06** Reader sync is a full download every interval. Fine for the
+      current ~50 cards; at thousands of members it is many blocking pages and a
+      full flash rewrite each time (the interval now grows with the list: 3 / 8
+      / 15 min). A real delta sync ("cards changed since X") needs server-side
+      change tracking, because dues, freezes and expiry are derived state spread
+      over memberships and payments. Not designed; do it if a gym passes ~2,000
+      cards.
+
 ### Web fixes (2026-11-02)
 
 - [x] Members list: "Last payment" column (date + amount, refunds excluded) via `lastPaymentsForMembers`, one query per page.
@@ -1406,7 +1414,18 @@ Supersedes the fixed registration + card fee columns of 2026-10-26, which never 
       `rfid_check_out` path beside `rfid_check_in`, and `check_out_member` for the
       card's member. Not designed; the setting is the switch for when it exists.
 
-### Staff cards, Phase 3: offline readers and firmware 1.3.0 (not started)
+### Staff cards, Phase 3: offline readers and firmware 1.3.0 (built 2026-11-06; flash + on-reader check pending)
+
+**Status 2026-11-06.** Done: server migration `20261106100000_staff_cards_offline.sql`
+(`staff_clock_tap` with `p_at`, `rfid_sync_cards` sends staff as `S`,
+`rfid_log_offline` replays staff taps oldest first), gate
+`supabase/tests/staff_cards_offline.sql` (passes), `rfid_offline_sync.sql` and
+the new gate are now in `db:test`, `rfid-sync` header comment, firmware 1.3.0
+(`CV_STAFF`, `CLOCK IN/OUT` screen, staff never deduped to one per day). Shipped
+in the same firmware: **cache-first taps** (a cached ALLOW opens the door with
+no HTTPS round trip; taps took 3-5 s online; sync every 3 min instead of 15).
+Still open: flash 1.3.0 on each reader and walk the checks in "4. Tests and
+rollout" below on the real hardware. The spec below is kept as written.
 
 Phase 2 shipped the online path (2026-11-04). Until this phase is done an
 **offline reader answers a staff tap as `UNKNOWN CARD`** (staff UIDs are not in

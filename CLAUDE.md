@@ -37,8 +37,8 @@ is cards only -- biometrics and turnstile relays are still out.
 **Staff cards came in on 2026-11-04**, a second explicit scope decision: a staff member can
 hold a card too, and a tap at the door clocks them in or out in their own `staff_attendance`
 table (never the members' `attendance`). One card UID is live for one holder across members
-and staff. Offline readers do not know staff cards yet (firmware 1.3.0, still to do): they
-answer staff taps as unknown until then. Payroll/HR stays out -- this records presence, not pay.
+and staff. Offline readers learn staff cards with firmware 1.3.0 (a reader on older firmware
+still answers a staff tap as unknown while offline). Payroll/HR stays out -- this records presence, not pay.
 
 
 1. Always read the PLANNING.md at the start of every new conversation 
