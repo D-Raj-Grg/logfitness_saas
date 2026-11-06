@@ -195,20 +195,20 @@ begin
   cards := result -> 'cards';
   assert jsonb_array_length(cards) = 7,
     format('expected the seven live cards (revoked one excluded), got %s', cards);
-  assert cards -> 0 = jsonb_build_array('04A00001', to_char(today_a + 25, 'YYYYMMDD'), 'A'),
+  assert cards -> 0 = jsonb_build_array('04A00001', to_char(today_a + 25, 'YYYYMMDD'), 'A', 'Ok Member'),
     format('ok member entry wrong: %s', cards -> 0);
-  assert cards -> 1 = jsonb_build_array('04A00002', to_char(today_a + 3, 'YYYYMMDD'), 'A'),
+  assert cards -> 1 = jsonb_build_array('04A00002', to_char(today_a + 3, 'YYYYMMDD'), 'A', 'Expiring Member'),
     format('expiring member entry wrong: %s', cards -> 1);
-  assert cards -> 2 = jsonb_build_array('04A00003', '00000000', 'D'),
+  assert cards -> 2 = jsonb_build_array('04A00003', '00000000', 'D', 'Due Member'),
     format('member owing money must be D: %s', cards -> 2);
-  assert cards -> 3 = jsonb_build_array('04A00004', '00000000', 'E'),
-    format('expired member must be E: %s', cards -> 3);
-  assert cards -> 4 = jsonb_build_array('04A00005', '00000000', 'F'),
+  assert cards -> 3 = jsonb_build_array('04A00004', to_char(today_a - 10, 'YYYYMMDD'), 'E', 'Expired Member'),
+    format('expired member must be E, carrying the day it ended and the name: %s', cards -> 3);
+  assert cards -> 4 = jsonb_build_array('04A00005', '00000000', 'F', 'Frozen Member'),
     format('frozen member must be F: %s', cards -> 4);
-  assert cards -> 5 = jsonb_build_array('04A00007', '00000000', 'L'),
+  assert cards -> 5 = jsonb_build_array('04A00007', '00000000', 'L', 'Left Member'),
     format('archived member must be L: %s', cards -> 5);
   -- archived but still owing: rfid_check_in says dues, so the list must too
-  assert cards -> 6 = jsonb_build_array('04A00009', '00000000', 'D'),
+  assert cards -> 6 = jsonb_build_array('04A00009', '00000000', 'D', 'Left And Owing'),
     format('archived member who owes money must be D: %s', cards -> 6);
 
   -- tenant isolation: org B's reader sees only org B's card

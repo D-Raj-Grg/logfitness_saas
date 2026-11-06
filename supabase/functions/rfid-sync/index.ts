@@ -1,15 +1,24 @@
 // rfid-sync -- the door reader's offline-mode endpoint.
 //
 //   GET  ?after=<uid>&limit=<n>   the card list, one page. text/plain, one
-//                                 "UID,YYYYMMDD,C" line per live card, where C
+//                                 "UID,YYYYMMDD,C,Name" line per live card (Name:
+//                                 the holder, printable ASCII, <= 20 chars, may be
+//                                 empty), where C
 //                                 is A allowed (YYYYMMDD = last day it may
 //                                 enter), D dues owing, E expired, F frozen,
-//                                 U not started, N no membership, L left
-//                                 (YYYYMMDD is 00000000 unless A). Then:
+//                                 U not started, N no membership, L left,
+//                                 S a staff card allowed at this door (clock
+//                                 in/out; YYYYMMDD is the open-ended 20991231).
+//                                 (YYYYMMDD is the day the membership ended for E,
+//                                 and 00000000 for the other codes.) Then:
 //                                   #END,<org-today YYYYMMDD>
 //                                   #MORE,<last uid>,<org-today YYYYMMDD>
 //   POST { events: [{ uid, ts }] }  backfill taps the reader let in while
 //                                 offline (max 100). ts = epoch seconds or ISO.
+//                                 The reply counts accepted / duplicate /
+//                                 unknown / clamped / bad_uid and staff_clocked
+//                                 (staff taps replayed as clock-ins/outs at the
+//                                 tap time).
 //
 // Same auth model as rfid-check: `verify_jwt: false` on purpose, the reader's
 // only credential is the `x-device-key` header; the key is hashed here and only
@@ -103,7 +112,7 @@ Deno.serve(async (req: Request) => {
     const result = data as {
       decision?: string
       reason?: string
-      cards?: [string, string, string][]
+      cards?: [string, string, string, string?][]
       more?: boolean
       last_uid?: string
       org_today?: string
@@ -115,7 +124,13 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: 'Sync failed' }, 500)
     }
 
-    const lines = result.cards.map(([uid, until, code]) => `${uid},${until},${code}`)
+    // UID,YYYYMMDD,C,Name. The name comes last and the database has already
+    // folded it to printable ASCII without commas; strip again here so a stray
+    // comma or line break can never split a line.
+    const lines = result.cards.map(
+      ([uid, until, code, name]) =>
+        `${uid},${until},${code},${(name ?? '').replace(/[,\r\n]/g, ' ')}`,
+    )
     lines.push(
       result.more
         ? `#MORE,${result.last_uid},${result.org_today}`
