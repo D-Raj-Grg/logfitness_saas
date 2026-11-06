@@ -105,6 +105,8 @@ while it is open.
 | Offline test | Skips the server and decides from the cached list; taps are queued and upload/sync pause until you switch it off. Idle screen shows `* OFFLINE TEST *`. **Not saved**: a reboot switches it off. |
 | Relay | ON/OFF (saved). Off means allowed taps no longer open the door. |
 | Open time | 1 / 3 / 5 / 10 s (saved). |
+| Result time | How long the result screen stays, 0.5 / 1 / 2 / 3 s (default 0.5 s). No card is read while it shows. Also on the web page. |
+| Repeat wait | A card just read is ignored if tapped again within 0.5 / 1 / 2 / 3 s (default 0.5 s). Also on the web page. |
 | Relay test | Pulses the relay once now, even if Relay is OFF (it is a wiring check). |
 | Sound | ON/OFF (saved). |
 | Sync now | Fetches the card list straight away. |
@@ -176,17 +178,19 @@ converted back to real Unix seconds.
 | Boot | `BOOT`, then `WIFI` + SSID + progress dots (up to 20 s) | one short beep when ready |
 | Idle | label + WiFi state, large clock, date, `TAP CARD` | - |
 | Checking | `CHECKING` + card UID | - |
-| Allowed | name, member code, `ALLOW`, `WELCOME` (or `ALREADY IN` on a second tap today), and `N Days Left` (`1 Day Left`, `Expires Today`) | 1 short |
-| Denied: dues | `DENY`, `PAY DUES`, `Rs 1,500.5` (from `due_paisa`, grouped like the console; paisa dropped from Rs 1,00,000) | 1 long |
-| Denied: expired / frozen / not started / no membership / left | `DENY`, `EXPIRED` / `FROZEN` / `NOT STARTED YET` / `NO MEMBERSHIP` / `NOT A MEMBER` | 1 long |
-| Unknown card | `DENY`, `UNKNOWN CARD`, `Ask desk to assign` | 3 short |
-| Bad read | `DENY`, `BAD READ`, `Tap again` | 3 short |
-| Key unknown (HTTP 401) | `SETUP`, `DEVICE KEY UNKNOWN` | 1 long |
-| Reader disabled (HTTP 403) | `DISABLED`, `READER DISABLED` | 1 long |
-| Offline, card allowed | card UID, `ALLOW`, `OFFLINE MODE`, `N Days Left` (`No Expiry` for open-ended plans) | 1 short |
-| Offline, any other status | card UID, then the same `DENY` screens as online: `EXPIRED`, `FROZEN`, `NOT STARTED YET`, `NO MEMBERSHIP`, `NOT A MEMBER`, `PAY DUES` (no amount offline: it says `See front desk`) | 1 long (2 long for dues) |
-| Offline, card not in the list | card UID, `DENY`, `UNKNOWN CARD`, `Ask desk to assign` | 3 short |
-| Offline and never synced (no list yet) | `OFFLINE`, `NOT RECORDED`, cause | 1 long |
+| Allowed | top row: the card number (small, left) and the name (small, right; a long name is shortened to `Ramesh S.`); then the days left as the biggest number with `DAYS LEFT` under it (`1` / `DAY LEFT`, `LAST` / `DAY` on the last day, `OK` / `NO LIMIT` for open-ended plans). A second tap today looks the same. No `ALLOW`, `WELCOME` or `ALREADY IN` word | 1 short |
+| Denied: dues | `PAY DUES` and `Rs 1,500.5` big (from `due_paisa`, grouped like the console; paisa dropped from Rs 1,00,000) | 1 long |
+| Denied: expired | `EXPIRED` big, and under it the day the membership ended: `12 OCT` if this year, `12 OCT 25` for an earlier year. Without a known date: `EXPIRED` alone | 1 long |
+| Denied: frozen / not started / no membership / left | `FROZEN` / `NOT` `STARTED` / `NO PLAN` / `NOT A` `MEMBER`, as big as fits. The member knows to see the desk, so there is no extra line | 1 long |
+| Unknown card | `UNKNOWN` `CARD` big | 3 short |
+| Bad read | `BAD READ` `TAP AGAIN` big | 3 short |
+| Key unknown (HTTP 401) | `SETUP` `DEVICE KEY` big, `Check config.h` | 1 long |
+| Reader disabled (HTTP 403) | `READER` `DISABLED` big, `Enable in console` | 1 long |
+| Cached allow (fast path) | same as Allowed, from the list: card number, the cached name, days left big | 1 short |
+| Offline, card allowed | same as Allowed with a small `OFFLINE` (or `NOT LOGGED`) under the top row, days number one size smaller | offline pattern |
+| Offline, any other status | the same denied screens as online: expired date, `FROZEN`, `NOT STARTED`, `NO PLAN`, `NOT A MEMBER`, `PAY DUES` (no amount offline) | 1 long (2 long for dues) |
+| Offline, card not in the list | `UNKNOWN` `CARD` big | 3 short |
+| Offline and never synced (no list yet) | `OFFLINE` `NOT SAVED` big, cause | 1 long |
 | K1 pressed (idle) | info for 5 s: label, IP, RSSI, RTC date/time, firmware version, `C<cards cached> Q<taps queued>` | - |
 
 Beeps by ear (an active buzzer has one pitch, so the rhythm is the message):
@@ -217,16 +221,42 @@ cards** (or type it in). The next tap is checked normally.
 
 The reader keeps a copy of the allow-list in its flash (LittleFS) so the door
 keeps working when WiFi or the server is down. Sizing: 5,000 members is
-about 120 KB of the 1.5 MB data partition.
+about 240 KB of the 1.5 MB data partition (48 bytes a card: UID, status, date and the holder's name; a reader on fw 1.3.0 re-syncs once because the record format grew). Lookups are a
+binary search over the sorted file (about 13 reads for 5,000 cards, so a tap's
+cache check stays in the low milliseconds; Serial prints `[cache] lookup N us`).
+The reader checks while it syncs that the list is strictly ascending; if the
+server ever sent it in another order it logs a warning and falls back to a
+linear scan, which is slower but still correct.
 
-- **Sync down.** As soon as WiFi is up, then every 15 minutes, the reader pulls
+- **Sync down.** As soon as WiFi is up, then every 3 minutes for a list up to 500 cards, 8 minutes up to 2,000 and 15 minutes above that (it was a flat 15 before fw 1.3.0, so a big gym does not re-download and rewrite its whole list every few minutes), the reader pulls
   the list from the `rfid-sync` Edge Function (`GET`, 500 cards per page, one
   page per idle pass so a tap never waits behind more than one page). Every
   live card is on the list with its status (allowed, dues, expired, frozen,
   not started, no membership, left); allowed ones carry the last day they may
   enter, which is how `N Days Left` is worked out offline. The new list
   replaces the old one only after the last page arrives. A failed sync retries after 1 minute.
-- **Decide locally.** A tap goes to the server first. Only if the server does not
+- **Cache-first (fw 1.3.0).** A card the list says is allowed opens the door at
+  once with no server round trip (an HTTPS call cost 3-5 s). The tap is queued
+  and uploaded within ~30 s. The screen shows the card number, the cached name and
+  the days left. This needs a sync newer than ~7 minutes and a valid clock;
+  otherwise, and for every card that is not a clean allow (unknown, expired,
+  dues, staff), the reader asks the server as before. Trade-off: a card
+  revoked or newly in arrears still opens the door for up to one sync interval.
+- **Staff cards (fw 1.3.0).** The list also carries staff cards as status `S`,
+  only for active staff who may enter at this reader's branch (owners anywhere).
+  With a fresh list a staff tap is as fast as a member's: the door opens from the
+  cache and the screen shows `STAFF` and `TIME SAVED` (not IN or OUT, because only the
+  server holds the shift state; the staff screen shows which it was). When the
+  server answers instead (stale list, no clock) it shows `CLOCK IN` /
+  `CLOCK OUT` / `ALREADY IN`. Offline, the
+  door opens and shows `STAFF`; the tap is queued with its real time and the
+  server turns it into a clock-in/out stamped with the tap time (source
+  `offline_card`) when the reader reconnects. Staff taps are never collapsed to
+  one per day (a person clocks in and out); a repeat within 60 s is ignored.
+  A reader with no trusted clock still opens for staff but says `NOT LOGGED`.
+  A deactivated or moved person stays on the list until the next sync, the same
+  window as a revoked member card.
+- **Decide locally.** Otherwise a tap goes to the server first. Only if the server does not
   answer (no WiFi, timeout, 5xx) does the reader check the list. After one
   failed round trip it fails faster (5 s) for the next minute so a dead server
   does not stall the door.
@@ -235,16 +265,20 @@ about 120 KB of the 1.5 MB data partition.
   once the network is back. The visit is recorded with the reader's own time as
   `checked_in_at`, attributed to this reader, and uploads are idempotent per
   member per day. Denied taps are not queued.
-- **Not available offline:** member names, dues amounts, "already in" detection,
+- **Not available offline:** dues amounts, "already in" detection,
   and enrolling a new card (an unknown card shows `UNKNOWN CARD`, but is not
   remembered for the desk).
+- **Names are stored on the reader.** The list carries each holder's name (printable
+  ASCII, 20 characters, other characters shown as `?`) so a cached tap can greet
+  them. Anyone with the reader in hand can read that flash; the web page is behind
+  the password and the list travels over HTTPS.
 
 - **If the server refuses the reader** (401 unknown key / 403 disabled), on a tap,
   a sync or an upload, the reader **throws the cached list away**: a disabled or
   re-keyed reader must not keep opening the door whenever the network drops. It
   then shows `OFFLINE / NOT RECORDED` until a sync succeeds again.
 - **Queue full or flash error:** an allowed offline tap still opens the door but
-  the screen says `NOT LOGGED` instead of `OFFLINE MODE`, because the visit could
+  the screen says `NOT LOGGED` instead of `OFFLINE`, because the visit could
   not be queued.
 - **A dead server never stalls the door for long:** after one failed round trip
   the reader skips background sync/upload for a minute and uses 4-5 s timeouts.
