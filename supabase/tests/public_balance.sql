@@ -15,9 +15,11 @@ declare
   org_a uuid := 'c7c7c7c7-1111-1111-1111-111111111111';
   org_b uuid := 'c8c8c8c8-2222-2222-2222-222222222222';
   br_a1 uuid := 'c7b00000-0000-0000-0000-000000000001';
+  br_a2 uuid := 'c7b00000-0000-0000-0000-000000000002';
   br_b1 uuid := 'c8b00000-0000-0000-0000-000000000001';
   st_owner uuid := 'c7000000-0000-0000-0000-00000000000f';
   st_desk  uuid := 'c7000000-0000-0000-0000-00000000000d';
+  st_desk2 uuid := 'c7000000-0000-0000-0000-00000000000e';
   st_tr1   uuid := 'c7000000-0000-0000-0000-000000000011';
   st_b_owner uuid := 'c8000000-0000-0000-0000-00000000000f';
 
@@ -38,11 +40,13 @@ begin
 
   insert into public.branches (id, org_id, name) values
     (br_a1, org_a, 'Omega One'),
+    (br_a2, org_a, 'Omega Two'),
     (br_b1, org_b, 'Rho One');
 
   insert into public.staff (id, org_id, full_name, email, role, branch_ids, status) values
     (st_owner, org_a, 'Omega Owner',   'owner@omega.test', 'owner',      '{}',         'active'),
     (st_desk,  org_a, 'Omega Desk',    'desk@omega.test',  'front_desk', array[br_a1], 'active'),
+    (st_desk2, org_a, 'Omega Desk Two','desk2@omega.test', 'front_desk', array[br_a2], 'active'),
     (st_tr1,   org_a, 'Omega Trainer', 'tr1@omega.test',   'trainer',    array[br_a1], 'active'),
     (st_b_owner, org_b, 'Rho Owner',   'owner@rho.test',   'owner',      '{}',         'active');
 
@@ -175,9 +179,29 @@ begin
   execute 'reset role';
   select * into req from public.renewal_requests where id = req_id;
   assert req.request_count = 2 and req.status = 'pending', format('repeat ask should bump the count: %s', req.request_count);
-  assert req.note = 'still waiting', 'the newest note should win';
+  -- a stranger with the card number must not be able to rewrite what the
+  -- member first said; the first phone and note stay
+  assert req.note = 'Please call after 5', format('a repeat ask rewrote the note: %s', req.note);
+  assert req.phone = '+9779830000001', format('a repeat ask rewrote the phone: %s', req.phone);
   select count(*) into n from public.renewal_requests where member_id = m_active;
   assert n = 1, 'a repeat ask made a second row';
+
+  -- a desk at another branch neither sees nor handles it
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', org_a::text, 'staff_id', st_desk2::text,
+    'staff_role', 'front_desk', 'branch_ids', json_build_array(br_a2::text)
+  )::text, true);
+  execute 'set local role authenticated';
+  select count(*) into n from public.renewal_requests;
+  assert n = 0, format('a desk at another branch read %s renewal requests', n);
+  failed := false;
+  begin
+    perform public.handle_renewal_request(req_id, 'rejected', 'no');
+  exception when no_data_found then failed := true;
+  end;
+  assert failed, 'a desk at another branch handled the request';
+  execute 'reset role';
 
   -- a trainer may not handle it; the desk may, once
   perform set_config('request.jwt.claims', json_build_object(
