@@ -423,6 +423,21 @@ begin
   end;
   assert failed, 'org B linked org A''s card';
 
+  -- nor probe whose chips are live over there
+  assert public.card_uid_holder_kind(org_a, 'AABBCCDD0007') is null,
+    'org B learnt that a chip is live in org A';
+  failed := false;
+  begin
+    perform public.card_uid_holder_kind_internal(org_a, 'AABBCCDD0007');
+  exception when insufficient_privilege then failed := true;
+  end;
+  assert failed, 'a signed-in user called the unguarded holder lookup';
+
+  -- the qr token is not on the screen view
+  select count(*) into n from information_schema.columns
+  where table_schema = 'public' and table_name = 'card_stock_overview' and column_name = 'qr_token';
+  assert n = 0, 'card_stock_overview exposes qr_token';
+
   -- and its own 0004 is a different card
   result := public.create_card_stock_range(1, 5);
   assert (result ->> 'created')::integer = 5, 'org B could not number its own cards';
