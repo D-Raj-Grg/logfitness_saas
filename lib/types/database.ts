@@ -313,6 +313,189 @@ export type Database = {
           },
         ]
       }
+      card_batches: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          design_id: string | null
+          from_no: number
+          id: string
+          org_id: string
+          to_no: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          design_id?: string | null
+          from_no: number
+          id?: string
+          org_id: string
+          to_no: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          design_id?: string | null
+          from_no?: number
+          id?: string
+          org_id?: string
+          to_no?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_batches_created_by_fkey"
+            columns: ["created_by", "org_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "card_batches_design_fkey"
+            columns: ["design_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "card_designs"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "card_batches_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      card_designs: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          height: number
+          id: string
+          image_path: string
+          label_prefix: string
+          name: string
+          org_id: string
+          placement: Json
+          updated_at: string
+          width: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          height: number
+          id?: string
+          image_path: string
+          label_prefix?: string
+          name: string
+          org_id: string
+          placement: Json
+          updated_at?: string
+          width: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          height?: number
+          id?: string
+          image_path?: string
+          label_prefix?: string
+          name?: string
+          org_id?: string
+          placement?: Json
+          updated_at?: string
+          width?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_designs_created_by_fkey"
+            columns: ["created_by", "org_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "card_designs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      card_stock: {
+        Row: {
+          batch_id: string | null
+          card_no: number
+          card_uid: string | null
+          created_at: string
+          created_by: string | null
+          design_id: string | null
+          id: string
+          org_id: string
+          qr_token: string
+          status: Database["public"]["Enums"]["card_stock_status"]
+          status_reason: string | null
+          updated_at: string
+        }
+        Insert: {
+          batch_id?: string | null
+          card_no: number
+          card_uid?: string | null
+          created_at?: string
+          created_by?: string | null
+          design_id?: string | null
+          id?: string
+          org_id: string
+          qr_token?: string
+          status?: Database["public"]["Enums"]["card_stock_status"]
+          status_reason?: string | null
+          updated_at?: string
+        }
+        Update: {
+          batch_id?: string | null
+          card_no?: number
+          card_uid?: string | null
+          created_at?: string
+          created_by?: string | null
+          design_id?: string | null
+          id?: string
+          org_id?: string
+          qr_token?: string
+          status?: Database["public"]["Enums"]["card_stock_status"]
+          status_reason?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_stock_batch_fkey"
+            columns: ["batch_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "card_batches"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "card_stock_created_by_fkey"
+            columns: ["created_by", "org_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "card_stock_design_fkey"
+            columns: ["design_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "card_designs"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "card_stock_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       class_bookings: {
         Row: {
           booked_at: string
@@ -2061,6 +2244,103 @@ export type Database = {
           },
         ]
       }
+      renewal_requests: {
+        Row: {
+          card_stock_id: string | null
+          created_at: string
+          handled_at: string | null
+          handled_by: string | null
+          handled_note: string | null
+          id: string
+          last_requested_at: string
+          member_id: string
+          note: string | null
+          org_id: string
+          phone: string | null
+          request_count: number
+          requested_at: string
+          status: Database["public"]["Enums"]["renewal_request_status"]
+          updated_at: string
+        }
+        Insert: {
+          card_stock_id?: string | null
+          created_at?: string
+          handled_at?: string | null
+          handled_by?: string | null
+          handled_note?: string | null
+          id?: string
+          last_requested_at?: string
+          member_id: string
+          note?: string | null
+          org_id: string
+          phone?: string | null
+          request_count?: number
+          requested_at?: string
+          status?: Database["public"]["Enums"]["renewal_request_status"]
+          updated_at?: string
+        }
+        Update: {
+          card_stock_id?: string | null
+          created_at?: string
+          handled_at?: string | null
+          handled_by?: string | null
+          handled_note?: string | null
+          id?: string
+          last_requested_at?: string
+          member_id?: string
+          note?: string | null
+          org_id?: string
+          phone?: string | null
+          request_count?: number
+          requested_at?: string
+          status?: Database["public"]["Enums"]["renewal_request_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "renewal_requests_card_stock_fkey"
+            columns: ["card_stock_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "card_stock"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "renewal_requests_card_stock_fkey"
+            columns: ["card_stock_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "card_stock_overview"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "renewal_requests_handled_by_fkey"
+            columns: ["handled_by", "org_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "renewal_requests_member_fkey"
+            columns: ["member_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "member_overview"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "renewal_requests_member_fkey"
+            columns: ["member_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "renewal_requests_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       staff: {
         Row: {
           accepted_at: string | null
@@ -2189,6 +2469,13 @@ export type Database = {
             referencedColumns: ["id", "org_id"]
           },
           {
+            foreignKeyName: "staff_attendance_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "staff_attendance_staff_fkey"
             columns: ["staff_id", "org_id"]
             isOneToOne: false
@@ -2244,6 +2531,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "staff"
             referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "staff_cards_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "staff_cards_revoked_by_fkey"
@@ -2546,9 +2840,62 @@ export type Database = {
           },
         ]
       }
+      card_stock_overview: {
+        Row: {
+          assigned_at: string | null
+          batch_id: string | null
+          card_no: number | null
+          card_no_text: string | null
+          card_uid: string | null
+          created_at: string | null
+          created_by: string | null
+          design_id: string | null
+          effective_status: string | null
+          holder_kind: string | null
+          holder_name: string | null
+          id: string | null
+          member_code: string | null
+          member_id: string | null
+          org_id: string | null
+          status: Database["public"]["Enums"]["card_stock_status"] | null
+          status_reason: string | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_stock_batch_fkey"
+            columns: ["batch_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "card_batches"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "card_stock_created_by_fkey"
+            columns: ["created_by", "org_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "card_stock_design_fkey"
+            columns: ["design_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "card_designs"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "card_stock_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       member_overview: {
         Row: {
           archived_at: string | null
+          card_no: number | null
           current_membership_id: string | null
           current_plan_id: string | null
           current_plan_name: string | null
@@ -2626,6 +2973,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "devices"
             referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "staff_attendance_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "staff_attendance_staff_fkey"
@@ -2731,6 +3085,33 @@ export type Database = {
           oldest_due_on: string
           phone: string
         }[]
+      }
+      assign_card_stock_to_member: {
+        Args: {
+          p_card_no: number
+          p_card_uid?: string
+          p_member_id: string
+          p_replace?: boolean
+        }
+        Returns: {
+          assigned_at: string
+          assigned_by: string | null
+          card_uid: string
+          created_at: string
+          id: string
+          member_id: string
+          org_id: string
+          revoke_reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "member_cards"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       assign_member_card: {
         Args: { p_card_uid: string; p_member_id: string; p_replace?: boolean }
@@ -2852,6 +3233,15 @@ export type Database = {
         Args: { p_pt_session_id: string; p_reason?: string }
         Returns: Json
       }
+      card_placement_is_valid: { Args: { p_placement: Json }; Returns: boolean }
+      card_uid_holder_kind: {
+        Args: { p_card_uid: string; p_org_id: string }
+        Returns: string
+      }
+      card_uid_holder_kind_internal: {
+        Args: { p_card_uid: string; p_org_id: string }
+        Returns: string
+      }
       check_in_member: {
         Args: {
           p_branch_id: string
@@ -2879,6 +3269,10 @@ export type Database = {
       complete_pt_session: { Args: { p_pt_session_id: string }; Returns: Json }
       convert_visitor: {
         Args: { p_member_id: string; p_visitor_id: string }
+        Returns: Json
+      }
+      create_card_stock_range: {
+        Args: { p_design_id?: string; p_from: number; p_to: number }
         Returns: Json
       }
       create_org_with_owner: {
@@ -2979,6 +3373,7 @@ export type Database = {
           txn_count: number
         }[]
       }
+      delete_card_design: { Args: { p_id: string }; Returns: string }
       discount_report: {
         Args: { p_branch_ids?: string[]; p_from?: string; p_to?: string }
         Returns: {
@@ -3011,6 +3406,7 @@ export type Database = {
       enqueue_notifications: { Args: never; Returns: Json }
       enqueue_renewal_reminders: { Args: never; Returns: number }
       enqueue_visitor_follow_ups: { Args: never; Returns: number }
+      format_card_no: { Args: { p_no: number }; Returns: string }
       format_paisa: {
         Args: { p_currency?: string; p_paisa: number }
         Returns: string
@@ -3020,6 +3416,36 @@ export type Database = {
         Returns: Json
       }
       generate_class_sessions: { Args: { p_class_id: string }; Returns: number }
+      handle_renewal_request: {
+        Args: {
+          p_note?: string
+          p_request_id: string
+          p_status: Database["public"]["Enums"]["renewal_request_status"]
+        }
+        Returns: {
+          card_stock_id: string | null
+          created_at: string
+          handled_at: string | null
+          handled_by: string | null
+          handled_note: string | null
+          id: string
+          last_requested_at: string
+          member_id: string
+          note: string | null
+          org_id: string
+          phone: string | null
+          request_count: number
+          requested_at: string
+          status: Database["public"]["Enums"]["renewal_request_status"]
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "renewal_requests"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       has_branch_access: {
         Args: { target_branch_id: string }
         Returns: boolean
@@ -3061,6 +3487,29 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["staff_role"]
       }
+      link_card_stock_uid: {
+        Args: { p_card_no: number; p_card_uid: string }
+        Returns: {
+          batch_id: string | null
+          card_no: number
+          card_uid: string | null
+          created_at: string
+          created_by: string | null
+          design_id: string | null
+          id: string
+          org_id: string
+          qr_token: string
+          status: Database["public"]["Enums"]["card_stock_status"]
+          status_reason: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "card_stock"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       link_member_account: { Args: never; Returns: string }
       link_staff_account: { Args: never; Returns: string }
       link_staff_account_by_email: {
@@ -3071,6 +3520,7 @@ export type Database = {
         Args: { p_attended: boolean; p_booking_id: string }
         Returns: Json
       }
+      mask_name: { Args: { p_name: string }; Returns: string }
       materialize_class_sessions: {
         Args: { p_class_id?: string; p_days?: number }
         Returns: number
@@ -3135,6 +3585,7 @@ export type Database = {
       }
       nepal_mobile_carrier: { Args: { p_to: string }; Returns: string }
       new_device_key: { Args: never; Returns: string }
+      next_free_card_no: { Args: never; Returns: number }
       next_org_counter: {
         Args: { p_counter: string; p_org_id: string }
         Returns: number
@@ -3223,6 +3674,7 @@ export type Database = {
         }[]
       }
       org_today: { Args: { p_org_id: string }; Returns: string }
+      parse_card_no: { Args: { p_text: string }; Returns: number }
       plan_mix: {
         Args: { p_branch_ids?: string[] }
         Returns: {
@@ -3239,6 +3691,29 @@ export type Database = {
       plan_sold_at: {
         Args: { p_branch_id: string; p_plan_id: string }
         Returns: boolean
+      }
+      public_card_balance: {
+        Args: { p_card_no: number; p_org_slug: string }
+        Returns: Json
+      }
+      public_card_lookup: {
+        Args: { p_card_no: number; p_org_slug: string }
+        Returns: {
+          full_name: string
+          member_id: string
+          org_id: string
+          outcome: string
+          stock_id: string
+        }[]
+      }
+      public_renewal_request: {
+        Args: {
+          p_card_no: number
+          p_note?: string
+          p_org_slug: string
+          p_phone?: string
+        }
+        Returns: Json
       }
       qr_sign: { Args: { p_key: string; p_payload: string }; Returns: string }
       qr_signing_key: { Args: never; Returns: string }
@@ -3446,6 +3921,18 @@ export type Database = {
           waived_paisa: number
         }[]
       }
+      save_card_design: {
+        Args: {
+          p_height: number
+          p_id: string
+          p_image_path: string
+          p_label_prefix: string
+          p_name: string
+          p_placement: Json
+          p_width: number
+        }
+        Returns: string
+      }
       seed_notification_rules: {
         Args: { p_org_id: string }
         Returns: undefined
@@ -3493,6 +3980,33 @@ export type Database = {
         }
         Returns: string
       }
+      set_card_stock_status: {
+        Args: {
+          p_card_no: number
+          p_reason?: string
+          p_status: Database["public"]["Enums"]["card_stock_status"]
+        }
+        Returns: {
+          batch_id: string | null
+          card_no: number
+          card_uid: string | null
+          created_at: string
+          created_by: string | null
+          design_id: string | null
+          id: string
+          org_id: string
+          qr_token: string
+          status: Database["public"]["Enums"]["card_stock_status"]
+          status_reason: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "card_stock"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       set_member_left: {
         Args: { p_left_on?: string; p_member_id: string; p_reason?: string }
         Returns: Json
@@ -3503,8 +4017,6 @@ export type Database = {
       }
       set_org_setting: { Args: { _key: string; _value: Json }; Returns: Json }
       settle_invoice: { Args: { p_invoice_id: string }; Returns: undefined }
-      storage_object_member: { Args: { object_name: string }; Returns: string }
-      storage_object_org: { Args: { object_name: string }; Returns: string }
       staff_attendance_summary: {
         Args: { p_from?: string; p_staff_id: string; p_to?: string }
         Returns: {
@@ -3518,6 +4030,19 @@ export type Database = {
           open_shifts_in_range: number
         }[]
       }
+      staff_clock_tap: {
+        Args: {
+          p_at?: string
+          p_branch_id: string
+          p_device_id: string
+          p_org_id: string
+          p_source?: string
+          p_staff_id: string
+        }
+        Returns: Json
+      }
+      storage_object_member: { Args: { object_name: string }; Returns: string }
+      storage_object_org: { Args: { object_name: string }; Returns: string }
       sweep_membership_expiry: {
         Args: never
         Returns: {
@@ -3596,6 +4121,7 @@ export type Database = {
       announcement_status: "scheduled" | "sending" | "cancelled"
       attendance_method: "manual" | "qr" | "card" | "biometric"
       branch_status: "active" | "inactive"
+      card_stock_status: "free" | "lost" | "retired"
       class_booking_status:
         | "booked"
         | "waitlisted"
@@ -3657,6 +4183,7 @@ export type Database = {
       payment_method: "cash" | "esewa" | "khalti" | "fonepay" | "bank" | "card"
       plan_type: "time" | "session_pack"
       pt_session_status: "scheduled" | "completed" | "cancelled"
+      renewal_request_status: "pending" | "done" | "rejected"
       staff_role: "owner" | "manager" | "front_desk" | "trainer"
       staff_status: "invited" | "active" | "inactive"
       visitor_kind: "enquiry" | "guest"
@@ -3792,6 +4319,7 @@ export const Constants = {
       announcement_status: ["scheduled", "sending", "cancelled"],
       attendance_method: ["manual", "qr", "card", "biometric"],
       branch_status: ["active", "inactive"],
+      card_stock_status: ["free", "lost", "retired"],
       class_booking_status: [
         "booked",
         "waitlisted",
@@ -3859,6 +4387,7 @@ export const Constants = {
       payment_method: ["cash", "esewa", "khalti", "fonepay", "bank", "card"],
       plan_type: ["time", "session_pack"],
       pt_session_status: ["scheduled", "completed", "cancelled"],
+      renewal_request_status: ["pending", "done", "rejected"],
       staff_role: ["owner", "manager", "front_desk", "trainer"],
       staff_status: ["invited", "active", "inactive"],
       visitor_kind: ["enquiry", "guest"],
