@@ -1,7 +1,9 @@
 'use client'
 
 import { useActionState, useState } from 'react'
+import { Smartphone } from 'lucide-react'
 
+import { AccessRow } from '@/components/members/access-row'
 import { inviteMemberToApp, type MemberFormState } from '@/app/(app)/members/actions'
 import { AuthFormMessage, FieldError } from '@/components/auth/auth-form-message'
 import {
@@ -56,18 +58,18 @@ export function MemberAppAccess({
   const active = hasAuthUser && Boolean(acceptedAt)
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
-      <div className="flex flex-col gap-0.5">
-        <span className="text-sm font-medium">Mobile app</span>
-        <span className="text-sm text-muted-foreground">
-          {active && acceptedAt
-            ? `Active since ${formatDate(acceptedAt)}`
-            : invited && invitedAt
-              ? `Invited on ${formatDate(invitedAt)}`
-              : 'Not invited yet'}
-        </span>
-      </div>
-
+    <AccessRow
+      icon={Smartphone}
+      title="Mobile app"
+      tone={active ? 'ok' : invited ? 'warn' : 'idle'}
+      status={
+        active && acceptedAt
+          ? `Active since ${formatDate(acceptedAt)}`
+          : invited && invitedAt
+            ? `Invited on ${formatDate(invitedAt)}`
+            : 'Not invited yet'
+      }
+    >
       {active ? null : (
         <AlertDialog open={open} onOpenChange={setOpen}>
           <AlertDialogTrigger render={<Button variant="outline" size="sm" />}>
@@ -110,6 +112,6 @@ export function MemberAppAccess({
           </AlertDialogContent>
         </AlertDialog>
       )}
-    </div>
+    </AccessRow>
   )
 }

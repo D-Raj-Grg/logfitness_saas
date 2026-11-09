@@ -12,6 +12,7 @@ import {
   type MemberPinStatus,
 } from '@/app/(app)/members/[id]/pin-actions'
 import { AuthFormMessage } from '@/components/auth/auth-form-message'
+import { AccessRow } from '@/components/members/access-row'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -150,7 +151,15 @@ export function MemberPinControls({
 
   const actions = (
     <>
-      <Button type="button" size="sm" onClick={generate} disabled={pending}>
+      {/* Only one primary: with no PIN yet, generating is the next step; once
+          there is one, regenerating is the exception and steps back. */}
+      <Button
+        type="button"
+        variant={hasPin ? 'outline' : 'default'}
+        size="sm"
+        onClick={generate}
+        disabled={pending}
+      >
         {pending && (view === null || view === 'menu') ? 'Working...' : 'Generate new PIN'}
       </Button>
       <Button
@@ -169,8 +178,9 @@ export function MemberPinControls({
       {hasPin ? (
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           size="sm"
+          className="text-destructive hover:text-destructive"
           disabled={pending}
           onClick={() => {
             setError(null)
@@ -186,17 +196,22 @@ export function MemberPinControls({
   return (
     <>
       {layout === 'card' ? (
-        <div className="flex flex-col gap-3 rounded-lg border px-4 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-col gap-0.5">
-              <span className="text-sm font-medium">Member app PIN</span>
-              <span className="text-sm text-muted-foreground">{pinStatusLabel(shown)}</span>
+        <>
+          <AccessRow
+            icon={KeyRound}
+            title="Member app PIN"
+            tone={shown?.locked_until ? 'bad' : hasPin ? 'ok' : 'idle'}
+            status={pinStatusLabel(shown)}
+            note={HELPER}
+          >
+            {actions}
+          </AccessRow>
+          {view === null && error ? (
+            <div className="pb-4 last:pb-0">
+              <AuthFormMessage error={error} />
             </div>
-            <div className="flex flex-wrap items-center gap-2">{actions}</div>
-          </div>
-          <p className="text-xs text-muted-foreground">{HELPER}</p>
-          {view === null ? <AuthFormMessage error={error ?? undefined} /> : null}
-        </div>
+          ) : null}
+        </>
       ) : (
         <Button
           type="button"

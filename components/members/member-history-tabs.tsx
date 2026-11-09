@@ -140,7 +140,7 @@ function AttendancePager({
   )
 }
 
-export type HistoryTab = 'memberships' | 'payments' | 'invoices' | 'attendance' | 'messages'
+export type HistoryTab = 'profile' | 'memberships' | 'payments' | 'invoices' | 'attendance' | 'messages'
 
 export function MemberHistoryTabs({
   memberships,
@@ -156,7 +156,8 @@ export function MemberHistoryTabs({
   attendanceTo,
   today,
   memberId,
-  defaultTab = 'memberships',
+  defaultTab = 'profile',
+  profile,
   messages,
   branchNames,
 }: {
@@ -180,6 +181,8 @@ export function MemberHistoryTabs({
   today: string
   memberId: string
   defaultTab?: HistoryTab
+  /** The Details and app/door access cards, rendered by the page. */
+  profile: React.ReactNode
   /** What this member has been told, by a sweep or by the desk. */
   messages: Messages
   branchNames: Record<string, string>
@@ -190,11 +193,12 @@ export function MemberHistoryTabs({
 
   return (
     <Tabs defaultValue={defaultTab}>
-      {/* Five labels with counts do not fit a phone. They scroll sideways
+      {/* Six labels with counts do not fit a phone. They scroll sideways
           rather than wrapping into a second row of pills, which would push the
           table down and read as two separate rows of controls. */}
       <div className="-mx-1 overflow-x-auto px-1 pb-1">
         <TabsList className="w-max">
+          <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="memberships">Memberships ({memberships.length})</TabsTrigger>
           <TabsTrigger value="payments">Payments ({payments.length})</TabsTrigger>
           <TabsTrigger value="invoices">Invoices ({invoices.length})</TabsTrigger>
@@ -202,6 +206,8 @@ export function MemberHistoryTabs({
           <TabsTrigger value="messages">Messages ({messages.length})</TabsTrigger>
         </TabsList>
       </div>
+
+      <TabsContent value="profile">{profile}</TabsContent>
 
       <TabsContent value="memberships">
         {memberships.length === 0 ? (

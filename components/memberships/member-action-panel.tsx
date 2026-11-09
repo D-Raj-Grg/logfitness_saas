@@ -228,8 +228,8 @@ export function MemberActionPanel({
               : current
                 ? `Sold at ${branches.find((b) => b.id === current.branch_id)?.name ?? 'a branch'}`
                 : isRenewal
-                  ? 'No active plan. The last one has expired.'
-                  : 'No plan on the books yet.'}
+                  ? 'No active plan'
+                  : 'No plan on the books yet'}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm">
@@ -241,7 +241,7 @@ export function MemberActionPanel({
                   {MEMBERSHIP_STATUS_LABELS[current.status]}
                 </Badge>
               </div>
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
+              <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 [&>dd]:text-right [&>dd]:tabular-nums">
                 <dt className="text-muted-foreground">Starts</dt>
                 <dd>{formatDate(current.start_date)}</dd>
                 <dt className="text-muted-foreground">Ends</dt>
@@ -274,13 +274,25 @@ export function MemberActionPanel({
               </dl>
             </>
           ) : (
-            <p className="text-muted-foreground">
-              {hasLeft
-                ? 'Reactivate the member before selling a membership.'
-                : isRenewal
-                  ? 'Renew to put them back on a plan.'
-                  : 'Sell a plan to get them started.'}
-            </p>
+            <div className="flex flex-col gap-1">
+              {lastMembership ? (
+                <p>
+                  <span className="font-medium">{lastMembership.plan_name}</span>
+                  <span className="text-muted-foreground">
+                    {lastMembership.end_date
+                      ? ` ended ${formatDate(lastMembership.end_date)}`
+                      : ' ended'}
+                  </span>
+                </p>
+              ) : null}
+              <p className="text-muted-foreground">
+                {hasLeft
+                  ? 'Reactivate the member before selling a membership.'
+                  : isRenewal
+                    ? 'Renew to put them back on a plan.'
+                    : 'Sell a plan to get them started.'}
+              </p>
+            </div>
           )}
 
           {canAct ? (
@@ -367,36 +379,39 @@ export function MemberActionPanel({
             recentPayments.map((payment, index) => (
               <div key={payment.id}>
                 {index > 0 ? <Separator className="my-2" /> : null}
-                <div className="flex items-center justify-between gap-2">
-                  <span>
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex items-baseline justify-between gap-2">
                     <span
                       className={
                         payment.kind === 'payment'
-                          ? 'font-medium'
-                          : 'font-medium text-destructive'
+                          ? 'font-medium tabular-nums'
+                          : 'font-medium tabular-nums text-destructive'
                       }
                     >
                       {formatMoney(payment.amount_paisa)}
                     </span>
-                    <span className="block text-xs text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {PAYMENT_METHOD_LABELS[payment.method]}
                       {payment.reference_no ? ` · ${payment.reference_no}` : ''}
-                      {' · '}
-                      {formatDateTime(payment.paid_at)}
-                      {payment.collector?.full_name ? ` · ${payment.collector.full_name}` : ''}
                     </span>
-                    {payment.kind !== 'payment' && payment.reason ? (
-                      <span className="block text-xs text-muted-foreground">
-                        {payment.kind === 'refund' ? 'Refund' : 'Never received'}:{' '}
-                        {payment.reason}
-                      </span>
-                    ) : null}
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {formatDateTime(payment.paid_at)}
+                    {payment.collector?.full_name ? ` · ${payment.collector.full_name}` : ''}
                   </span>
+                  {payment.kind !== 'payment' && payment.reason ? (
+                    <span className="text-xs text-muted-foreground">
+                      {payment.kind === 'refund' ? 'Refund' : 'Never received'}: {payment.reason}
+                    </span>
+                  ) : null}
                   {canAct && payment.kind === 'payment' && payment.amount_paisa > 0 ? (
-                    <span className="flex shrink-0 items-center">
+                    // Under the line, not beside it: next to the amount two
+                    // buttons squeeze the method and the date into a sliver.
+                    <span className="-ml-2.5 flex items-center">
                       <Button
-                        size="sm"
+                        size="xs"
                         variant="ghost"
+                        className="h-8 text-muted-foreground sm:h-6"
                         onClick={() => setOpen({ kind: 'refund', paymentId: payment.id })}
                       >
                         Refund
@@ -406,8 +421,9 @@ export function MemberActionPanel({
                           the drawer sheet. */}
                       {canAdjustSale ? (
                         <Button
-                          size="sm"
+                          size="xs"
                           variant="ghost"
+                          className="h-8 text-muted-foreground sm:h-6"
                           onClick={() => setOpen({ kind: 'reverse', paymentId: payment.id })}
                         >
                           Not paid

@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { CreditCard } from 'lucide-react'
 
+import { AccessRow } from '@/components/members/access-row'
 import {
   assignMemberCard,
   revokeMemberCard,
@@ -190,7 +192,11 @@ function RevokeCardDialog({ memberId, cardUid }: { memberId: string; cardUid: st
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogTrigger render={<Button variant="ghost" size="sm" />}>Revoke</AlertDialogTrigger>
+      <AlertDialogTrigger
+        render={<Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" />}
+      >
+        Revoke
+      </AlertDialogTrigger>
       <AlertDialogContent>
         <form action={formAction} className="flex flex-col gap-4">
           <input type="hidden" name="memberId" value={memberId} />
@@ -247,12 +253,12 @@ export function MemberCardAccess({
 }) {
   if (!cards) {
     return (
-      <div className="flex flex-col gap-0.5 rounded-lg border px-4 py-3">
-        <span className="text-sm font-medium">Access card</span>
-        <span className="text-sm text-muted-foreground">
-          The card details could not be loaded. Refresh the page to try again.
-        </span>
-      </div>
+      <AccessRow
+        icon={CreditCard}
+        title="Access card"
+        tone="bad"
+        status="The card details could not be loaded. Refresh the page to try again."
+      />
     )
   }
 
@@ -260,37 +266,35 @@ export function MemberCardAccess({
   const lastRevoked = live ? null : (cards[0] ?? null)
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-sm font-medium">Access card</span>
-        <span className="text-sm break-words text-muted-foreground">
-          {live ? (
-            <>
-              {cardNo ? (
-                <>
-                  <span className="font-mono font-semibold text-foreground">
-                    {cardLabel(cardNo)}
-                  </span>
-                  {' · '}
-                </>
-              ) : null}
-              <span className="font-mono">{live.card_uid}</span> · since{' '}
-              {formatDate(live.assigned_at)}
-            </>
-          ) : lastRevoked?.revoked_at ? (
-            `No card. The last one was revoked on ${formatDate(lastRevoked.revoked_at)}${
-              lastRevoked.revoke_reason ? ` (${lastRevoked.revoke_reason})` : ''
-            }.`
-          ) : (
-            'No card assigned'
-          )}
-        </span>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        {live ? <RevokeCardDialog memberId={memberId} cardUid={live.card_uid} /> : null}
-        <AssignCardDialog memberId={memberId} replacing={Boolean(live)} scans={scans} />
-      </div>
-    </div>
+    <AccessRow
+      icon={CreditCard}
+      title="Access card"
+      tone={live ? 'ok' : 'idle'}
+      status={
+        live ? (
+          <>
+            {cardNo ? (
+              <>
+                <span className="font-mono font-semibold text-foreground">
+                  {cardLabel(cardNo)}
+                </span>
+                {' · '}
+              </>
+            ) : null}
+            <span className="font-mono">{live.card_uid}</span> · since{' '}
+            {formatDate(live.assigned_at)}
+          </>
+        ) : lastRevoked?.revoked_at ? (
+          `No card. The last one was revoked on ${formatDate(lastRevoked.revoked_at)}${
+            lastRevoked.revoke_reason ? ` (${lastRevoked.revoke_reason})` : ''
+          }.`
+        ) : (
+          'No card assigned'
+        )
+      }
+    >
+      {live ? <RevokeCardDialog memberId={memberId} cardUid={live.card_uid} /> : null}
+      <AssignCardDialog memberId={memberId} replacing={Boolean(live)} scans={scans} />
+    </AccessRow>
   )
 }
