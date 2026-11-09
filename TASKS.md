@@ -276,18 +276,47 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
+### Gym schedule, attendance calendar, renewal read (backend B1, 2026-11-09)
+
+- [x] `org_holidays` (RLS: staff read own org; audited) + `add_org_holiday(p_on_date, p_name)` / `remove_org_holiday(p_id)` (owner/manager only).
+- [x] `orgs.settings.weekly_off` via `set_org_setting('weekly_off', '[6]')` (int array 1..7, deduped+sorted; owner or manager).
+- [x] `my_attendance_calendar(p_year, p_month)` and `my_renewal_request()`; `renewal_requests` added to `supabase_realtime`.
+- [x] Gate `supabase/tests/attendance_calendar.sql` (in `db:test`); `lib/types/database.ts` regenerated.
+- [x] **Fixed:** `set_org_setting` null-unsafe owner guard let a member principal change org settings (`20261109130100`).
+- [ ] Console: Settings "Gym schedule" section (workstream C). Calendar UI in the Flutter app (E2).
+- [ ] Past freeze periods are not stored, so a past frozen span can show red (only the *current* freeze is neutral). Needs a freeze-period table.
+### Door-display QR check-in, backend (built 2026-11-09; firmware 1.4.0 + member app pending)
+
+The reader's OLED shows a QR that rotates every 30 s; the member scans it in the app, `member_door_check_in` runs the same allow/deny rules as a card tap, records a `qr` visit and queues an unlock that the reader fetches with `rfid-poll`. Protocol (code formula, test vector, JSON shapes): `firmware/rfid-check-in/README.md` "QR protocol". Migration `20261109131000_door_qr.sql`.
+
+- [x] `devices.qr_id` (per-org unique, auto-assigned) and the per-device HMAC secret. **Deviation:** the secret is in `device_qr_secrets` (RLS on, no policy, no client grants), not a `devices.qr_secret` column -- `update_device()` returns `to_jsonb(devices row)`, the audit trigger copies inserted rows and `devices` is granted wholesale to `authenticated`, any of which would leak it to a front-desk user. `rotate_device_key` rotates the secret too.
+- [x] `door_qr_code(secret, qr_id, window)`, `door_member_tap` (member half of `rfid_check_in`, extracted unchanged), `member_door_check_in`, `device_unlock_requests`, `door_qr_failures`, `rfid_poll_unlock`, `rfid_qr_config`.
+- [x] Edge: new `rfid-poll`; `rfid-sync` gains opt-in `GET ?qr=1` (the plain GET is still the text card list, byte-identical).
+- [x] Gate `supabase/tests/door_qr.sql` (in `db:test`); `staff_cards.sql`, `rfid_check_in.sql`, `rfid_offline_sync.sql`, `staff_cards_offline.sql`, `card_stock.sql` re-run green. `scripts/door-qr-sim.mjs` + a throwaway prod fixture proved scan -> poll once -> poll null, stale code, expired member.
+- [ ] Firmware 1.4.0: draw the QR, derive the code, fetch the secret, poll `rfid-poll` (agent D).
+- [ ] Member app scan screen (agent E3).
+- [ ] Console: show a device's `qr_id` in Settings -> Devices (the column is staff-readable, not secret); a "Rotate QR secret" action separate from the key if wanted.
+- [ ] A photo of the screen replayed within ~60 s still opens the door (rotating code is not proof of presence); mitigations are opening hours, one visit per day, the 20 s unlock window and the per-member throttle.
+### Console: renewal alerts and gym schedule (2026-11-09, workstream C)
+
+- [x] Sidebar badge on Members (pending renewal requests, branch-scoped via the header cookie); `countPendingRenewalRequests(branchIds)`.
+- [x] Dashboard "Renewal requests" card (newest 5 + View all).
+- [x] Live pop-up (`components/renewals/renewal-live-alerts.tsx`): Realtime INSERT/UPDATE on `renewal_requests`, toast + `router.refresh()`, 45 s polling fallback. **Not verified in a browser against live data yet.**
+- [x] Settings -> Gym schedule (`/settings/schedule`): weekly days off + holidays, owner/manager.
+- [ ] Regenerate `lib/types/database.ts` after the schedule migration merges, then drop the narrow local client types in `lib/db/org-schedule.ts`.
+
 ### Member app backend: PIN login and member self-calls (decided 2026-11-09)
 
 The members' app (`../logfitness_membership_flutter`, LOG-branded, separate from Gym Tross) signs members in with **printed card number or phone + a PIN staff set**. Full contract in that repo's `PLANNING.md` §4–5; its `TASKS.md` Phase 0 is the same list. The PIN belongs to the member, not the card (cards are reusable stock). Gym Tross keeps its member shell and `current_member()`'s signature until the new app ships.
 
-- [ ] Spike: `member-login` can create a synthetic never-mailed auth user (`m-<member_id>@members.invalid`) linked via `members.auth_user_id` and mint a session; confirm GoTrue accepts it, `link_member_account` cannot adopt it, the access-token hook stamps the member claims, and `accepted_at` stays null (`members_accept_requires_invite`).
-- [ ] `member_pins` (bcrypt hash, `failed_attempts`, `locked_until`; RLS on, no client write) + `verify_member_pin` (service_role only; dummy hash when no PIN; 5 failures → 15 min lock).
-- [ ] `set_member_pin` / `clear_member_pin` (desk+, branch-scoped, audited without ever logging the PIN; generated PIN returned once; reset clears the lock and revokes the member's sessions).
-- [ ] `member-login` Edge Function (`verify_jwt` off): 1–4 digits = card number, 7+ = phone; org from build config; one generic `invalid`, plus `locked` / `rate_limited`; per-IP window on the **last** `x-forwarded-for` hop; per-org attempt ceiling in Postgres.
-- [ ] Gate `supabase/tests/member_pin_login.sql` (lockout, reissued card, archived/left, 3- vs 7-digit ambiguity, cross-org, grants).
-- [ ] Console: PIN controls on `/members/[id]` and the `/cards` row.
-- [ ] `my_card()` (additive) and member-callable `request_renewal(p_phone, p_note)` reusing `renewal_requests` rules.
-- [ ] Verify `attendance_snapshot` is callable by a member token for their own id only.
+- [x] Spike: `member-login` can create a synthetic never-mailed auth user (`m-<member_id>@members.invalid`) linked via `members.auth_user_id` and mint a session; confirm GoTrue accepts it, `link_member_account` cannot adopt it, the access-token hook stamps the member claims, and `accepted_at` stays null (`members_accept_requires_invite`). **Done 2026-11-09:** `.invalid` domain accepted; `generateLink({type:'magiclink'})` + `verifyOtp({type:'magiclink', token_hash})` on an anon client returns a real session; hook stamps `org_id`/`member_id`/`branch_ids`; `accepted_at` untouched.
+- [x] `member_pins` (bcrypt hash, `failed_attempts`, `locked_until`; RLS on, no client write) + `verify_member_pin` (service_role only; dummy hash when no PIN; 5 failures → 15 min lock).
+- [x] `set_member_pin` / `clear_member_pin` (desk+, branch-scoped, audited without ever logging the PIN; generated PIN returned once; reset clears the lock and revokes the member's sessions). **Not done:** revoking the member's existing sessions on reset (a stolen refresh token outlives a PIN reset) -- add an admin sign-out in a follow-up.
+- [x] `member-login` Edge Function (`verify_jwt` off): 1–4 digits = card number, 7+ = phone; org from build config; one generic `invalid`, plus `locked` / `rate_limited`; per-IP window on the **last** `x-forwarded-for` hop; per-org attempt ceiling in Postgres. **Deviation:** the per-org ceiling is in-memory (300 FAILED verifications per 10 min, best effort per instance; successes never counted), not in Postgres; the DB lockout (15 min doubling per repeat lock, capped about 16h, via `member_pins.lock_level`) is the real backstop. `member-login` only signs in synthetic member users (never an email-invited or staff-linked auth user); `set_member_pin` refuses a member whose auth user is a staff login (`20261109120100_member_pin_hardening.sql`).
+- [x] Gate `supabase/tests/member_pin_login.sql` (lockout, reissued card, archived/left, 3- vs 7-digit ambiguity, cross-org, grants).
+- [x] Console: PIN controls on `/members/[id]` and the `/cards` row. **Done 2026-11-09** (`feat/console-member-pin`): "Member app PIN" card (status, Generate new PIN shown once in a dialog, Set custom PIN, Remove PIN) and a compact PIN button on assigned `/cards` rows, one shared client component. Not yet clicked through against the live database.
+- [x] `my_card()` (additive) and member-callable `request_renewal(p_phone, p_note)` reusing `renewal_requests` rules. Shared internal `file_renewal_request` (not yet used by `public_renewal_request`; fold that in later).
+- [x] Verify `attendance_snapshot` is callable by a member token for their own id only. Works as is for a member JWT (own id returns a row, any other id returns none) -- no `my_snapshot()` needed.
 - [ ] Verify the FCM send path of `push-fanout` end to end (Firebase project for the member bundle id, `FCM_SERVICE_ACCOUNT_JSON`).
 - [ ] After the member app ships: decide the fate of `invite_member` / `link_member_account` and the console "Invite to app" action.
 

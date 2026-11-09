@@ -4,7 +4,7 @@ import { Dumbbell } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
-import { navItemsForRole } from '@/components/app/nav-items'
+import { navItemsForRole, type NavItem } from '@/components/app/nav-items'
 import { UserMenu } from '@/components/app/user-menu'
 import {
   Sidebar,
@@ -14,13 +14,27 @@ import {
   SidebarGroupContent,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
 import type { CurrentStaff } from '@/lib/roles'
 
-export function AppSidebar({ staff }: { staff: CurrentStaff }) {
+/** Live counts the layout fetches; a missing or zero key shows no badge. */
+export type SidebarBadges = Partial<Record<NonNullable<NavItem['badgeKey']>, number>>
+
+const BADGE_NOUNS = {
+  renewalRequests: 'pending renewal request',
+} as const
+
+export function AppSidebar({
+  staff,
+  badges,
+}: {
+  staff: CurrentStaff
+  badges?: SidebarBadges
+}) {
   const pathname = usePathname()
   const items = navItemsForRole(staff.role)
   const { isMobile, setOpenMobile } = useSidebar()
@@ -77,6 +91,8 @@ export function AppSidebar({ staff }: { staff: CurrentStaff }) {
                     ? pathname === '/'
                     : pathname.startsWith(item.href)
 
+                const count = item.badgeKey ? (badges?.[item.badgeKey] ?? 0) : 0
+
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
@@ -88,6 +104,14 @@ export function AppSidebar({ staff }: { staff: CurrentStaff }) {
                       <item.icon />
                       <span>{item.title}</span>
                     </SidebarMenuButton>
+                    {count > 0 && item.badgeKey ? (
+                      <SidebarMenuBadge
+                        className="bg-primary text-primary-foreground"
+                        aria-label={`${count} ${BADGE_NOUNS[item.badgeKey]}${count === 1 ? '' : 's'}`}
+                      >
+                        {count > 9 ? '9+' : count}
+                      </SidebarMenuBadge>
+                    ) : null}
                   </SidebarMenuItem>
                 )
               })}

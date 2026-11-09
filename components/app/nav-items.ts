@@ -4,6 +4,7 @@ import {
   Megaphone,
   Building2,
   CalendarDays,
+  CalendarOff,
   CreditCard,
   Dumbbell,
   DoorOpen,
@@ -25,6 +26,8 @@ export type NavItem = {
   href: string
   icon: LucideIcon
   roles: StaffRole[]
+  /** Which live count (if any) hangs on this link; the layout supplies the numbers. */
+  badgeKey?: 'renewalRequests'
 }
 
 const ALL_ROLES: StaffRole[] = ['owner', 'manager', 'front_desk', 'trainer']
@@ -47,6 +50,7 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/members',
     icon: Users,
     roles: ['owner', 'manager', 'front_desk'],
+    badgeKey: 'renewalRequests',
   },
   {
     title: 'Payments',
@@ -105,6 +109,13 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ['owner', 'manager', 'front_desk'],
   },
   { title: 'Settings', href: '/settings', icon: Settings, roles: ['owner'] },
+  // Managers cannot open Settings, but they may set the gym's days off.
+  {
+    title: 'Gym schedule',
+    href: '/settings/schedule',
+    icon: CalendarOff,
+    roles: ['manager'],
+  },
 ]
 
 export function navItemsForRole(role: StaffRole) {

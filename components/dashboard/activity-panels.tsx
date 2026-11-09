@@ -8,6 +8,8 @@ import { recentPayments } from '@/lib/db/payments'
 import { recentMemberships } from '@/lib/db/memberships'
 import { listVisitors, type VisitorStatus } from '@/lib/db/visitors'
 import { listMembers } from '@/lib/db/members'
+import { listPendingRenewalRequests } from '@/lib/db/renewal-requests'
+import { relativeTimeLabel } from '@/lib/relative-time'
 import { formatDate, formatMoney, formatTime } from '@/lib/format'
 import { PAYMENT_METHOD_LABELS } from '@/lib/members'
 
@@ -163,6 +165,45 @@ export async function ExpiringSoonPanel({ branchIds }: { branchIds: string[] | n
               />
             )
           })}
+        </ActivityList>
+      )}
+    </ChartCard>
+  )
+}
+
+/**
+ * Members who tapped "renew" and are waiting for a call. Same rows as
+ * /members/requests (same branch filter), newest ask first, capped at the
+ * panel's usual height.
+ */
+export async function RenewalRequestsPanel({ branchIds }: { branchIds: string[] | null }) {
+  const all = await listPendingRenewalRequests(branchIds)
+  const rows = all.slice(0, 5)
+
+  return (
+    <ChartCard
+      title="Renewal requests"
+      description={
+        all.length
+          ? `${all.length} member${all.length === 1 ? '' : 's'} waiting for a call`
+          : 'No one is waiting'
+      }
+      href="/members/requests"
+      linkLabel="View all"
+    >
+      {rows.length === 0 ? (
+        <ActivityEmpty>All caught up. New renewal requests appear here.</ActivityEmpty>
+      ) : (
+        <ActivityList>
+          {rows.map((row) => (
+            <ActivityRow
+              key={row.id}
+              href={`/members/${row.member_id}`}
+              title={row.member?.full_name ?? 'Unknown member'}
+              subtitle={[row.member?.member_code, row.member?.phone].filter(Boolean).join(' · ')}
+              value={relativeTimeLabel(row.last_requested_at) ?? formatDate(row.last_requested_at)}
+            />
+          ))}
         </ActivityList>
       )}
     </ChartCard>

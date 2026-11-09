@@ -17,6 +17,101 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-11-09 — Gym schedule, attendance calendar, renewal read (backend)
+
+### Added
+
+- **Gym schedule (org-wide, every branch).** Weekly off days live in
+  `orgs.settings.weekly_off` (ISO weekdays 1=Mon..7=Sun, stored sorted and
+  deduplicated, `[]` = open every day), set through `set_org_setting`; owners and
+  managers may set it. Closed dates live in the new `org_holidays` table, added and
+  removed through `add_org_holiday(date, name)` / `remove_org_holiday(id)` (owner or
+  manager; audited; staff read their own org's rows).
+- **`my_attendance_calendar(year, month)`** for the members' app: every day of the
+  month as present / absent / off / holiday / none in the gym's timezone, with
+  present/absent counts and today's date. Only a member's own data; staff are refused.
+- **`my_renewal_request()`**: the member's own pending renewal request (or null), so
+  the app can keep showing "requested" after a restart. `renewal_requests` is now in
+  the `supabase_realtime` publication for the console's live toast.
+
+### Security
+
+- **`set_org_setting` let a member through.** The owner check was null-unsafe: for a
+  member principal `jwt_is_owner()` is null, so the guard never fired and a signed-in
+  member could change their gym's settings (`track_check_out`, `balance_url`, ...).
+  Fixed in `20261109130100`; the new gate asserts desk, trainer and member are refused.
+
+### Database
+
+- `20261109130000_gym_schedule_and_calendar.sql`, `20261109130100_set_org_setting_null_guard.sql`,
+  `20261109130200_org_holidays_revoke_anon.sql`; gate `supabase/tests/attendance_calendar.sql`.
+## 2026-11-09 — Door-display QR check-in (backend)
+
+### Added
+
+- **Rotating door QR, server side.** A member can scan the code shown on a door reader's screen (every 30 s a new 8-digit code) in the app; the server checks it, applies the same membership/dues rules as a card tap, records the visit as a QR check-in and tells the reader to open the door. Opening hours of the branch are respected, repeat scans the same day open the door without a second visit, and a member who types or scans 10 bad codes in 10 minutes is paused. Firmware 1.4.0 and the app's scan screen are still to come; firmware 1.3.0 readers are unaffected.
+- `rfid-poll` Edge Function (reader asks for a pending unlock; each unlock is handed out once and expires after 20 s) and `rfid-sync?qr=1` (reader fetches its QR number and secret). Plain `rfid-sync` and `rfid-check` answers are unchanged.
+- `scripts/door-qr-sim.mjs`: plays the phone and the reader against the live backend for an end-to-end check without hardware.
+
+### Database
+
+- `20261109131000_door_qr.sql`: `devices.qr_id`, `device_qr_secrets`, `device_unlock_requests`, `door_qr_failures`, `door_qr_code`, `door_member_tap` (extracted from `rfid_check_in`, card behaviour unchanged), `member_door_check_in`, `rfid_poll_unlock`, `rfid_qr_config`; `rotate_device_key` also rotates the QR secret. Gate `supabase/tests/door_qr.sql`.
+
+---
+## 2026-11-09 — Renewal alerts and gym schedule (console)
+
+### Added (console)
+
+- **Renewal-request alerts.** The Members link in the sidebar carries a badge with the
+  number of pending renewal requests (hidden at 0, "9+" above 9, labelled for screen
+  readers) for owner, manager and front desk. The dashboard has a "Renewal requests"
+  card with the newest five (name, member code, phone, how long ago) and a View all link.
+  A live pop-up ("<name> asked to renew", with an Open action) appears when a request
+  arrives or is re-asked, and refreshes the badge and card; it listens through Supabase
+  Realtime as the signed-in staff member and falls back to refreshing every 45 s if the
+  socket fails. `countPendingRenewalRequests` now takes the same branch filter as the list.
+- **Settings -> Gym schedule** (`/settings/schedule`, owner and manager): weekly days
+  off and a dated holiday list. The members' attendance calendar shows these as off
+  instead of absent.
+
+## 2026-11-09 — Member app PIN login (backend)
+
+### Added
+
+- **PIN login for the members' app.** Desk, managers and owners can set a
+  member's 4-6 digit PIN (or have a random 6-digit one generated and shown
+  once), reset it (also clears a lock) and clear it. Members sign in with the
+  printed card number or phone plus the PIN; five wrong PINs lock the member for
+  15 minutes, doubling on each repeat lock (up to about 16 hours) until a correct
+  PIN or a desk reset. Nothing about the PIN reaches the audit log. Sign-in only
+  ever works for app accounts made for PIN login, never for an email-invited or
+  staff account.
+- **Member self-calls:** `my_card()` (printed number of the member's live card)
+  and `request_renewal()` (the same one-pending-request rules as the public
+  balance page, from inside the app).
+
+### Added (console)
+
+- **Member app PIN controls.** The member profile has a "Member app PIN" card
+  (owner, manager, front desk; hidden from trainers) showing No PIN, PIN set
+  on a date, or Locked until a time, with Generate new PIN, Set custom PIN
+  (4-6 digits) and Remove PIN. A generated PIN appears once in a dialog with a
+  copy button and a warning; closing the dialog drops it. The Cards list has a
+  compact PIN button on every row held by a member, opening the same flow. The
+  PIN never goes into a URL, toast, log or revalidated page state, and any
+  message the database raises (for example a refused member) shows as the form
+  error.
+
+### Database
+
+- `member_pins` (+ `lock_level`, hardening migration `20261109120100`), `verify_member_pin`, `member_login_lookup` (service role
+  only), `set_member_pin`, `clear_member_pin`, `member_pin_status`, `my_card`,
+  `request_renewal`, internal `file_renewal_request`. Migration
+  `20261109120000_member_pin.sql`; gate `supabase/tests/member_pin_login.sql`.
+- Edge Function `member-login` (`verify_jwt` off).
+
+---
+
 ## 2026-11-09 — Printed card numbers, a public balance page, renewal requests, a card designer
 
 ### Added

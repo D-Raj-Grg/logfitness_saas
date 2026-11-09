@@ -718,6 +718,45 @@ export type Database = {
           },
         ]
       }
+      device_qr_secrets: {
+        Row: {
+          created_at: string
+          device_id: string
+          org_id: string
+          qr_secret: string
+          rotated_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          device_id: string
+          org_id: string
+          qr_secret: string
+          rotated_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          device_id?: string
+          org_id?: string
+          qr_secret?: string
+          rotated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "device_qr_secrets_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: true
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "device_qr_secrets_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       device_tokens: {
         Row: {
           app_version: string | null
@@ -810,6 +849,82 @@ export type Database = {
           },
         ]
       }
+      device_unlock_requests: {
+        Row: {
+          attendance_id: string | null
+          consumed_at: string | null
+          created_at: string
+          device_id: string
+          display: Json
+          id: string
+          member_id: string
+          org_id: string
+        }
+        Insert: {
+          attendance_id?: string | null
+          consumed_at?: string | null
+          created_at?: string
+          device_id: string
+          display: Json
+          id?: string
+          member_id: string
+          org_id: string
+        }
+        Update: {
+          attendance_id?: string | null
+          consumed_at?: string | null
+          created_at?: string
+          device_id?: string
+          display?: Json
+          id?: string
+          member_id?: string
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "device_unlock_requests_attendance_fkey"
+            columns: ["attendance_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "attendance"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "device_unlock_requests_attendance_fkey"
+            columns: ["attendance_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "attendance_detail"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "device_unlock_requests_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "device_unlock_requests_member_fkey"
+            columns: ["member_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "member_overview"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "device_unlock_requests_member_fkey"
+            columns: ["member_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "device_unlock_requests_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       devices: {
         Row: {
           branch_id: string
@@ -821,6 +936,7 @@ export type Database = {
           last_seen_at: string | null
           name: string
           org_id: string
+          qr_id: number
           status: Database["public"]["Enums"]["device_status"]
           updated_at: string
         }
@@ -834,6 +950,7 @@ export type Database = {
           last_seen_at?: string | null
           name: string
           org_id: string
+          qr_id: number
           status?: Database["public"]["Enums"]["device_status"]
           updated_at?: string
         }
@@ -847,6 +964,7 @@ export type Database = {
           last_seen_at?: string | null
           name?: string
           org_id?: string
+          qr_id?: number
           status?: Database["public"]["Enums"]["device_status"]
           updated_at?: string
         }
@@ -867,6 +985,49 @@ export type Database = {
           },
           {
             foreignKeyName: "devices_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      door_qr_failures: {
+        Row: {
+          failed_at: string
+          id: number
+          member_id: string
+          org_id: string
+        }
+        Insert: {
+          failed_at?: string
+          id?: never
+          member_id: string
+          org_id: string
+        }
+        Update: {
+          failed_at?: string
+          id?: never
+          member_id?: string
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "door_qr_failures_member_fkey"
+            columns: ["member_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "member_overview"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "door_qr_failures_member_fkey"
+            columns: ["member_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "door_qr_failures_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "orgs"
@@ -1099,6 +1260,61 @@ export type Database = {
           {
             foreignKeyName: "member_cards_revoked_by_fkey"
             columns: ["revoked_by", "org_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id", "org_id"]
+          },
+        ]
+      }
+      member_pins: {
+        Row: {
+          failed_attempts: number
+          lock_level: number
+          locked_until: string | null
+          member_id: string
+          org_id: string
+          pin_hash: string
+          set_at: string
+          set_by: string | null
+        }
+        Insert: {
+          failed_attempts?: number
+          lock_level?: number
+          locked_until?: string | null
+          member_id: string
+          org_id: string
+          pin_hash: string
+          set_at?: string
+          set_by?: string | null
+        }
+        Update: {
+          failed_attempts?: number
+          lock_level?: number
+          locked_until?: string | null
+          member_id?: string
+          org_id?: string
+          pin_hash?: string
+          set_at?: string
+          set_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_pins_member_fkey"
+            columns: ["member_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "member_overview"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "member_pins_member_fkey"
+            columns: ["member_id", "org_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "member_pins_set_by_fkey"
+            columns: ["set_by", "org_id"]
             isOneToOne: false
             referencedRelation: "staff"
             referencedColumns: ["id", "org_id"]
@@ -1887,6 +2103,51 @@ export type Database = {
             foreignKeyName: "org_counters_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: true
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_holidays: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          on_date: string
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          on_date: string
+          org_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          on_date?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_holidays_created_by_fkey"
+            columns: ["created_by", "org_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id", "org_id"]
+          },
+          {
+            foreignKeyName: "org_holidays_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
             referencedRelation: "orgs"
             referencedColumns: ["id"]
           },
@@ -3010,6 +3271,24 @@ export type Database = {
           phone: string
         }[]
       }
+      add_org_holiday: {
+        Args: { p_name: string; p_on_date: string }
+        Returns: {
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          on_date: string
+          org_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "org_holidays"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       adjust_membership_dates: {
         Args: {
           p_end_date: string
@@ -3258,6 +3537,7 @@ export type Database = {
         Args: { p_org_id: string }
         Returns: number
       }
+      clear_member_pin: { Args: { p_member_id: string }; Returns: Json }
       clear_notification_credential: {
         Args: { p_provider_id: string }
         Returns: undefined
@@ -3386,6 +3666,18 @@ export type Database = {
           subtotal_paisa: number
         }[]
       }
+      door_member_tap: {
+        Args: {
+          p_device_id: string
+          p_member_id: string
+          p_method: Database["public"]["Enums"]["attendance_method"]
+        }
+        Returns: Json
+      }
+      door_qr_code: {
+        Args: { p_qr_id: number; p_secret: string; p_window: number }
+        Returns: string
+      }
       enqueue_birthday_greetings: { Args: never; Returns: number }
       enqueue_dues_reminders: { Args: never; Returns: number }
       enqueue_notification: {
@@ -3406,6 +3698,16 @@ export type Database = {
       enqueue_notifications: { Args: never; Returns: Json }
       enqueue_renewal_reminders: { Args: never; Returns: number }
       enqueue_visitor_follow_ups: { Args: never; Returns: number }
+      file_renewal_request: {
+        Args: {
+          p_member_id: string
+          p_note: string
+          p_org_id: string
+          p_phone: string
+          p_stock_id: string
+        }
+        Returns: string
+      }
       format_card_no: { Args: { p_no: number }; Returns: string }
       format_paisa: {
         Args: { p_currency?: string; p_paisa: number }
@@ -3529,7 +3831,12 @@ export type Database = {
         Args: { p_left_on: string; p_member_id: string }
         Returns: Database["public"]["Enums"]["member_status"]
       }
+      member_door_check_in: { Args: { p_payload: string }; Returns: Json }
       member_is_contactable: { Args: { p_member_id: string }; Returns: boolean }
+      member_login_lookup: {
+        Args: { p_identifier: string; p_org_slug: string }
+        Returns: string
+      }
       member_message_target: {
         Args: {
           p_channel?: Database["public"]["Enums"]["notification_channel"]
@@ -3562,6 +3869,55 @@ export type Database = {
           to_address: string
         }[]
       }
+      member_pin_audit: {
+        Args: {
+          p_after: boolean
+          p_before: boolean
+          p_member: Database["public"]["Tables"]["members"]["Row"]
+        }
+        Returns: undefined
+      }
+      member_pin_authorize: {
+        Args: { p_member_id: string }
+        Returns: {
+          accepted_at: string | null
+          address: string | null
+          archived_at: string | null
+          archived_by: string | null
+          archived_reason: string | null
+          auth_user_id: string | null
+          created_at: string
+          created_by: string | null
+          date_of_birth: string | null
+          email: string | null
+          emergency_contact_name: string | null
+          emergency_contact_phone: string | null
+          full_name: string
+          gender: Database["public"]["Enums"]["member_gender"] | null
+          home_branch_id: string
+          id: string
+          invited_at: string | null
+          invited_by: string | null
+          joined_on: string
+          left_on: string | null
+          left_reason: string | null
+          member_code: string
+          notes: string | null
+          notifications_opt_out: boolean
+          org_id: string
+          phone: string
+          photo_path: string | null
+          status: Database["public"]["Enums"]["member_status"]
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "members"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      member_pin_status: { Args: { p_member_id: string }; Returns: Json }
       membership_movement: {
         Args: {
           p_branch_ids?: string[]
@@ -3583,6 +3939,12 @@ export type Database = {
         Args: { p_member_id?: string; p_ttl_seconds?: number }
         Returns: Json
       }
+      my_attendance_calendar: {
+        Args: { p_month: number; p_year: number }
+        Returns: Json
+      }
+      my_card: { Args: never; Returns: Json }
+      my_renewal_request: { Args: never; Returns: Json }
       nepal_mobile_carrier: { Args: { p_to: string }; Returns: string }
       new_device_key: { Args: never; Returns: string }
       next_free_card_no: { Args: never; Returns: number }
@@ -3777,6 +4139,7 @@ export type Database = {
         }
         Returns: Json
       }
+      remove_org_holiday: { Args: { p_id: string }; Returns: undefined }
       render_notification_template: {
         Args: { p_body: string; p_vars: Json }
         Returns: string
@@ -3804,6 +4167,10 @@ export type Database = {
       request_notification_gateway_balance: {
         Args: { p_provider_id: string }
         Returns: undefined
+      }
+      request_renewal: {
+        Args: { p_note?: string; p_phone?: string }
+        Returns: Json
       }
       reschedule_class_session: {
         Args: { p_ends_at: string; p_session_id: string; p_starts_at: string }
@@ -3905,6 +4272,8 @@ export type Database = {
         Returns: Json
       }
       rfid_open_ended_date: { Args: never; Returns: string }
+      rfid_poll_unlock: { Args: { p_key_hash: string }; Returns: Json }
+      rfid_qr_config: { Args: { p_key_hash: string }; Returns: Json }
       rfid_sync_cards: {
         Args: { p_after?: string; p_key_hash: string; p_limit?: number }
         Returns: Json
@@ -4011,6 +4380,10 @@ export type Database = {
         Args: { p_left_on?: string; p_member_id: string; p_reason?: string }
         Returns: Json
       }
+      set_member_pin: {
+        Args: { p_member_id: string; p_pin?: string }
+        Returns: Json
+      }
       set_notification_credential: {
         Args: { p_provider_id: string; p_secret: string }
         Returns: undefined
@@ -4083,6 +4456,10 @@ export type Database = {
       validate_class_recurrence: {
         Args: { p_recurrence: Json }
         Returns: boolean
+      }
+      verify_member_pin: {
+        Args: { p_member_id: string; p_pin: string }
+        Returns: Json
       }
       verify_qr_token: { Args: { p_token: string }; Returns: Json }
       visitor_message_target: {

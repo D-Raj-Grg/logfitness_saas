@@ -9,8 +9,12 @@ import { countPendingRenewalRequests } from '@/lib/db/renewal-requests'
  * /members/requests. Nothing renders when no one is waiting, and a failed
  * count renders nothing too rather than taking the list down with it.
  */
-export async function RenewalRequestsBadge() {
-  const count = await countPendingRenewalRequests().catch(() => 0)
+export async function RenewalRequestsBadge({
+  branchIds,
+}: {
+  branchIds?: string[] | null
+}) {
+  const count = await countPendingRenewalRequests(branchIds).catch(() => 0)
   if (count === 0) return null
 
   return (

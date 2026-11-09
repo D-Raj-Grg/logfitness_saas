@@ -13,6 +13,13 @@
 //                                 and 00000000 for the other codes.) Then:
 //                                   #END,<org-today YYYYMMDD>
 //                                   #MORE,<last uid>,<org-today YYYYMMDD>
+//   GET  ?qr=1                    the door-QR config as JSON (not the card list):
+//                                 { "qr": { "qr_id": 7, "secret_b64": "..." },
+//                                   "server_time": <unix seconds> }
+//                                 The reader keeps the secret in flash and derives
+//                                 the rotating 8-digit code from it (see the
+//                                 firmware README, "QR protocol"). Active readers
+//                                 only; a plain GET is unchanged.
 //   POST { events: [{ uid, ts }] }  backfill taps the reader let in while
 //                                 offline (max 100). ts = epoch seconds or ISO.
 //                                 The reply counts accepted / duplicate /
@@ -23,7 +30,8 @@
 // Same auth model as rfid-check: `verify_jwt: false` on purpose, the reader's
 // only credential is the `x-device-key` header; the key is hashed here and only
 // the hash reaches Postgres. The service-role key is used solely to call
-// rfid_sync_cards / rfid_log_offline, both executable by service_role only.
+// rfid_sync_cards / rfid_log_offline / rfid_qr_config, all executable by
+// service_role only.
 //
 // Status codes: 401 missing/unknown key, 403 disabled reader, 400 malformed
 // request, 405 other methods, 500 anything unexpected (details stay in logs).
@@ -89,7 +97,33 @@ Deno.serve(async (req: Request) => {
 
   if (req.method === 'GET') {
     const url = new URL(req.url)
-    const after = url.searchParams.get('after')
+
+    // Door-QR config: opt-in, so the text card list below stays byte-identical
+    // for readers that do not ask for it (firmware 1.3.0 and older).
+    if (url.searchParams.get('qr') === '1') {
+      const { data: q, error: qErr } = await admin.rpc('rfid_qr_config', {
+        p_key_hash: keyHash,
+      })
+      if (qErr) {
+        console.error('rfid_qr_config failed', qErr.code, qErr.message)
+        return jsonResponse({ error: 'Sync failed' }, 500)
+      }
+      const qr = q as {
+        decision?: string
+        reason?: string
+        qr?: { qr_id: number; secret_b64: string }
+        server_time?: number
+      } | null
+      if (qr?.reason === 'device_unknown') return jsonResponse(qr, 401)
+      if (qr?.reason === 'device_disabled') return jsonResponse(qr, 403)
+      if (qr?.decision !== 'ok' || !qr.qr) {
+        console.error('rfid_qr_config unexpected shape')
+        return jsonResponse({ error: 'Sync failed' }, 500)
+      }
+      return jsonResponse({ qr: qr.qr, server_time: qr.server_time })
+    }
+
+    const after =url.searchParams.get('after')
     if (after !== null && (after.length > 40 || !/^[0-9A-Fa-f:\- ]*$/.test(after))) {
       return jsonResponse({ error: 'after must be a card UID' }, 400)
     }
