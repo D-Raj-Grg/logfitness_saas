@@ -276,6 +276,21 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
+### Member app backend: PIN login and member self-calls (decided 2026-11-09)
+
+The members' app (`../logfitness_membership_flutter`, LOG-branded, separate from Gym Tross) signs members in with **printed card number or phone + a PIN staff set**. Full contract in that repo's `PLANNING.md` §4–5; its `TASKS.md` Phase 0 is the same list. The PIN belongs to the member, not the card (cards are reusable stock). Gym Tross keeps its member shell and `current_member()`'s signature until the new app ships.
+
+- [ ] Spike: `member-login` can create a synthetic never-mailed auth user (`m-<member_id>@members.invalid`) linked via `members.auth_user_id` and mint a session; confirm GoTrue accepts it, `link_member_account` cannot adopt it, the access-token hook stamps the member claims, and `accepted_at` stays null (`members_accept_requires_invite`).
+- [ ] `member_pins` (bcrypt hash, `failed_attempts`, `locked_until`; RLS on, no client write) + `verify_member_pin` (service_role only; dummy hash when no PIN; 5 failures → 15 min lock).
+- [ ] `set_member_pin` / `clear_member_pin` (desk+, branch-scoped, audited without ever logging the PIN; generated PIN returned once; reset clears the lock and revokes the member's sessions).
+- [ ] `member-login` Edge Function (`verify_jwt` off): 1–4 digits = card number, 7+ = phone; org from build config; one generic `invalid`, plus `locked` / `rate_limited`; per-IP window on the **last** `x-forwarded-for` hop; per-org attempt ceiling in Postgres.
+- [ ] Gate `supabase/tests/member_pin_login.sql` (lockout, reissued card, archived/left, 3- vs 7-digit ambiguity, cross-org, grants).
+- [ ] Console: PIN controls on `/members/[id]` and the `/cards` row.
+- [ ] `my_card()` (additive) and member-callable `request_renewal(p_phone, p_note)` reusing `renewal_requests` rules.
+- [ ] Verify `attendance_snapshot` is callable by a member token for their own id only.
+- [ ] Verify the FCM send path of `push-fanout` end to end (Firebase project for the member bundle id, `FCM_SERVICE_ACCOUNT_JSON`).
+- [ ] After the member app ships: decide the fate of `invite_member` / `link_member_account` and the console "Invite to app" action.
+
 ### Printed card numbers, public balance page, renewal requests, card designer (2026-11-08)
 
 **Status 2026-11-09.** Built on `feat/card-stock-balance`. Live migrations:
