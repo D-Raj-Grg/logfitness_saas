@@ -2,7 +2,8 @@
 
 import { useMemo, useRef, useState } from 'react'
 
-import { clamp, qrMatrix, qrRuns, type CardBox, type CardPlacement } from '@/lib/cards/card-design'
+import { clamp, type CardBox, type CardPlacement } from '@/lib/cards/card-design'
+import { qrMatrix, qrRuns } from '@/lib/cards/card-qr'
 import { cn } from '@/lib/utils'
 
 type Drag = {

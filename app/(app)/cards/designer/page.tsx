@@ -31,22 +31,18 @@ export default async function CardDesignerPage() {
     designRows.map((d) => d.image_path),
     TEMPLATE_URL_TTL_SECONDS
   )
-  const designs: StudioDesign[] = designRows.flatMap((d) => {
-    const url = urls[d.image_path]
-    if (!url) return []
-    return [
-      {
-        id: d.id,
-        name: d.name,
-        imagePath: d.image_path,
-        url,
-        width: d.width,
-        height: d.height,
-        placement: placementFrom(d.placement) ?? DEFAULT_PLACEMENT,
-        labelPrefix: d.label_prefix,
-      },
-    ]
-  })
+  // A design whose picture failed to sign is kept, with no url: the gallery
+  // shows it as unavailable rather than silently losing it.
+  const designs: StudioDesign[] = designRows.map((d) => ({
+    id: d.id,
+    name: d.name,
+    imagePath: d.image_path,
+    url: urls[d.image_path] ?? null,
+    width: d.width,
+    height: d.height,
+    placement: placementFrom(d.placement) ?? DEFAULT_PLACEMENT,
+    labelPrefix: d.label_prefix,
+  }))
 
   const batches: StudioBatch[] = batchRows.map((b) => ({
     id: b.id,

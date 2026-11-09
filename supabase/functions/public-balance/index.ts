@@ -22,9 +22,9 @@
 //
 // Status codes: business answers (org_not_found, card_not_found,
 // card_unassigned, ok) are 200 with the RPC's jsonb verbatim -- they are
-// answers, not errors. too_soon -> 429. 400 malformed input, 405 other
-// methods/paths, 429 rate limited, 500 anything unexpected (generic; details
-// stay in the logs).
+// answers, not errors. too_soon -> 429. 400 malformed input, 404 unknown
+// path, 405 wrong method (with Allow), 429 rate limited, 500 anything
+// unexpected (generic; details stay in the logs).
 //
 // CORS: BALANCE_ALLOWED_ORIGINS (optional function secret, comma-separated)
 // lists the gym sites allowed to call this from the browser; the request's
@@ -62,7 +62,9 @@ function corsHeaders(req: Request): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': allow,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'content-type',
+    // content-type for plain fetch; the rest so supabase.functions.invoke works too.
+    'Access-Control-Allow-Headers': 'content-type, authorization, apikey, x-client-info',
+    'Access-Control-Max-Age': '600',
     Vary: 'Origin',
     'Cache-Control': 'no-store',
   }
@@ -87,10 +89,17 @@ const RATE_LIMIT = 30
 const RATE_WINDOW_MS = 60_000
 const hits = new Map<string, number[]>()
 
+// The LAST x-forwarded-for entry is the one the edge appended; the first is
+// whatever the client chose to send and would let it rotate past the limit.
 function clientIp(req: Request): string {
+  const direct = req.headers.get('cf-connecting-ip')
+  if (direct) return direct.trim()
   const fwd = req.headers.get('x-forwarded-for')
-  if (fwd) return fwd.split(',')[0].trim()
-  return req.headers.get('cf-connecting-ip') ?? 'unknown'
+  if (fwd) {
+    const parts = fwd.split(',').map((s) => s.trim()).filter(Boolean)
+    if (parts.length > 0) return parts[parts.length - 1]
+  }
+  return 'unknown'
 }
 
 function rateLimited(ip: string): boolean {
@@ -118,6 +127,7 @@ function parseOrgSlug(value: unknown): string | null {
 // "4", "04", "0004", "NO. 0004" -> 4. Mirrors public.parse_card_no.
 function parseCardNo(value: unknown): number | null {
   if (typeof value !== 'string' && typeof value !== 'number') return null
+  if (typeof value === 'number' && !Number.isInteger(value)) return null
   const digits = String(value).replace(/[^0-9]/g, '')
   if (digits === '' || digits.length > 4) return null
   const n = Number.parseInt(digits, 10)
@@ -163,10 +173,18 @@ Deno.serve(async (req: Request) => {
   const isBalance = req.method === 'GET' && subPath === ''
   const isRenew = req.method === 'POST' && subPath === '/renew-request'
   if (!isBalance && !isRenew) {
-    return jsonResponse(
-      req,
-      { error: 'GET /public-balance or POST /public-balance/renew-request' },
-      405,
+    const knownPath = subPath === '' || subPath === '/renew-request'
+    if (!knownPath) return jsonResponse(req, { error: 'Not found' }, 404)
+    return new Response(
+      JSON.stringify({ error: 'GET /public-balance or POST /public-balance/renew-request' }),
+      {
+        status: 405,
+        headers: {
+          ...corsHeaders(req),
+          'Content-Type': 'application/json',
+          Allow: subPath === '' ? 'GET, OPTIONS' : 'POST, OPTIONS',
+        },
+      },
     )
   }
 

@@ -59,6 +59,10 @@ export async function saveCardDesign(input: unknown): Promise<DesignActionResult
     })
   } catch (error) {
     if (data.imagePath !== previous) await removeCardTemplate(data.imagePath)
+    // unique (org_id, name) raises the raw constraint text; say it plainly.
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : null
+    if (code === '23505') return { error: `A design named ${data.name} already exists.` }
     return { error: rpcErrorMessage(error, 'The design could not be saved.') }
   }
 

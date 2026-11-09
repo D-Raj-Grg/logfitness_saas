@@ -321,6 +321,20 @@ begin
   end;
   assert failed, 'org B handled org A''s request';
 
+  -- a flood of first requests across an org is throttled ------------------------------
+  execute 'reset role';
+  perform set_config('request.jwt.claims', null, true);
+  insert into public.renewal_requests (org_id, member_id, status, handled_at, handled_note)
+  select org_a, m_nocard, 'done', now(), 'flood fixture' from generate_series(1, 30);
+  execute 'set local role service_role';
+  result := public.public_renewal_request('omega-fit-test', 1, null, null);
+  assert result ->> 'result' = 'too_soon', format('the org-wide hourly cap did not hold: %s', result);
+  select count(*) into n from public.renewal_requests where member_id = m_active and status = 'pending';
+  assert n = 0, 'a request was written past the hourly cap';
+  execute 'reset role';
+  perform set_config('request.jwt.claims', null, true);
+  delete from public.renewal_requests where handled_note = 'flood fixture';
+
   -- the balance_url preference ------------------------------------------------------------
   execute 'reset role';
   perform set_config('request.jwt.claims', json_build_object(

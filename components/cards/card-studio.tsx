@@ -39,6 +39,7 @@ import {
 import { CARD_NO_MAX, CARD_NO_MIN, cardLabel, formatCardNo } from '@/lib/cards/card-no'
 import { buildCardPdf, type CardTemplate } from '@/lib/cards/card-pdf'
 import { ALLOWED_TEMPLATE_TYPES, MAX_TEMPLATE_BYTES, removeUploadedTemplate, uploadCardTemplate } from '@/lib/cards/template-upload'
+import { formatDate } from '@/lib/format'
 import { MAX_CARDS_PER_RUN } from '@/lib/validation/card-designs'
 
 /** A saved design, with a signed link to its picture. */
@@ -46,7 +47,8 @@ export type StudioDesign = {
   id: string
   name: string
   imagePath: string
-  url: string
+  /** Signed link to the picture; null when signing failed on this load. */
+  url: string | null
   width: number
   height: number
   placement: CardPlacement
@@ -155,10 +157,17 @@ export function CardStudio({
   const exporting = progress !== null
   const busy = saving || numbering || exporting || loadingDesign
   const canSave = template !== null && designName.trim().length > 0 && !busy
-  const canNumber = template !== null && !rangeProblem && !busy
+  // Numbering writes the run against the design, so the design must exist as
+  // saved: a later "Download again" has to reproduce exactly what was printed.
+  const designReady = template !== null && designId !== null && !dirty
+  const canNumber = designReady && !rangeProblem && !busy
 
   /** Bring a saved design back: its picture, placement and prefix. */
   async function loadDesign(d: StudioDesign) {
+    if (!d.url) {
+      toast.error("This design's picture couldn't be loaded. Reload the page and try again.")
+      return
+    }
     setLoadingDesign(true)
     try {
       const res = await fetch(d.url)
@@ -263,8 +272,12 @@ export function CardStudio({
     })
   }
 
-  /** Build the PDF for `cardNos` in the browser and save it. */
-  async function exportPdf(cardNos: number[]) {
+  /**
+   * Build the PDF for `cardNos` in the browser and save it. `reserved` is set
+   * right after numbering: the database already holds those cards, so a build
+   * failure must say so rather than invite a second run of the same numbers.
+   */
+  async function exportPdf(cardNos: number[], reserved = false) {
     if (!template || cardNos.length === 0) return
     setProgress({ done: 0, total: cardNos.length })
     try {
@@ -282,7 +295,16 @@ export function CardStudio({
       download(new Blob([bytes as BlobPart], { type: 'application/pdf' }), `cards-${formatCardNo(first)}-${formatCardNo(last)}.pdf`)
       toast.success(`${cardNos.length} card${cardNos.length === 1 ? '' : 's'} ready.`)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "The PDF couldn't be built.")
+      const why = e instanceof Error ? e.message : "The PDF couldn't be built."
+      if (reserved) {
+        const a = cardNos[0]
+        const b = cardNos[cardNos.length - 1]
+        toast.error(
+          `${why} Cards ${cardLabel(a, labelPrefix)}–${cardLabel(b, labelPrefix)} are now reserved; use Download again below to get the PDF.`
+        )
+      } else {
+        toast.error(why)
+      }
     } finally {
       setProgress(null)
     }
@@ -301,7 +323,7 @@ export function CardStudio({
       const next = res.cardNos[res.cardNos.length - 1] + 1
       setFrom(String(next))
       setTo(String(Math.min(next + 99, CARD_NO_MAX)))
-      await exportPdf(res.cardNos)
+      await exportPdf(res.cardNos, true)
     })
   }
 
@@ -395,6 +417,7 @@ export function CardStudio({
                         max={1}
                         step={0.05}
                         value={placement.codeScale}
+                        aria-valuetext={`${Math.round(placement.codeScale * 100)}% of the box height`}
                         onChange={(e) => update({ ...placement, codeScale: Number(e.target.value) })}
                         className="h-9 w-full"
                       />
@@ -408,6 +431,7 @@ export function CardStudio({
                         max={0.15}
                         step={0.01}
                         value={placement.qrInset}
+                        aria-valuetext={`${Math.round(placement.qrInset * 100)}% of the QR side`}
                         onChange={(e) => update({ ...placement, qrInset: Number(e.target.value) })}
                         className="h-9 w-full"
                       />
@@ -538,7 +562,11 @@ export function CardStudio({
           <p className="text-sm text-muted-foreground" aria-live="polite">
             {rangeProblem ??
               `${count} card${count === 1 ? '' : 's'}: ${cardLabel(fromNo, labelPrefix)} to ${cardLabel(toNo, labelPrefix)}.`}
-            {!template ? ' Pick or upload a design first.' : ''}
+            {!template
+              ? ' Pick or upload a design first.'
+              : !designReady
+                ? ' Save the design first.'
+                : ''}
           </p>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -566,34 +594,48 @@ export function CardStudio({
                 Re-renders a past run with the design and page size loaded above.
               </p>
               <ul className="divide-y rounded-lg border text-sm">
-                {batches.map((b) => (
-                  <li key={b.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
-                    <span>
-                      <span className="font-medium tabular-nums">
-                        {formatCardNo(b.fromNo)}–{formatCardNo(b.toNo)}
+                {batches.map((b) => {
+                  const design = b.designId ? designs.find((d) => d.id === b.designId) : undefined
+                  const designLabel = !b.designId
+                    ? 'No saved design for this run'
+                    : (design?.name ?? 'deleted design')
+                  // Only the run's own design reproduces what was printed.
+                  const loaded = template !== null && designId !== null && designId === b.designId
+                  const why = !b.designId
+                    ? 'No saved design for this run'
+                    : !design
+                      ? 'The design this run used was deleted'
+                      : !loaded
+                        ? `Load design ${design.name} first`
+                        : undefined
+                  return (
+                    <li key={b.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+                      <span>
+                        <span className="font-medium tabular-nums">
+                          {formatCardNo(b.fromNo)}–{formatCardNo(b.toNo)}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {' '}· {b.toNo - b.fromNo + 1} cards · {formatDate(b.createdAt)} · {designLabel}
+                        </span>
                       </span>
-                      <span className="text-muted-foreground">
-                        {' '}· {b.toNo - b.fromNo + 1} cards ·{' '}
-                        {new Date(b.createdAt).toLocaleDateString()}
-                        {b.designId ? ` · ${designs.find((d) => d.id === b.designId)?.name ?? 'deleted design'}` : ''}
-                      </span>
-                    </span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={!template || busy}
-                      onClick={() => {
-                        const nos: number[] = []
-                        for (let n = b.fromNo; n <= b.toNo; n++) nos.push(n)
-                        void exportPdf(nos)
-                      }}
-                    >
-                      <Download />
-                      PDF
-                    </Button>
-                  </li>
-                ))}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!loaded || busy}
+                        title={why}
+                        onClick={() => {
+                          const nos: number[] = []
+                          for (let n = b.fromNo; n <= b.toNo; n++) nos.push(n)
+                          void exportPdf(nos)
+                        }}
+                      >
+                        <Download />
+                        PDF
+                      </Button>
+                    </li>
+                  )
+                })}
               </ul>
             </div>
           ) : null}

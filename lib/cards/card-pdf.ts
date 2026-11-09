@@ -1,15 +1,9 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 
 import { balanceLink } from '@/lib/cards/balance-link'
-import {
-  CARD_PAGES,
-  parseHex,
-  qrMatrix,
-  qrRuns,
-  type CardPageKey,
-  type CardPlacement,
-} from '@/lib/cards/card-design'
+import { CARD_PAGES, parseHex, type CardPageKey, type CardPlacement } from '@/lib/cards/card-design'
 import { cardLabel } from '@/lib/cards/card-no'
+import { qrMatrix, qrRuns } from '@/lib/cards/card-qr'
 
 export type CardTemplate = {
   bytes: ArrayBuffer
