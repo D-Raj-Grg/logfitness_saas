@@ -12,11 +12,20 @@
 // until the next sync -- a card revoked or newly in arrears keeps working
 // offline until then.
 //
+// Door QR (fw 1.4.0): the idle screen shows a QR code that changes every 30 s.
+// A member scans it with the app; the server checks the member in and the reader
+// finds out by polling rfid-poll (about once a second while idle and online),
+// then opens the door exactly like a card tap. The code is
+// HMAC-SHA256(secret, "<qr_id>:<unix/30>"), so it needs only the secret and the
+// clock; both are cached in flash, so the code keeps rotating through a WiFi
+// outage (but the door can only open on a scan while the reader is online).
+//
 // Settings live in config.h (copy config.h.example -> config.h). See README.md.
 //
 // Board: "ESP32 Dev Module", ESP32 Arduino core 2.x, Arduino IDE 1.8.19.
 // Libraries: MFRC522 (GithubCommunity), RTClib (Adafruit), Adafruit GFX,
-// Adafruit SSD1306, ArduinoJson 6.x. LittleFS ships with the ESP32 core.
+// Adafruit SSD1306, ArduinoJson 6.x, QRCode (Richard Moore). LittleFS and mbedTLS
+// ship with the ESP32 core.
 
 #include <WiFi.h>
 #include <LittleFS.h>
@@ -32,6 +41,9 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <time.h>
+#include "lg_qrcode.h"         // QR encoder, vendored in this folder (ricmoo/QRCode, MIT)
+#include <mbedtls/md.h>        // HMAC-SHA256 for the door QR code
+#include <mbedtls/base64.h>    // the QR secret arrives base64 encoded
 // sntp_set_time_sync_notification_cb() is declared in esp_sntp.h on core 3.x
 // (IDF 5) and in both esp_sntp.h and sntp.h on core 2.x (IDF 4.4).
 #if __has_include(<esp_sntp.h>)
@@ -124,7 +136,7 @@
 // ---------------------------------------------------------------------------
 // Behaviour
 // ---------------------------------------------------------------------------
-#define FW_VERSION            "1.3.0"
+#define FW_VERSION            "1.4.0"
 #define TZ_OFFSET_SEC         (5 * 3600 + 45 * 60)  // Nepal, UTC+5:45, no DST
 #define HTTP_TIMEOUT_MS       8000
 #define HTTP_TIMEOUT_DOWN_MS  5000UL   // after a failure, fail faster (TLS alone can take 2-3 s)
@@ -176,12 +188,29 @@
 #define MENU_IDLE_TIMEOUT_MS  30000UL
 #define PIN_IDLE_TIMEOUT_MS   15000UL
 #define SETTINGS_FILE         "/settings.bin"
-#define SETTINGS_MAGIC        0x4C4F5334UL  // "LOS4" (v1.3.0 added resultMs/repeatMs; old files reset to defaults)
+#define SETTINGS_MAGIC        0x4C4F5335UL  // "LOS5" (v1.4.0 added qrOn)
+#define SETTINGS_MAGIC_V4     0x4C4F5334UL  // "LOS4": v1.3.0 file, still accepted (QR defaults to ON)
 #define EXIT_LOCKOUT_MS       1000UL   // ignore further exit presses this long after one
 #define WEB_MAX_FAILS         5
 #define WEB_LOCKOUT_MS        60000UL
 #define TAP_LOG_N             10
 #define NAME_MAX_CHARS        20
+
+// Door QR (fw 1.4.0)
+#define QR_FILE               "/qr.bin"
+#define QR_MAGIC              0x4C475131UL  // "LGQ1"
+#define QR_SECRET_MAX         64            // bytes of decoded secret we keep
+#define QR_WINDOW_SEC         30UL
+#define QR_TICK_MS            200UL         // how often the idle screen checks whether anything changed
+#define QR_PAYLOAD_MAX        32
+#define QR_MODULE_PX          2             // px per QR module on the 128x64 panel
+#define QR_BUF_BYTES          80            // >= qrcode_getBufferSize(2): 25x25 modules
+#define QR_SKEW_IGNORE_SEC    3             // smaller clock differences are HTTP latency, not drift
+#define QR_POLL_MS            1000UL        // while idle and online
+#define QR_POLL_SLOW_MS       5000UL        // after QR_POLL_ERRS_SLOW errors in a row
+#define QR_POLL_CONFIG_MS     30000UL       // 401/403/404: a setup problem, do not hammer
+#define QR_POLL_ERRS_SLOW     3
+#define QR_POLL_TIMEOUT_MS    1500UL        // never hold a card tap up for long
 
 // ---------------------------------------------------------------------------
 // Types (declared before any function so the IDE's auto-prototypes compile)
@@ -249,6 +278,7 @@ struct Settings {
   uint16_t exitMs;      // how long the exit switch releases the door
   uint16_t resultMs;    // how long the result screen stays (cards are not read meanwhile)
   uint16_t repeatMs;    // the same card presented again within this is ignored
+  uint8_t qrOn;         // 1 = show the rotating door QR on the idle screen and poll for scans
 };
 
 enum MenuItem {
@@ -261,6 +291,7 @@ enum MenuItem {
   MI_RELAY_TEST,
   MI_SOUND,
   MI_SOUND_TEST,
+  MI_QR,
   MI_SYNC_NOW,
   MI_BACK,
   MI_COUNT
@@ -290,6 +321,16 @@ struct CheckResult {
   bool fast;       // RES_OFFLINE_ALLOW: decided from the cache on purpose (server is up)
   bool staff;      // a staff card: online reply kind "staff", or offline cache status S
   char clock;      // online staff reply: 'i' clocked in, 'o' clocked out, 'a' already in
+  bool viaQr;      // opened by a phone scan (rfid-poll), not a card
+};
+
+// /qr.bin: the door QR secret, so the code keeps working when WiFi is down.
+struct QrFile {
+  uint32_t magic;
+  uint32_t qrId;
+  int32_t skewSec;                 // server time minus our clock when last measured
+  uint8_t secretLen;
+  uint8_t secret[QR_SECRET_MAX];
 };
 
 // ---------------------------------------------------------------------------
@@ -324,7 +365,7 @@ uint32_t lastUidMs = 0;
 
 // Settings, relay, keypad, menu
 Settings settings = { SETTINGS_MAGIC, 1, 1, (uint16_t)RELAY_OPEN_MS, (uint16_t)EXIT_OPEN_MS,
-                      (uint16_t)RESULT_HOLD_DEFAULT_MS, (uint16_t)SAME_UID_DEFAULT_MS };
+                      (uint16_t)RESULT_HOLD_DEFAULT_MS, (uint16_t)SAME_UID_DEFAULT_MS, 1 };
 bool testOffline = false;         // menu "Offline test": skip the server, decide from the cache
 bool relayActive = false;
 uint32_t relayUntilMs = 0;
@@ -381,6 +422,33 @@ bool syncSorted = true;           // while syncing: every record so far was > th
 char syncPrevUid[20];             // last record written to the temp list (UID_HEX_MAX)
 bool syncHavePrev = false;
 uint32_t cacheSyncDay = 0;        // org-local YYYYMMDD of the last sync (0 = never)
+
+// Door QR state
+bool qrHave = false;              // a secret is cached (loaded from flash or fetched)
+uint32_t qrId = 0;
+uint8_t qrSecret[QR_SECRET_MAX];
+size_t qrSecretLen = 0;
+int32_t qrSkewSec = 0;            // add to our clock to get server time
+QRCode qrCode;
+uint8_t qrModules[QR_BUF_BYTES];
+bool qrBuilt = false;             // qrCode holds the code for qrBuiltWindow
+uint32_t qrBuiltWindow = 0;
+uint8_t qrQuiet = 0;              // quiet zone, in modules
+bool qrDrawnValid = false;        // the last thing drawn on the idle screen was the QR screen
+uint32_t qrDrawnWindow = 0;
+uint16_t qrDrawnMinute = 0;
+uint8_t qrDrawnBar = 0;
+bool qrDrawnNet = false;
+uint32_t qrLastTickMs = 0;
+bool qrPollArmed = false;         // false: next poll is due at once
+uint32_t qrPollNextMs = 0;
+uint8_t qrPollErrs = 0;
+bool qrCfgArmed = false;          // false: fetch the QR config at once
+uint32_t qrCfgNextMs = 0;
+bool qrPollClientReady = false;
+WiFiClientSecure qrPollClient;    // kept open between polls (keep-alive): a TLS handshake a second would stall card taps
+HTTPClient qrPollHttp;
+String qrPollUrl;
 
 // Beep patterns: alternating on/off durations in ms, starting with "on".
 // An active buzzer has one pitch, so each outcome gets its own rhythm:
@@ -538,7 +606,7 @@ void showMessage(const char *line1, const char *line2, const char *line3) {
   display.display();
 }
 
-void drawIdle() {
+void drawIdleClassic() {
   if (!oledOk) return;
   char label[22];
   char hhmm[8];
@@ -571,6 +639,17 @@ void drawIdle() {
   printCentered(dateLine, 38, 1);   // y 38..45
   printCentered("TAP CARD", 48, 2); // y 48..63
   display.display();
+}
+
+// The idle screen: the rotating door QR when it is on and usable, else the 1.3.0
+// clock screen (QR off, no secret cached yet, clock not set, offline test).
+void drawIdle() {
+  if (qrScreenWanted()) {
+    drawIdleQr(true);
+    return;
+  }
+  qrDrawnValid = false;
+  drawIdleClassic();
 }
 
 void drawInfo() {
@@ -868,6 +947,7 @@ void updateNtp() {
         rtc.adjust(DateTime(local.tm_year + 1900, local.tm_mon + 1, local.tm_mday,
                             local.tm_hour, local.tm_min, local.tm_sec));
         rtcTimeValid = true;
+        qrSetSkew(0);  // the RTC is right again: drop any door-QR clock correction
       }
       Serial.printf("[ntp] synced, RTC set to %04d-%02d-%02d %02d:%02d:%02d (UTC+5:45)\n",
                     local.tm_year + 1900, local.tm_mon + 1, local.tm_mday,
@@ -943,6 +1023,431 @@ void maintainWifi() {
 }
 
 // ---------------------------------------------------------------------------
+// Door QR (fw 1.4.0)
+// ---------------------------------------------------------------------------
+// The code on screen is the same number the server computes:
+//   code = (first 4 bytes of HMAC-SHA256(secret, "<qr_id>:<window>") as a
+//           big-endian uint32) % 100000000, zero-padded to 8 digits
+//   window = floor(unix seconds UTC / 30), payload = "LG1.<qr_id>.<code>"
+// The secret and qr_id come from `GET rfid-sync?qr=1` (qrConfigStep) and are
+// cached in /qr.bin, so the code keeps rotating while WiFi is down. The scan
+// itself reaches the reader through `GET rfid-poll` (qrPollStep).
+
+// HMAC-SHA256(key, msg), first four bytes as a big-endian uint32.
+bool qrHmacU32(const uint8_t *key, size_t keyLen, const uint8_t *msg, size_t msgLen, uint32_t &out) {
+  const mbedtls_md_info_t *info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+  uint8_t mac[32];
+  if (info == nullptr) return false;
+  if (mbedtls_md_hmac(info, key, keyLen, msg, msgLen, mac) != 0) return false;
+  out = ((uint32_t)mac[0] << 24) | ((uint32_t)mac[1] << 16) | ((uint32_t)mac[2] << 8) | (uint32_t)mac[3];
+  return true;
+}
+
+// The 8-digit code for (qr_id, window). out must hold 9 bytes.
+bool qrCodeText(const uint8_t *secret, size_t secretLen, uint32_t id, uint32_t window, char *out) {
+  char msg[24];
+  int n = snprintf(msg, sizeof(msg), "%lu:%lu", (unsigned long)id, (unsigned long)window);
+  uint32_t v = 0;
+  if (n <= 0 || n >= (int)sizeof(msg)) return false;
+  if (!qrHmacU32(secret, secretLen, (const uint8_t *)msg, (size_t)n, v)) return false;
+  snprintf(out, 9, "%08lu", (unsigned long)(v % 100000000UL));
+  return true;
+}
+
+#ifdef QR_SELFTEST
+// Compile with #define QR_SELFTEST (top of the sketch or config.h) and watch the
+// Serial log at boot. The expected values were computed with Python's hmac module:
+//   hmac.new(key, msg, sha256).digest()[:4] as big-endian, % 10**8, zero-padded.
+void qrSelfTest() {
+  // RFC 4231 test case 1: key = 20 x 0x0b, data = "Hi There" -> b0344c61...
+  uint8_t k1[20];
+  memset(k1, 0x0b, sizeof(k1));
+  uint32_t v = 0;
+  bool ok1 = qrHmacU32(k1, sizeof(k1), (const uint8_t *)"Hi There", 8, v) && v == 0xb0344c61UL;
+  Serial.printf("[qr-selftest] HMAC-SHA256 RFC4231 #1 first 4 bytes %08lx: %s\n", (unsigned long)v, ok1 ? "PASS" : "FAIL");
+
+  // Door vectors: secret = bytes 0x00..0x1f (base64 AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=)
+  uint8_t sec[32];
+  for (uint8_t i = 0; i < 32; i++) sec[i] = i;
+  static const struct { uint32_t id; uint32_t window; const char *want; } V[] = {
+    { 7, 56789012UL, "06036629" },  // the server's published vector (door_qr_code in the migration)
+    { 7, 56000000UL, "95171647" },
+    { 12, 58000001UL, "79708858" },
+    { 7, 56789013UL, "61789799" },  // the server's second published vector
+    { 1, 0UL, "75481906" },
+  };
+  for (uint8_t i = 0; i < sizeof(V) / sizeof(V[0]); i++) {
+    char c[9] = "";
+    bool ok = qrCodeText(sec, sizeof(sec), V[i].id, V[i].window, c) && strcmp(c, V[i].want) == 0;
+    Serial.printf("[qr-selftest] qr_id %lu window %lu -> %s (want %s): %s\n", (unsigned long)V[i].id,
+                  (unsigned long)V[i].window, c, V[i].want, ok ? "PASS" : "FAIL");
+  }
+}
+#endif
+
+void qrSave() {
+  if (!fsOk || !qrHave) return;
+  QrFile q;
+  memset(&q, 0, sizeof(q));
+  q.magic = QR_MAGIC;
+  q.qrId = qrId;
+  q.skewSec = qrSkewSec;
+  q.secretLen = (uint8_t)qrSecretLen;
+  memcpy(q.secret, qrSecret, qrSecretLen);
+  File f = LittleFS.open(QR_FILE, "w");
+  if (!f) return;
+  f.write((const uint8_t *)&q, sizeof(q));
+  f.close();
+}
+
+void qrLoad() {
+  qrHave = false;
+  qrSecretLen = 0;
+  qrSkewSec = 0;
+  if (!fsOk) return;
+  File f = LittleFS.open(QR_FILE, "r");
+  if (!f) return;
+  QrFile q;
+  if (f.read((uint8_t *)&q, sizeof(q)) == sizeof(q) && q.magic == QR_MAGIC &&
+      q.secretLen >= 16 && q.secretLen <= QR_SECRET_MAX) {
+    qrId = q.qrId;
+    qrSecretLen = q.secretLen;
+    memcpy(qrSecret, q.secret, qrSecretLen);
+    qrSkewSec = q.skewSec;
+    qrHave = true;
+  }
+  f.close();
+}
+
+// Drop the secret (reader refused by the server): a disabled or re-keyed reader
+// must not keep showing a door code.
+void qrForget(const char *why) {
+  if (!qrHave && qrSecretLen == 0) return;
+  Serial.printf("[qr] secret dropped: %s\n", why);
+  qrHave = false;
+  qrSecretLen = 0;
+  qrBuilt = false;
+  qrDrawnValid = false;
+  memset(qrSecret, 0, sizeof(qrSecret));
+  if (fsOk) LittleFS.remove(QR_FILE);
+}
+
+void qrSetSkew(int32_t skew) {
+  if (skew == qrSkewSec) return;
+  qrSkewSec = skew;
+  qrBuilt = false;
+  Serial.printf("[qr] clock correction %ld s\n", (long)skew);
+  qrSave();
+}
+
+// The door QR secret from rfid-sync?qr=1 (base64 as Postgres encode(...,'base64')
+// writes it; URL-safe base64, missing padding and stray whitespace are tolerated).
+// Returns true if the secret was accepted (new or unchanged).
+bool qrApplySecret(unsigned long id, const char *b64) {
+  if (id == 0 || id > 99999999UL || b64 == nullptr) return false;
+  char norm[104];
+  size_t n = 0;
+  for (const char *p = b64; *p != '\0'; p++) {
+    char c = *p;
+    if (c == ' ' || c == '\n' || c == '\r' || c == '\t') continue;
+    if (c == '-') c = '+';
+    else if (c == '_') c = '/';
+    if (n >= sizeof(norm) - 4) return false;  // longer than any secret we keep
+    norm[n++] = c;
+  }
+  if (n < 16) return false;
+  while (n % 4 != 0) norm[n++] = '=';
+  norm[n] = '\0';
+  uint8_t out[QR_SECRET_MAX + 4];
+  size_t olen = 0;
+  if (mbedtls_base64_decode(out, sizeof(out), &olen, (const unsigned char *)norm, n) != 0) return false;
+  if (olen < 16 || olen > QR_SECRET_MAX) return false;
+
+  bool same = qrHave && qrId == (uint32_t)id && qrSecretLen == olen && memcmp(qrSecret, out, olen) == 0;
+  if (!same) {
+    qrId = (uint32_t)id;
+    qrSecretLen = olen;
+    memcpy(qrSecret, out, olen);
+    qrHave = true;
+    qrBuilt = false;
+    qrSave();
+    Serial.printf("[qr] secret stored for qr_id %lu (%u bytes)\n", id, (unsigned)olen);
+  }
+  memset(out, 0, sizeof(out));
+  return true;
+}
+
+// `server_time` (unix seconds) from rfid-sync?qr=1 and rfid-poll. If our RTC is off by
+// more than a couple of seconds (latency is not drift), codes are computed from
+// the RTC plus this correction, so a drifting DS3231 does not invalidate them.
+void qrApplyServerTime(uint32_t serverUnix) {
+  if (serverUnix < 1704067200UL || !rtcOk || !rtcTimeValid) return;  // before 2024: nonsense
+  int64_t diff = (int64_t)serverUnix - (int64_t)rtcUnixUtc();
+  if (diff >= -QR_SKEW_IGNORE_SEC && diff <= QR_SKEW_IGNORE_SEC) diff = 0;
+  if (diff > 86400 * 30 || diff < -86400 * 30) {
+    Serial.println("[qr] server time differs from the RTC by over 30 days: not corrected, fix the clock");
+    return;
+  }
+  qrSetSkew((int32_t)diff);
+}
+
+// Fetch the door QR secret, qr_id and the server's clock: `GET rfid-sync?qr=1`
+// (JSON {"qr":{"qr_id":7,"secret_b64":"..."},"server_time":1700000000}). Runs once
+// WiFi is up, then every sync interval; a failure retries after a minute. Returns
+// true if it used the network.
+bool qrConfigStep() {
+  if (!settings.qrOn || WiFi.status() != WL_CONNECTED || serverRecentlyDown()) {
+    if (!settings.qrOn) qrCfgArmed = false;  // fetch at once when switched back on
+    return false;
+  }
+  uint32_t now = millis();
+  if (qrCfgArmed && (int32_t)(now - qrCfgNextMs) < 0) return false;
+  qrCfgArmed = true;
+  qrCfgNextMs = now + SYNC_RETRY_MS;  // overwritten on success
+
+  qrPollClient.stop();  // one TLS session at a time (heap)
+  WiFiClientSecure client;
+  client.setInsecure();  // see README "Security"
+  client.setHandshakeTimeout(BG_TIMEOUT_MS / 1000);
+  HTTPClient http;
+  http.setConnectTimeout(BG_TIMEOUT_MS);
+  http.setTimeout(BG_TIMEOUT_MS);
+  String url = String(RFID_SYNC_ENDPOINT) + "?qr=1&limit=1";  // limit: an older server ignores qr=1 and would send the card list
+  if (!http.begin(client, url)) return true;
+  http.addHeader("x-device-key", DEVICE_KEY);  // never logged
+  int code = http.GET();
+  String body = (code == 200) ? http.getString() : String();
+  http.end();
+
+  if (code == 401 || code == 403) {
+    qrForget(code == 401 ? "qr fetch: device key unknown" : "qr fetch: reader disabled");
+    qrCfgNextMs = millis() + SYNC_RETRY_BADKEY_MS;
+    return true;
+  }
+  if (code != 200) {
+    noteServerFail();
+    Serial.printf("[qr] config fetch failed (HTTP %d)\n", code);
+    return true;
+  }
+  noteServerOk();
+  DynamicJsonDocument doc(768);
+  if (deserializeJson(doc, body) != DeserializationError::Ok || doc["qr"].isNull() ||
+      !qrApplySecret(doc["qr"]["qr_id"] | 0UL, doc["qr"]["secret_b64"] | (const char *)nullptr)) {
+    Serial.println("[qr] config reply not usable (old server, or no QR secret for this reader)");
+    return true;  // retry in a minute
+  }
+  qrApplyServerTime(doc["server_time"] | 0UL);
+  qrCfgNextMs = millis() + syncIntervalMs();
+  return true;
+}
+
+bool qrScreenWanted() {
+  return settings.qrOn && qrHave && !testOffline && rtcOk && rtcTimeValid;
+}
+
+// True UTC seconds for the code, plus the local hour/minute for the little clock.
+bool qrNow(uint32_t &unixNow, uint8_t &hh, uint8_t &mm) {
+  if (!rtcOk || !rtcTimeValid) return false;
+  DateTime t = rtc.now();  // the RTC holds Nepal local time
+  unixNow = (uint32_t)((int64_t)t.unixtime() - (int64_t)TZ_OFFSET_SEC + (int64_t)qrSkewSec);
+  hh = t.hour();
+  mm = t.minute();
+  return true;
+}
+
+// Build the QR for a 30 s window into qrCode. Alphanumeric mode (upper case,
+// digits, '.') at ECC low: version 1 (21x21) holds 25 characters, version 2
+// (25x25) holds 47. The library does not check the length itself, so we do.
+bool qrBuild(uint32_t window) {
+  char code[9];
+  char payload[QR_PAYLOAD_MAX];
+  if (!qrCodeText(qrSecret, qrSecretLen, qrId, window, code)) return false;
+  int n = snprintf(payload, sizeof(payload), "LG1.%lu.%s", (unsigned long)qrId, code);
+  if (n <= 0 || n >= (int)sizeof(payload)) return false;
+  uint8_t version = n <= 25 ? 1 : (n <= 47 ? 2 : 0);
+  if (version == 0) return false;
+  if (qrcode_initText(&qrCode, qrModules, version, ECC_LOW, payload) != 0) return false;
+  // Quiet zone: up to 4 modules, but the whole code must fit the 64 px height.
+  int room = (OLED_H / QR_MODULE_PX - (int)qrCode.size) / 2;
+  if (room < 2) return false;  // would not scan; never happens for version 1 or 2
+  qrQuiet = (uint8_t)(room > 4 ? 4 : room);
+  qrBuilt = true;
+  qrBuiltWindow = window;
+  return true;
+}
+
+// The idle screen with the door QR: white tile on the left (white quiet zone,
+// black modules: reads best on a dark OLED), text on the right. Redraws only
+// when the 30 s window, the clock minute, the WiFi state or the countdown bar
+// step changes (or when forced after another screen).
+void drawIdleQr(bool force) {
+  if (!oledOk) return;
+  uint32_t unixNow = 0;
+  uint8_t hh = 0, mm = 0;
+  if (!qrNow(unixNow, hh, mm)) return;
+  uint32_t window = unixNow / QR_WINDOW_SEC;
+  uint32_t remain = QR_WINDOW_SEC - (unixNow % QR_WINDOW_SEC);  // 1..30
+  uint8_t bar = (uint8_t)((remain + 2) / 3);                    // 1..10
+  bool net = WiFi.status() == WL_CONNECTED;
+  uint16_t minuteKey = (uint16_t)hh * 60 + mm;
+  if (!force && qrDrawnValid && window == qrDrawnWindow && minuteKey == qrDrawnMinute &&
+      bar == qrDrawnBar && net == qrDrawnNet) {
+    return;
+  }
+  qrDrawnValid = true;
+  qrDrawnWindow = window;
+  qrDrawnMinute = minuteKey;
+  qrDrawnBar = bar;
+  qrDrawnNet = net;
+
+  if (!qrBuilt || qrBuiltWindow != window) {
+    if (!qrBuild(window)) {
+      Serial.println("[qr] could not build the code: showing the clock screen");
+      drawIdleClassic();  // stays until the next window / minute / state change
+      return;
+    }
+  }
+
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(1);
+
+  const int16_t side = (int16_t)(qrCode.size + 2 * qrQuiet) * QR_MODULE_PX;
+  const int16_t y0 = (OLED_H - side) / 2;
+  display.fillRect(0, y0, side, side, SSD1306_WHITE);
+  for (uint8_t y = 0; y < qrCode.size; y++) {
+    for (uint8_t x = 0; x < qrCode.size; x++) {
+      if (qrcode_getModule(&qrCode, x, y)) {
+        display.fillRect((int16_t)(qrQuiet + x) * QR_MODULE_PX, y0 + (int16_t)(qrQuiet + y) * QR_MODULE_PX,
+                         QR_MODULE_PX, QR_MODULE_PX, SSD1306_BLACK);
+      }
+    }
+  }
+
+  const int16_t tx = side + 4;           // text column, ~62 px
+  const int16_t w = OLED_W - tx;
+  char line[12];
+  snprintf(line, sizeof(line), "%02u:%02u", (unsigned)hh, (unsigned)mm);
+  display.setCursor(tx, 0);
+  display.print(line);
+  if (net) {
+    display.setCursor(tx, 12);
+    display.print("SCAN WITH");
+    display.setTextSize(2);
+    display.setCursor(tx, 22);
+    display.print("APP");
+    display.setTextSize(1);
+    display.setCursor(tx, 42);
+    display.print("or TAP");
+    display.setCursor(tx, 51);
+    display.print("CARD");
+  } else {
+    // The code still rotates, but a scan cannot open the door without WiFi.
+    display.setCursor(tx, 12);
+    display.print("WIFI DOWN");
+    display.setTextSize(2);
+    display.setCursor(tx, 24);
+    display.print("TAP");
+    display.setCursor(tx, 40);
+    display.print("CARD");
+  }
+  // Seconds-to-refresh bar, drains over the 30 s window.
+  display.drawRect(tx, 60, w, 4, SSD1306_WHITE);
+  display.fillRect(tx + 1, 61, (int16_t)(((w - 2) * bar) / 10), 2, SSD1306_WHITE);
+  display.display();
+}
+
+// Opens the door for a phone scan: the same allowed path as a card tap (relay,
+// beep, ALLOWED screen with the name and days left), then back to idle.
+void qrHandleUnlock(JsonObjectConst u) {
+  CheckResult r;
+  memset(&r, 0, sizeof(r));
+  r.kind = RES_ALLOW;
+  r.viaQr = true;
+  copyDisplayText(r.name, sizeof(r.name), u["member_name"] | "", NAME_MAX_CHARS);
+  copyDisplayText(r.code, sizeof(r.code), u["member_code"] | "", sizeof(r.code) - 1);
+  copyDisplayText(r.status, sizeof(r.status), u["status"] | "", sizeof(r.status) - 1);
+  r.hasDays = !u["days_to_expiry"].isNull();
+  r.days = u["days_to_expiry"] | 0L;
+  // The result screen's top-left shows the card number; for a scan it is the member code.
+  snprintf(r.uid, sizeof(r.uid), "%s", r.code);
+  Serial.printf("[qr] scan accepted for %s\n", r.code[0] ? r.code : "?");
+  finishTap(r);
+}
+
+void qrPollFailed(int code) {
+  qrPollClient.stop();  // start the next try from a clean connection
+  if (qrPollErrs < 255) qrPollErrs++;
+  if (qrPollErrs == 1 || qrPollErrs % 60 == 0) {
+    Serial.printf("[qr] poll failed (%d), %u in a row\n", code, (unsigned)qrPollErrs);
+  }
+  uint32_t gap = QR_POLL_MS;
+  if (code == 401 || code == 403 || code == 404) gap = QR_POLL_CONFIG_MS;  // key / not deployed: will not fix itself
+  else if (qrPollErrs >= QR_POLL_ERRS_SLOW) gap = QR_POLL_SLOW_MS;
+  qrPollNextMs = millis() + gap;
+}
+
+// Ask the server whether a member has just scanned the code. Idle and online
+// only, about once a second; short timeouts so a card tap stays responsive. The
+// TLS connection is kept open between polls (a handshake a second would block
+// the loop for most of the time). Returns true if it used the network.
+bool qrPollStep() {
+  if (!(qrScreenWanted() && WiFi.status() == WL_CONNECTED && !relayActive)) {
+    qrPollArmed = false;  // due at once the next time it is wanted
+    return false;
+  }
+  uint32_t now = millis();
+  if (qrPollArmed && (int32_t)(now - qrPollNextMs) < 0) return false;
+  qrPollArmed = true;
+
+  if (!qrPollClientReady) {
+    qrPollClient.setInsecure();  // see README "Security"
+    qrPollClient.setHandshakeTimeout(2);
+    qrPollClientReady = true;
+  }
+  if (qrPollUrl.length() == 0) {
+#ifdef RFID_POLL_ENDPOINT
+    qrPollUrl = RFID_POLL_ENDPOINT;
+#else
+    qrPollUrl = RFID_SYNC_ENDPOINT;
+    qrPollUrl.replace("rfid-sync", "rfid-poll");
+#endif
+  }
+  qrPollHttp.setReuse(true);
+  qrPollHttp.setConnectTimeout(QR_POLL_TIMEOUT_MS);
+  qrPollHttp.setTimeout(QR_POLL_TIMEOUT_MS);
+  if (!qrPollHttp.begin(qrPollClient, qrPollUrl)) {
+    qrPollFailed(-1);
+    return true;
+  }
+  qrPollHttp.addHeader("x-device-key", DEVICE_KEY);  // never logged
+  int code = qrPollHttp.GET();
+  String body = (code == 200) ? qrPollHttp.getString() : String();
+  qrPollHttp.end();  // keeps the connection open for the next poll
+  if (code != 200) {
+    qrPollFailed(code);
+    return true;
+  }
+
+  DynamicJsonDocument doc(768);
+  if (deserializeJson(doc, body) != DeserializationError::Ok) {
+    qrPollFailed(-2);
+    return true;
+  }
+  if (qrPollErrs >= QR_POLL_ERRS_SLOW) Serial.println("[qr] poll recovered");
+  qrPollErrs = 0;
+  uint32_t dur = millis() - now;
+  // Poll again in a second, or after as long as this one took if the connection
+  // had to be set up again, so polling never takes more than half the loop.
+  qrPollNextMs = millis() + (dur > QR_POLL_MS ? dur : QR_POLL_MS);
+
+  qrApplyServerTime(doc["server_time"] | 0UL);  // keeps the code in step with the server's clock
+  JsonObjectConst u = doc["unlock"].as<JsonObjectConst>();
+  if (!u.isNull()) qrHandleUnlock(u);
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Backend call
 // ---------------------------------------------------------------------------
 bool serverRecentlyDown() {
@@ -966,6 +1471,8 @@ void postCheck(const char *uid, CheckResult &r) {
     Serial.println("[http] skipped: no WiFi");
     return;
   }
+
+  qrPollClient.stop();  // one TLS session at a time (heap); the next poll reconnects
 
   StaticJsonDocument<192> req;
   req["uid"] = uid;
@@ -1278,6 +1785,7 @@ void invalidateCache(const char *why) {
   cacheSorted = false;
   cacheSyncDay = 0;
   syncEverDone = false;
+  qrForget(why);
 }
 
 // The server did not answer. Decide from the cached list instead. The screen
@@ -1362,6 +1870,7 @@ bool syncStep() {
     Serial.println("[sync] starting");
   }
 
+  qrPollClient.stop();  // one TLS session at a time (heap)
   String url = String(RFID_SYNC_ENDPOINT) + "?limit=" + String(SYNC_PAGE_LIMIT);
   if (syncAfter[0] != '\0') url += String("&after=") + syncAfter;
 
@@ -1530,6 +2039,7 @@ bool uploadStep() {
   body += "]}";
   if (take == 0) { f.close(); return false; }
 
+  qrPollClient.stop();  // one TLS session at a time (heap)
   WiFiClientSecure client;
   client.setInsecure();
   client.setHandshakeTimeout(BG_TIMEOUT_MS / 1000);
@@ -1663,6 +2173,20 @@ bool tryFastAllow(const char *uid, CheckResult &r) {
   return true;
 }
 
+// Everything after the decision is known, shared by a card tap and a phone scan:
+// log it, open the door (before the slow OLED redraw), show the result, beep, and
+// hold the result screen. r.uid is the card number (the member code for a scan).
+void finishTap(CheckResult &r) {
+  logTap(r.uid, r);
+  if ((r.kind == RES_ALLOW || r.kind == RES_OFFLINE_ALLOW) && settings.relayOn) {
+    relayOpen(settings.openMs);
+  }
+  drawResult(r);
+  beepForResult(r);
+  state = ST_RESULT;
+  stateSinceMs = millis();
+}
+
 void handleCard() {
   if (!rfid.PICC_IsNewCardPresent()) return;
   if (!rfid.PICC_ReadCardSerial()) return;
@@ -1706,18 +2230,7 @@ void handleCard() {
   lastUidMs = millis();
   strncpy(r.uid, uid, sizeof(r.uid) - 1);
   r.uid[sizeof(r.uid) - 1] = '\0';
-
-  logTap(uid, r);
-
-  // Open the door as soon as the decision is known, before the OLED redraw.
-  if ((r.kind == RES_ALLOW || r.kind == RES_OFFLINE_ALLOW) && settings.relayOn) {
-    relayOpen(settings.openMs);
-  }
-
-  drawResult(r);
-  beepForResult(r);
-  state = ST_RESULT;
-  stateSinceMs = millis();
+  finishTap(r);
 }
 
 // ---------------------------------------------------------------------------
@@ -1751,9 +2264,13 @@ void loadSettings() {
   File f = LittleFS.open(SETTINGS_FILE, "r");
   if (!f) return;
   Settings t;
-  if (f.read((uint8_t *)&t, sizeof(t)) == sizeof(t) && t.magic == SETTINGS_MAGIC &&
+  if (f.read((uint8_t *)&t, sizeof(t)) == sizeof(t) &&
+      (t.magic == SETTINGS_MAGIC || t.magic == SETTINGS_MAGIC_V4) &&
       t.openMs >= 200 && t.openMs <= 30000 && t.exitMs >= 200 && t.exitMs <= 30000 &&
       t.resultMs >= 200 && t.resultMs <= 30000 && t.repeatMs >= 200 && t.repeatMs <= 30000) {
+    // A 1.3.0 file has no qrOn (that byte was struct padding): QR defaults to ON.
+    if (t.magic == SETTINGS_MAGIC_V4 || t.qrOn > 1) t.qrOn = 1;
+    t.magic = SETTINGS_MAGIC;
     settings = t;
   }
   f.close();
@@ -1766,6 +2283,9 @@ void saveSettings() {
   f.write((const uint8_t *)&settings, sizeof(settings));
   f.close();
 }
+
+// qrOn lives in the padding after repeatMs, so the 1.3.0 file (same size) can still be read.
+static_assert(sizeof(Settings) == 16, "Settings must stay 16 bytes: loadSettings() migrates 1.3.0 files");
 
 // Debounced scan of K1..K4 (active-low). Returns a bitmask of keys that went
 // down since the last call (bit 0 = K1). Also sets k4LongFired once when K4 has
@@ -1845,6 +2365,7 @@ void menuValue(uint8_t item, char *out, size_t outSize) {
     case MI_RESULT_TIME:  fmtSecs(out, outSize, settings.resultMs); break;
     case MI_REPEAT_TIME:  fmtSecs(out, outSize, settings.repeatMs); break;
     case MI_SOUND:        snprintf(out, outSize, "%s", settings.soundOn ? "ON" : "OFF"); break;
+    case MI_QR:           snprintf(out, outSize, "%s", !settings.qrOn ? "OFF" : (qrHave ? "ON" : "NO KEY")); break;
     case MI_RELAY_TEST:
     case MI_SOUND_TEST:
     case MI_SYNC_NOW:     snprintf(out, outSize, "go"); break;
@@ -1854,7 +2375,7 @@ void menuValue(uint8_t item, char *out, size_t outSize) {
 
 void drawMenu() {
   static const char *const LABELS[MI_COUNT] = {
-    "Offline test", "Relay", "Open time", "Exit time", "Result time", "Repeat wait", "Relay test", "Sound", "Sound test", "Sync now", "Back"
+    "Offline test", "Relay", "Open time", "Exit time", "Result time", "Repeat wait", "Relay test", "Sound", "Sound test", "Door QR", "Sync now", "Back"
   };
   if (!oledOk) return;
   display.clearDisplay();
@@ -1967,9 +2488,19 @@ void menuAction(uint8_t item) {
     case MI_SOUND_TEST:
       startBeepAlways(BEEP_TEST, PATTERN_LEN(BEEP_TEST));  // a wiring check: ignores Sound OFF
       break;
+    case MI_QR:
+      settings.qrOn = settings.qrOn ? 0 : 1;
+      saveSettings();
+      qrPollArmed = false;
+      qrCfgArmed = false;
+      qrDrawnValid = false;
+      if (!settings.qrOn) qrPollClient.stop();  // release the kept-open connection
+      Serial.printf("[menu] door QR %s\n", settings.qrOn ? "ON" : "OFF");
+      break;
     case MI_SYNC_NOW:
       syncDue = true;
       syncBackoffOn = false;
+      qrCfgArmed = false;
       startBeep(BEEP_SHORT, PATTERN_LEN(BEEP_SHORT));
       break;
     default:
@@ -2030,11 +2561,12 @@ void serialCommands() {
     } else if (c == 's') {
       menuAction(MI_SYNC_NOW);
     } else if (c == 'i') {
-      Serial.printf("[status] fw %s offlineTest=%d relay=%d open=%ums exit=%ums sound=%d cache=%lu queue=%lu wifi=%d\n",
+      Serial.printf("[status] fw %s offlineTest=%d relay=%d open=%ums exit=%ums sound=%d cache=%lu queue=%lu wifi=%d qr=%d/%d qr_id=%lu skew=%lds heap=%lu\n",
                     FW_VERSION, testOffline, settings.relayOn, (unsigned)settings.openMs,
                     (unsigned)settings.exitMs,
                     settings.soundOn, (unsigned long)cardsCached, (unsigned long)eventsQueued,
-                    WiFi.status() == WL_CONNECTED);
+                    WiFi.status() == WL_CONNECTED, settings.qrOn, qrHave, (unsigned long)qrId,
+                    (long)qrSkewSec, (unsigned long)ESP.getFreeHeap());
     }
   }
 }
@@ -2051,7 +2583,7 @@ void logTap(const char *uid, const CheckResult &r) {
   strncpy(t.tail, uid + (n > 4 ? n - 4 : 0), sizeof(t.tail) - 1);
   t.tail[sizeof(t.tail) - 1] = '\0';
   switch (r.kind) {
-    case RES_ALLOW:         snprintf(t.what, sizeof(t.what), "%s", r.alreadyIn ? "ALREADY IN" : "ALLOW"); break;
+    case RES_ALLOW:         snprintf(t.what, sizeof(t.what), "%s", r.viaQr ? "QR ALLOW" : (r.alreadyIn ? "ALREADY IN" : "ALLOW")); break;
     case RES_OFFLINE_ALLOW: snprintf(t.what, sizeof(t.what), "%s", r.fast ? (r.staff ? "CACHE STAFF" : "CACHE ALLOW") : "OFFLINE ALLOW"); break;
     case RES_DENY:          snprintf(t.what, sizeof(t.what), "DENY %.9s", r.reason); break;
     case RES_KEY_BAD:       snprintf(t.what, sizeof(t.what), "KEY UNKNOWN"); break;
@@ -2190,6 +2722,9 @@ void webRoot() {
   htmlToggleRow(h, "Offline test", "offline_test", testOffline, "skip the server, use the cached list; taps queue until switched off");
   htmlToggleRow(h, "Door relay", "relay", settings.relayOn, "OFF = allowed taps no longer open the door");
   htmlToggleRow(h, "Sound", "sound", settings.soundOn, "");
+  htmlToggleRow(h, "Door QR", "qr", settings.qrOn,
+                qrHave ? "rotating QR on the idle screen; scanning it in the app opens the door"
+                       : "no QR secret from the server yet (it arrives with the next sync)");
 
   h += "<div class=row><div>Open time <b>";
   h += String((unsigned)(settings.openMs / 1000));
@@ -2284,6 +2819,15 @@ void webSet() {
     settings.soundOn = (v == "on");
     saveSettings();
   }
+  if ((v = web.arg("qr")) != "") {
+    settings.qrOn = (v == "on") ? 1 : 0;
+    saveSettings();
+    qrPollArmed = false;
+    qrCfgArmed = false;
+    qrDrawnValid = false;
+    if (!settings.qrOn) qrPollClient.stop();
+    Serial.printf("[web] door QR %s\n", settings.qrOn ? "ON" : "OFF");
+  }
   if ((v = web.arg("open_ms")) != "") {
     long ms = v.toInt();
     if (ms == 1000 || ms == 3000 || ms == 5000 || ms == 10000) {
@@ -2339,6 +2883,8 @@ void webStatus() {
   j += "\"result_ms\":"; j += String((unsigned)settings.resultMs); j += ",";
   j += "\"repeat_ms\":"; j += String((unsigned)settings.repeatMs); j += ",";
   j += "\"sound_on\":"; j += settings.soundOn ? "true" : "false"; j += ",";
+  j += "\"qr_on\":"; j += settings.qrOn ? "true" : "false"; j += ",";
+  j += "\"qr_ready\":"; j += qrHave ? "true" : "false"; j += ",";
   j += "\"cards_cached\":"; j += String((unsigned long)cardsCached); j += ",";
   j += "\"last_sync_day\":"; j += String((unsigned long)cacheSyncDay); j += ",";
   j += "\"taps_queued\":"; j += String((unsigned long)eventsQueued);
@@ -2429,9 +2975,15 @@ void setup() {
   if (!fsOk) Serial.println("[fs] LittleFS mount failed: offline mode disabled");
   loadMeta();
   loadSettings();
+  qrLoad();
   eventsQueued = countEvents();
   Serial.printf("[fs] %s, %lu cached card(s), %lu tap(s) queued\n", fsOk ? "ok" : "FAILED",
                 (unsigned long)cardsCached, (unsigned long)eventsQueued);
+  Serial.printf("[qr] door QR %s, secret %s, qr_id %lu\n", settings.qrOn ? "on" : "off",
+                qrHave ? "cached" : "not cached yet (arrives with the first sync)", (unsigned long)qrId);
+#ifdef QR_SELFTEST
+  qrSelfTest();
+#endif
   Serial.printf("[cfg] relay %s, open %u ms, sound %s, keypad %s\n",
                 settings.relayOn ? "on" : "off", (unsigned)settings.openMs,
                 settings.soundOn ? "on" : "off",
@@ -2475,7 +3027,14 @@ void loop() {
         stateSinceMs = now;
         break;
       }
-      if (now - lastIdleDrawMs >= IDLE_REDRAW_MS) {
+      if (qrScreenWanted()) {
+        // Door QR screen: redraws itself only when the window, minute, WiFi state
+        // or countdown step changes, so checking often is cheap.
+        if (now - qrLastTickMs >= QR_TICK_MS) {
+          qrLastTickMs = now;
+          drawIdleQr(false);
+        }
+      } else if (now - lastIdleDrawMs >= IDLE_REDRAW_MS) {
         lastIdleDrawMs = now;
         drawIdle();
       }
@@ -2485,8 +3044,10 @@ void loop() {
       // card tapped meanwhile waits at most for a single page. Not while the
       // relay is open (a slow request must not stretch the door-open time) and
       // not during the offline test (taps must stay queued).
+      // The door-QR poll goes first (when due, about once a second) so a scan opens
+      // the door promptly; the QR config fetch, upload and sync take the passes in between.
       if (state == ST_IDLE && !relayActive && !testOffline) {
-        if (!uploadStep()) syncStep();
+        if (!qrPollStep() && !qrConfigStep() && !uploadStep()) syncStep();
       }
       break;
 

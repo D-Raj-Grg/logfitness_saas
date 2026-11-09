@@ -26,6 +26,9 @@
 #define RFID_ENDPOINT  "https://hefptanjhwxcuhikuhwd.supabase.co/functions/v1/rfid-check"
 // Offline mode: allow-list download + backfill of taps made while offline.
 #define RFID_SYNC_ENDPOINT "https://hefptanjhwxcuhikuhwd.supabase.co/functions/v1/rfid-sync"
+// Door QR (fw 1.4.0): the reader polls this for phone scans. Optional: when it is
+// not defined the URL is RFID_SYNC_ENDPOINT with "rfid-sync" replaced by "rfid-poll".
+// #define RFID_POLL_ENDPOINT "https://hefptanjhwxcuhikuhwd.supabase.co/functions/v1/rfid-poll"
 
 // ---- Buzzer -------------------------------------------------------------
 // GPIO the buzzer (or its transistor) is wired to.
