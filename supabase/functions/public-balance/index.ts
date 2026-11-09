@@ -89,11 +89,10 @@ const RATE_LIMIT = 30
 const RATE_WINDOW_MS = 60_000
 const hits = new Map<string, number[]>()
 
-// The LAST x-forwarded-for entry is the one the edge appended; the first is
-// whatever the client chose to send and would let it rotate past the limit.
+// The LAST x-forwarded-for entry is the one Supabase's proxy appended; the
+// first is whatever the client chose to send and would let it rotate past the
+// limit. No other client-IP header is trusted: anything else is client-set.
 function clientIp(req: Request): string {
-  const direct = req.headers.get('cf-connecting-ip')
-  if (direct) return direct.trim()
   const fwd = req.headers.get('x-forwarded-for')
   if (fwd) {
     const parts = fwd.split(',').map((s) => s.trim()).filter(Boolean)
