@@ -1,7 +1,8 @@
 -- Member app PIN login: verify_member_pin, member_login_lookup, the desk's
 -- set/clear/status RPCs, and the member's my_card / request_renewal / own-only
 -- attendance_snapshot. Seeds two orgs, drives the real functions as real roles,
--- asserts, then removes its fixtures. A failed assertion aborts.
+-- asserts, then removes its fixtures. A failed assertion aborts. A PIN is exactly
+-- six digits: 4-, 5- and 7-digit values must be rejected by set_member_pin.
 --
 --   psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/member_pin_login.sql
 
@@ -62,24 +63,24 @@ begin
 
   -- verify_member_pin (service role) ---------------------------------------------
   insert into public.member_pins (member_id, org_id, pin_hash)
-  values (m1, org_a, extensions.crypt('4821', extensions.gen_salt('bf', 8))),
-         (m2, org_a, extensions.crypt('1234', extensions.gen_salt('bf', 8)));
+  values (m1, org_a, extensions.crypt('482193', extensions.gen_salt('bf', 8))),
+         (m2, org_a, extensions.crypt('123456', extensions.gen_salt('bf', 8)));
   execute 'set local role service_role';
 
-  r := public.verify_member_pin(m1, '4821');
+  r := public.verify_member_pin(m1, '482193');
   assert r = '{"result":"ok"}'::jsonb, format('right pin: %s', r);
   r := public.verify_member_pin(m1, '0000');
   assert r = '{"result":"invalid"}'::jsonb, format('wrong pin: %s', r);
-  r := public.verify_member_pin(m3, '4821');
+  r := public.verify_member_pin(m3, '482193');
   assert r = '{"result":"invalid"}'::jsonb, 'member with no pin row must look like a wrong pin';
-  r := public.verify_member_pin(gen_random_uuid(), '4821');
+  r := public.verify_member_pin(gen_random_uuid(), '482193');
   assert r = '{"result":"invalid"}'::jsonb, 'unknown member must look like a wrong pin';
 
   -- lockout: 4 fails then the 5th locks; success earlier reset the count
   perform public.verify_member_pin(m1, '1');
   perform public.verify_member_pin(m1, '1');
   perform public.verify_member_pin(m1, '1');
-  r := public.verify_member_pin(m1, '4821');          -- success resets the streak
+  r := public.verify_member_pin(m1, '482193');          -- success resets the streak
   assert r ->> 'result' = 'ok', 'success mid-streak';
   perform public.verify_member_pin(m1, '1');
   perform public.verify_member_pin(m1, '1');
@@ -89,12 +90,12 @@ begin
   r := public.verify_member_pin(m1, '1');
   assert r ->> 'result' = 'locked' and (r ->> 'retry_after_seconds')::integer between 890 and 900,
     format('5th failure locks: %s', r);
-  r := public.verify_member_pin(m1, '4821');
+  r := public.verify_member_pin(m1, '482193');
   assert r ->> 'result' = 'locked', 'right pin while locked is still locked';
   execute 'reset role';
   update public.member_pins set locked_until = now() - interval '1 second' where member_id = m1;
   execute 'set local role service_role';
-  r := public.verify_member_pin(m1, '4821');
+  r := public.verify_member_pin(m1, '482193');
   assert r ->> 'result' = 'ok', format('after the lock expires: %s', r);
   select count(*) into n from public.member_pins where member_id = m1 and failed_attempts = 0 and locked_until is null;
   assert n = 1, 'success clears failed_attempts and locked_until';
@@ -125,7 +126,7 @@ begin
   execute 'reset role';
   update public.member_pins set locked_until = now() - interval '1 second' where member_id = m1;
   execute 'set local role service_role';
-  r := public.verify_member_pin(m1, '4821');
+  r := public.verify_member_pin(m1, '482193');
   assert r ->> 'result' = 'ok', 'right pin after the lock';
   execute 'reset role';
   select count(*) into n from public.member_pins where member_id = m1 and lock_level = 0 and failed_attempts = 0;
@@ -189,7 +190,7 @@ begin
   failed := false;
   begin
     execute 'set local role authenticated';
-    perform public.verify_member_pin(m1, '4821');
+    perform public.verify_member_pin(m1, '482193');
   exception when insufficient_privilege then failed := true;
   end;
   execute 'reset role';
@@ -201,7 +202,7 @@ begin
     'org_id', org_a::text, 'staff_id', st_tr::text, 'staff_role', 'trainer', 'branch_ids', json_build_array(br_a1))::text, true);
   execute 'set local role authenticated';
   failed := false;
-  begin perform public.set_member_pin(m3, '5555'); exception when insufficient_privilege then failed := true; end;
+  begin perform public.set_member_pin(m3, '555555'); exception when insufficient_privilege then failed := true; end;
   assert failed, 'a trainer set a member pin';
 
   -- desk (branch 1)
@@ -209,14 +210,14 @@ begin
     'org_id', org_a::text, 'staff_id', st_desk::text, 'staff_role', 'front_desk', 'branch_ids', json_build_array(br_a1))::text, true);
   r := public.member_pin_status(m3);
   assert (r ->> 'has_pin')::boolean = false and r -> 'locked_until' = 'null'::jsonb, format('status no pin: %s', r);
-  r := public.set_member_pin(m3, '5555');
+  r := public.set_member_pin(m3, '555555');
   assert r = '{"result":"ok"}'::jsonb, format('desk sets a given pin: %s', r);
   r := public.set_member_pin(m3);
   assert r ->> 'result' = 'ok' and (r ->> 'pin') ~ '^[0-9]{6}$', format('generated pin: %s', r);
   gen_pin := r ->> 'pin';
   r := public.member_pin_status(m3);
   assert (r ->> 'has_pin')::boolean, 'status has pin';
-  foreach hash0 in array array['', 'abc', '123', '1234567', '12 34', '12a45'] loop
+  foreach hash0 in array array['', 'abc', '123', '1234', '12345', '1234567', '12345678', '12 345', '12a456', '+12345', '1234 56'] loop
     failed := false;
     begin perform public.set_member_pin(m3, hash0); exception when check_violation then failed := true; end;
     assert failed, format('pin "%s" accepted', hash0);
@@ -229,19 +230,19 @@ begin
     'org_id', org_a::text, 'staff_id', st_desk::text, 'staff_role', 'front_desk', 'branch_ids', json_build_array(br_a1))::text, true);
   execute 'set local role authenticated';
   assert (public.member_pin_status(m3) ->> 'locked_until') is not null, 'status shows the lock';
-  perform public.set_member_pin(m3, '6666');
+  perform public.set_member_pin(m3, '666666');
   assert (public.member_pin_status(m3) -> 'locked_until') = 'null'::jsonb, 'set clears the lock';
 
   -- scoping: desk of branch 2, other org's owner
   perform set_config('request.jwt.claims', json_build_object('sub', gen_random_uuid()::text, 'role', 'authenticated',
     'org_id', org_a::text, 'staff_id', st_desk2::text, 'staff_role', 'front_desk', 'branch_ids', json_build_array(br_a2))::text, true);
   failed := false;
-  begin perform public.set_member_pin(m3, '7777'); exception when no_data_found then failed := true; end;
+  begin perform public.set_member_pin(m3, '777777'); exception when no_data_found then failed := true; end;
   assert failed, 'a desk at another branch set a pin';
   perform set_config('request.jwt.claims', json_build_object('sub', gen_random_uuid()::text, 'role', 'authenticated',
     'org_id', org_b::text, 'staff_id', st_b_owner::text, 'staff_role', 'owner', 'branch_ids', json_build_array())::text, true);
   failed := false;
-  begin perform public.set_member_pin(m3, '7777'); exception when no_data_found then failed := true; end;
+  begin perform public.set_member_pin(m3, '777777'); exception when no_data_found then failed := true; end;
   assert failed, 'another org''s owner set a pin';
   failed := false;
   begin perform public.member_pin_status(m3); exception when no_data_found then failed := true; end;
@@ -264,7 +265,7 @@ begin
   assert (r ->> 'card_no')::integer = 1 and r ->> 'card_no_text' = '0001' and r ->> 'assigned_at' is not null,
     format('my_card: %s', r);
   failed := false;
-  begin perform public.set_member_pin(m1, '1111'); exception when insufficient_privilege then failed := true; end;
+  begin perform public.set_member_pin(m1, '111111'); exception when insufficient_privilege then failed := true; end;
   assert failed, 'a member set a pin';
   failed := false;
   begin perform public.member_pin_status(m1); exception when insufficient_privilege then failed := true; end;
@@ -307,7 +308,7 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', gen_random_uuid()::text, 'role', 'authenticated',
     'org_id', org_a::text, 'staff_id', st_owner::text, 'staff_role', 'owner', 'branch_ids', json_build_array())::text, true);
   execute 'set local role authenticated';
-  perform public.set_member_pin(m1, '4822');
+  perform public.set_member_pin(m1, '482200');
   execute 'reset role';
   select count(*) into n from public.member_pins
   where member_id = m1 and lock_level = 0 and failed_attempts = 0 and locked_until is null;
@@ -320,7 +321,7 @@ begin
   update public.members set auth_user_id = u_staff where id = m2;
   execute 'set local role authenticated';
   failed := false;
-  begin perform public.set_member_pin(m2, '4823'); exception when insufficient_privilege then failed := true; end;
+  begin perform public.set_member_pin(m2, '482300'); exception when insufficient_privilege then failed := true; end;
   assert failed, 'a PIN was set for a member whose account is a staff login';
   execute 'reset role';
   update public.members set auth_user_id = null where id = m2;
@@ -337,7 +338,7 @@ begin
   where org_id = org_a
     and ((coalesce(before::text, '') || coalesce(after::text, '')) ~ '(pin_hash|\$2[aby]\$)'
          or (entity = 'member_pins'
-             and (coalesce(before::text, '') || coalesce(after::text, '')) ~ ('(5555|6666|' || gen_pin || ')')));
+             and (coalesce(before::text, '') || coalesce(after::text, '')) ~ ('(555555|666666|' || gen_pin || ')')));
   assert n = 0, 'a pin or hash leaked into audit_log';
   select count(*) into n from pg_trigger where tgrelid = 'public.member_pins'::regclass and not tgisinternal;
   assert n = 0, 'member_pins must not carry the generic audit trigger';
@@ -347,3 +348,6 @@ begin
 
   raise notice 'member pin login: all assertions passed';
 end $$;
+
+-- Visible pass marker when run through a client that drops notices.
+select 'ok' as member_pin_login;

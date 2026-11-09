@@ -63,7 +63,7 @@ export async function setMemberPin(memberId: string, pin?: string): Promise<Memb
   let custom: string | undefined
   if (pin !== undefined) {
     const parsed = customPinSchema.safeParse(pin)
-    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Enter 4 to 6 digits' }
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Exactly 6 digits' }
     custom = parsed.data
   }
 
