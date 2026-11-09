@@ -276,6 +276,52 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
+### Printed card numbers, public balance page, renewal requests, card designer (2026-11-08)
+
+**Status 2026-11-09.** Built on `feat/card-stock-balance`. Live migrations:
+`20261108100000_card_stock.sql` (+ `100010` hardening), `100100_renewal_requests.sql`
+(+ `100210` scope), `100200_public_card_balance.sql`, `100300_card_designs.sql`
+(+ `100301` fix). Gates `supabase/tests/card_stock.sql`, `public_balance.sql`,
+`card_designs.sql` pass and are in `db:test`. Edge Function `public-balance`
+deployed (`verify_jwt` off; see `supabase/functions/README.md`). Types regenerated.
+
+- [x] `card_stock` / `card_batches`: one row per printed card (`NO. 0004`), chip uid,
+      reserved `qr_token`, free/lost/retired; "assigned" derived from live
+      `member_cards`/`staff_cards`. RPCs `create_card_stock_range`, `next_free_card_no`,
+      `link_card_stock_uid`, `assign_card_stock_to_member` (delegates to
+      `assign_member_card`), `set_card_stock_status`; view `card_stock_overview`;
+      `member_overview.card_no`.
+- [x] `/cards`: list, number a run, link chip (reader inbox or typed UID), lost/found,
+      assign to member. Member profile: assign by printed number first; members
+      search matches card numbers; list + profile show `NO. 0004`.
+- [x] `renewal_requests`: one pending row per member; repeat within 10 min →
+      `too_soon`; later repeat counted on the same row (first phone/note stand);
+      next `memberships` insert closes it; `handle_renewal_request` (done/rejected),
+      branch-scoped like the desk.
+- [x] Public API: `public_card_balance` / `public_renewal_request` (service role
+      only) → `public-balance` Edge Function (`GET ?org=&card_no=`,
+      `POST /renew-request`). Masked name, plan, status, days left, ends on. No
+      phone, dues or member code. Enumeration of card numbers accepted by decision.
+- [x] Console public page `app/(public)/balance?org=<slug>&card_no=` (outside the
+      staff session; `/balance` in `PUBLIC_PREFIXES`); `/settings` → "Card balance
+      link" (`orgs.settings.balance_url`).
+- [x] lordofgyms.com `/balance` page in `logfitness_web` (branch `feat/balance-page`;
+      env `NEXT_PUBLIC_BALANCE_API`, `NEXT_PUBLIC_ORG_SLUG`).
+- [x] Card designer `/cards/designer`: template upload (private `card-templates`
+      bucket), drag number + QR, CR80 / CR80+bleed, range → `card_stock` rows +
+      batch, one PDF page per card (`pdf-lib`, vector QR), download again per batch.
+- [ ] Staff UI for renewal requests: `/members/requests` list, badge on `/members`,
+      panel on the member profile with Done / Reject.
+- [ ] LOG cutover: set `balance_url` = `https://lordofgyms.com/balance` on
+      `/settings`; number the printed run on `/cards`; add the two env vars to the
+      Vercel project of `logfitness_web` (Production + Preview) and redeploy;
+      optionally set `BALANCE_ALLOWED_ORIGINS` on the Edge Function.
+- [ ] Open: staff push on a new renewal request (`push-fanout` has no staff target);
+      phone-number lookup on the balance page needs OTP; `qr_token` unused until a
+      signed link is wanted; per-IP rate limit in the Edge Function is per-instance;
+      A4 imposition (many cards per sheet) for the designer; Flutter parity
+      (show `card_no`).
+
 - [ ] **2026-11-06** Reader sync is a full download every interval. Fine for the
       current ~50 cards; at thousands of members it is many blocking pages and a
       full flash rewrite each time (the interval now grows with the list: 3 / 8

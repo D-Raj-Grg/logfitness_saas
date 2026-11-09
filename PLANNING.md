@@ -391,12 +391,32 @@ Do not build these without an explicit decision to change scope.
   payment receipt on the org letterhead, rendered by the browser's own print
   engine from `app/(print)/` -- a sibling route group, so the console shell is
   absent from the paper *and* from the on-screen preview. No PDF dependency; the
-  user prints or saves as PDF. `orgs` gained the letterhead columns, the
+  user prints or saves as PDF. (One documented exception since 2026-11-08: the
+  card designer builds a print run as a real PDF in the browser with `pdf-lib`
+  + `qrcode`, because a print shop needs one page per card at exact card
+  geometry and a vector QR per page. Invoices and receipts are unchanged.)
+  `orgs` gained the letterhead columns, the
   `org-logos` bucket is public with owner-only writes, and `/settings` (owner
   only) is where a gym fills all of it in. `renew_membership` now records
   `memberships.signup_fee_paisa` so the joining fee can print as its own line;
   rows written earlier carry 0 and print as one line, which is correct -- the
   split does not exist for them.
+- **Printed card numbers are stock, not identity (2026-11-08).** A gym prints
+  `NO. 0004` on each RFID card so the desk can find, hand out and take back a
+  card by typing its number. `card_stock` is one row per physical card
+  (number, chip uid, reserved `qr_token`, free/lost/retired); whether it is in
+  someone's hand is derived from the live `member_cards`/`staff_cards` row for
+  its uid, so revoking a card frees the stock with no second write. The stock
+  RPCs only translate a number into a uid and delegate to `assign_member_card`.
+  `member_overview.card_no` is the printed number of the member's live card.
+  The card's QR opens the public balance page (`public_card_balance`, service
+  role only, masked name + plan + days left, never phone/dues/member code);
+  "Request renewal" writes `renewal_requests` (one pending row per member,
+  branch-scoped for staff, closed by the next `memberships` insert). The QR
+  carries the plain number -- enumeration is accepted because the page shows
+  nothing a stranger holding the card could not guess; `qr_token` is stored
+  now so a signed link later needs no reprint. Gates:
+  `supabase/tests/card_stock.sql`, `public_balance.sql`, `card_designs.sql`.
 - **A waived joining fee is printed, not inferred (2026-09-10).** A member who
   pays no registration fee should see on paper that one applied and was not
   taken. The amount is recorded at the point of sale in
