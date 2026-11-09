@@ -265,6 +265,14 @@ begin
   end;
   assert failed, 'a lost card was handed out';
 
+  -- nor by its chip through the plain uid path: the stock row is the truth
+  failed := false;
+  begin
+    perform public.assign_member_card(m1, 'AABBCCDD0004');
+  exception when check_violation then failed := true;
+  end;
+  assert failed, 'a lost card''s chip was assigned by uid';
+
   failed := false;
   begin
     perform public.set_card_stock_status(5, 'lost', '  ');
