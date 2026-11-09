@@ -17,6 +17,22 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-11-09 — Renewal alerts and gym schedule (console)
+
+### Added (console)
+
+- **Renewal-request alerts.** The Members link in the sidebar carries a badge with the
+  number of pending renewal requests (hidden at 0, "9+" above 9, labelled for screen
+  readers) for owner, manager and front desk. The dashboard has a "Renewal requests"
+  card with the newest five (name, member code, phone, how long ago) and a View all link.
+  A live pop-up ("<name> asked to renew", with an Open action) appears when a request
+  arrives or is re-asked, and refreshes the badge and card; it listens through Supabase
+  Realtime as the signed-in staff member and falls back to refreshing every 45 s if the
+  socket fails. `countPendingRenewalRequests` now takes the same branch filter as the list.
+- **Settings -> Gym schedule** (`/settings/schedule`, owner and manager): weekly days
+  off and a dated holiday list. The members' attendance calendar shows these as off
+  instead of absent.
+
 ## 2026-11-09 — Member app PIN login (backend)
 
 ### Added

@@ -276,6 +276,14 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
+### Console: renewal alerts and gym schedule (2026-11-09, workstream C)
+
+- [x] Sidebar badge on Members (pending renewal requests, branch-scoped via the header cookie); `countPendingRenewalRequests(branchIds)`.
+- [x] Dashboard "Renewal requests" card (newest 5 + View all).
+- [x] Live pop-up (`components/renewals/renewal-live-alerts.tsx`): Realtime INSERT/UPDATE on `renewal_requests`, toast + `router.refresh()`, 45 s polling fallback. **Not verified in a browser against live data yet.**
+- [x] Settings -> Gym schedule (`/settings/schedule`): weekly days off + holidays, owner/manager.
+- [ ] Regenerate `lib/types/database.ts` after the schedule migration merges, then drop the narrow local client types in `lib/db/org-schedule.ts`.
+
 ### Member app backend: PIN login and member self-calls (decided 2026-11-09)
 
 The members' app (`../logfitness_membership_flutter`, LOG-branded, separate from Gym Tross) signs members in with **printed card number or phone + a PIN staff set**. Full contract in that repo's `PLANNING.md` §4–5; its `TASKS.md` Phase 0 is the same list. The PIN belongs to the member, not the card (cards are reusable stock). Gym Tross keeps its member shell and `current_member()`'s signature until the new app ships.
