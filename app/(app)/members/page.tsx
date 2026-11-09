@@ -140,7 +140,7 @@ export default async function MembersPage({
           {/* Only renders when someone is waiting; its own Suspense so the
               count never holds up the heading. */}
           <Suspense fallback={null}>
-            <RenewalRequestsBadge />
+            <RenewalRequestsBadge branchIds={scope.branchIds} />
           </Suspense>
           <Button render={<Link href="/members/new" />}>Register member</Button>
         </div>

@@ -75,13 +75,38 @@ export async function listPendingRenewalRequests(
     .map((row) => ({ ...row, member: members.get(row.member_id) ?? null }))
 }
 
-/** The badge on the member list. A count, not the rows. */
-export async function countPendingRenewalRequests(): Promise<number> {
+/**
+ * How many are waiting -- the member-list badge, the sidebar badge and the
+ * dashboard card. `branchIds` is the same filter listPendingRenewalRequests
+ * takes (null/undefined = every branch RLS allows), so every count agrees with
+ * the list it points at. A branch filter needs the member's home branch, which
+ * lives on member_overview, so it is a second count keyed by member id rather
+ * than a join the table cannot make.
+ */
+export async function countPendingRenewalRequests(
+  branchIds?: string[] | null
+): Promise<number> {
   const supabase = await createClient()
+
+  if (!branchIds) {
+    const { count, error } = await supabase
+      .from('renewal_requests')
+      .select('id', { head: true, count: 'exact' })
+      .eq('status', 'pending')
+    if (error) throw error
+    return count ?? 0
+  }
+
+  const pending = unwrap<{ member_id: string }[]>(
+    await supabase.from('renewal_requests').select('member_id').eq('status', 'pending')
+  )
+  if (!pending || pending.length === 0) return 0
+
   const { count, error } = await supabase
-    .from('renewal_requests')
+    .from('member_overview')
     .select('id', { head: true, count: 'exact' })
-    .eq('status', 'pending')
+    .in('id', [...new Set(pending.map((row) => row.member_id))])
+    .in('home_branch_id', branchIds)
   if (error) throw error
   return count ?? 0
 }

@@ -297,6 +297,13 @@ The reader's OLED shows a QR that rotates every 30 s; the member scans it in the
 - [ ] Member app scan screen (agent E3).
 - [ ] Console: show a device's `qr_id` in Settings -> Devices (the column is staff-readable, not secret); a "Rotate QR secret" action separate from the key if wanted.
 - [ ] A photo of the screen replayed within ~60 s still opens the door (rotating code is not proof of presence); mitigations are opening hours, one visit per day, the 20 s unlock window and the per-member throttle.
+### Console: renewal alerts and gym schedule (2026-11-09, workstream C)
+
+- [x] Sidebar badge on Members (pending renewal requests, branch-scoped via the header cookie); `countPendingRenewalRequests(branchIds)`.
+- [x] Dashboard "Renewal requests" card (newest 5 + View all).
+- [x] Live pop-up (`components/renewals/renewal-live-alerts.tsx`): Realtime INSERT/UPDATE on `renewal_requests`, toast + `router.refresh()`, 45 s polling fallback. **Not verified in a browser against live data yet.**
+- [x] Settings -> Gym schedule (`/settings/schedule`): weekly days off + holidays, owner/manager.
+- [ ] Regenerate `lib/types/database.ts` after the schedule migration merges, then drop the narrow local client types in `lib/db/org-schedule.ts`.
 
 ### Member app backend: PIN login and member self-calls (decided 2026-11-09)
 

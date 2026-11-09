@@ -46,6 +46,17 @@ export default async function SettingsPage() {
       </Link>
 
       <Link
+        href="/settings/schedule"
+        className="rounded-lg border p-4 transition-colors hover:bg-muted/50"
+      >
+        <div className="font-medium">Gym schedule</div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Weekly days off and holidays. Members&apos; attendance calendar shows these days as off
+          instead of absent.
+        </p>
+      </Link>
+
+      <Link
         href="/settings/devices"
         className="rounded-lg border p-4 transition-colors hover:bg-muted/50"
       >

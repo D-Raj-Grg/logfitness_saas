@@ -6,6 +6,7 @@ import {
   RecentMembershipsPanel,
   RecentPaymentsPanel,
   RecentVisitorsPanel,
+  RenewalRequestsPanel,
 } from '@/components/dashboard/activity-panels'
 import { BranchTable } from '@/components/dashboard/branch-table'
 import {
@@ -106,6 +107,11 @@ export default async function DashboardPage({
           the same line the charts are behind. Visitors and expiries are the
           desk's call list, which every role works from. */}
       <div className="grid gap-3 md:grid-cols-2">
+        {memberLists ? (
+          <Suspense key={`renewals-${scope.label}`} fallback={<ChartSkeleton className="[&>*:last-child]:h-[150px]" />}>
+            <RenewalRequestsPanel branchIds={scope.branchIds} />
+          </Suspense>
+        ) : null}
         {charts ? (
           <>
             <Suspense key={`payments-${scope.label}`} fallback={<ChartSkeleton className="[&>*:last-child]:h-[150px]" />}>

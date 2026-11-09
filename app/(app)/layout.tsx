@@ -8,8 +8,11 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from '@/components/ui/sidebar'
+import { RenewalLiveAlerts } from '@/components/renewals/renewal-live-alerts'
 import { Skeleton } from '@/components/ui/skeleton'
 import { requireStaff, type CurrentStaff } from '@/lib/auth'
+import { countPendingRenewalRequests } from '@/lib/db/renewal-requests'
+import { canViewMembers } from '@/lib/roles'
 import { resolveBranchScope } from '@/lib/scope'
 
 /**
@@ -24,6 +27,18 @@ async function BranchSwitcherSlot({ staff }: { staff: CurrentStaff }) {
   // the options.
   const scope = await resolveBranchScope({}, staff)
   return <BranchSwitcher scope={scope} />
+}
+
+/**
+ * The sidebar paints at once with no badge; this swaps in the same sidebar with
+ * the pending-renewal count once the count lands. The count follows the branch
+ * the header switcher remembers (its cookie), like every other list. A failed
+ * count shows no badge rather than taking the navigation down.
+ */
+async function AppSidebarSlot({ staff }: { staff: CurrentStaff }) {
+  const scope = await resolveBranchScope({}, staff)
+  const renewalRequests = await countPendingRenewalRequests(scope.branchIds).catch(() => 0)
+  return <AppSidebar staff={staff} badges={{ renewalRequests }} />
 }
 
 export default async function AppLayout({
@@ -45,8 +60,15 @@ export default async function AppLayout({
           every shift, and until now it came out with the sidebar down the
           left. */}
       <div className="print:hidden">
-        <AppSidebar staff={staff} />
+        {canViewMembers(staff) ? (
+          <Suspense fallback={<AppSidebar staff={staff} />}>
+            <AppSidebarSlot staff={staff} />
+          </Suspense>
+        ) : (
+          <AppSidebar staff={staff} />
+        )}
       </div>
+      {canViewMembers(staff) ? <RenewalLiveAlerts /> : null}
       <SidebarInset>
         <header className="flex h-14 min-w-0 shrink-0 items-center gap-2 border-b px-4 print:hidden">
           <SidebarTrigger className="-ml-1" />
