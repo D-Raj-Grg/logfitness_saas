@@ -30,6 +30,18 @@ Two conventions worth knowing while reading:
   and `request_renewal()` (the same one-pending-request rules as the public
   balance page, from inside the app).
 
+### Added (console)
+
+- **Member app PIN controls.** The member profile has a "Member app PIN" card
+  (owner, manager, front desk; hidden from trainers) showing No PIN, PIN set
+  on a date, or Locked until a time, with Generate new PIN, Set custom PIN
+  (4-6 digits) and Remove PIN. A generated PIN appears once in a dialog with a
+  copy button and a warning; closing the dialog drops it. The Cards list has a
+  compact PIN button on every row held by a member, opening the same flow. The
+  PIN never goes into a URL, toast, log or revalidated page state, and any
+  message the database raises (for example a refused member) shows as the form
+  error.
+
 ### Database
 
 - `member_pins`, `verify_member_pin`, `member_login_lookup` (service role
