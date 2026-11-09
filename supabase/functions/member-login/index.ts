@@ -4,6 +4,7 @@
 //   OPTIONS              -> 204 (no Access-Control-Allow-Origin: native app only)
 //
 // identifier is the printed card number (1-4 digits) or the phone number.
+// pin is exactly six digits.
 //
 // Responses (all JSON, Cache-Control: no-store):
 //   200 { result: 'ok', access_token, refresh_token, expires_in }
@@ -35,7 +36,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 const ORG_SLUG_RE = /^[a-z0-9-]{1,60}$/
 const IDENT_RE = /^[0-9]{1,15}$/
-const PIN_RE = /^[0-9]{4,6}$/
+const PIN_RE = /^[0-9]{6}$/
 
 const IP_LIMIT = 10
 const IP_WINDOW_MS = 60_000
@@ -124,7 +125,7 @@ Deno.serve(async (req: Request) => {
   const pin = typeof b.pin === 'string' ? b.pin : ''
   if (!ORG_SLUG_RE.test(orgSlug)) return json({ error: 'org_slug must be a gym code' }, 400)
   if (!IDENT_RE.test(identifier)) return json({ error: 'identifier must be digits' }, 400)
-  if (!PIN_RE.test(pin)) return json({ error: 'pin must be 4 to 6 digits' }, 400)
+  if (!PIN_RE.test(pin)) return json({ error: 'pin must be exactly 6 digits' }, 400)
 
   // Per-org ceiling counts failed verifications only, and is checked (not
   // incremented) here, so successful logins are never throttled by it.

@@ -146,7 +146,7 @@ export function MemberPinControls({
     }
   }
 
-  const customValid = /^\d{4,6}$/.test(custom)
+  const customValid = /^\d{6}$/.test(custom)
 
   const actions = (
     <>
@@ -258,7 +258,7 @@ export function MemberPinControls({
               <DialogHeader>
                 <DialogTitle>Set a PIN for {fullName}</DialogTitle>
                 <DialogDescription>
-                  4 to 6 digits. It replaces any PIN they have now and clears a lock.
+                  Exactly 6 digits. It replaces any PIN they have now and clears a lock.
                 </DialogDescription>
               </DialogHeader>
               <AuthFormMessage error={error ?? undefined} />
@@ -269,9 +269,10 @@ export function MemberPinControls({
                   value={custom}
                   onChange={(event) => setCustom(event.target.value.replace(/\D/g, '').slice(0, 6))}
                   inputMode="numeric"
-                  pattern="[0-9]{4,6}"
-                  minLength={4}
+                  pattern="[0-9]{6}"
+                  minLength={6}
                   maxLength={6}
+                  placeholder="6 digits"
                   autoComplete="off"
                   autoFocus
                   required

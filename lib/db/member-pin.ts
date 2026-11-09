@@ -43,7 +43,7 @@ export async function getMemberPinStatus(memberId: string): Promise<MemberPinSta
 
 /**
  * Set the member's PIN. With no `pin` the database generates six digits and
- * returns them in this one response; with one it must be 4-6 digits or the RPC
+ * returns them in this one response; with one it must be exactly 6 digits or the RPC
  * raises. Either way it also clears any lock. The caller must not log the
  * result.
  */

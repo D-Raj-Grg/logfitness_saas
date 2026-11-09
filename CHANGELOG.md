@@ -17,6 +17,16 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-11-09 — Member PIN is exactly six digits
+
+### Changed
+
+- **A member's app PIN is now exactly six digits** (was 4-6), matching the app's
+  six-box sign-in that signs in on the sixth digit. The desk's custom-PIN dialog
+  asks for exactly 6 digits and the server refuses anything else; generated PINs
+  were already six digits. `member-login` also rejects a PIN that is not six
+  digits. PINs already set are unaffected.
+
 ## 2026-11-09 — Gym schedule, attendance calendar, renewal read (backend)
 
 ### Added
@@ -79,7 +89,7 @@ Two conventions worth knowing while reading:
 ### Added
 
 - **PIN login for the members' app.** Desk, managers and owners can set a
-  member's 4-6 digit PIN (or have a random 6-digit one generated and shown
+  member's six-digit PIN (exactly 6 digits, or have a random one generated and shown
   once), reset it (also clears a lock) and clear it. Members sign in with the
   printed card number or phone plus the PIN; five wrong PINs lock the member for
   15 minutes, doubling on each repeat lock (up to about 16 hours) until a correct
@@ -95,7 +105,7 @@ Two conventions worth knowing while reading:
 - **Member app PIN controls.** The member profile has a "Member app PIN" card
   (owner, manager, front desk; hidden from trainers) showing No PIN, PIN set
   on a date, or Locked until a time, with Generate new PIN, Set custom PIN
-  (4-6 digits) and Remove PIN. A generated PIN appears once in a dialog with a
+  (exactly 6 digits) and Remove PIN. A generated PIN appears once in a dialog with a
   copy button and a warning; closing the dialog drops it. The Cards list has a
   compact PIN button on every row held by a member, opening the same flow. The
   PIN never goes into a URL, toast, log or revalidated page state, and any
