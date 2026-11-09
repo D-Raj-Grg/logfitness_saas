@@ -2,6 +2,7 @@ import Link from 'next/link'
 
 import { AssignCardDialog } from '@/components/cards/assign-card-dialog'
 import { LinkUidDialog } from '@/components/cards/link-uid-dialog'
+import { MemberPinControls } from '@/components/members/member-pin-controls'
 import { StockStatusDialog } from '@/components/cards/stock-status-dialog'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -131,6 +132,13 @@ export function CardStockTable({
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex flex-wrap justify-end gap-2">
+                    {row.holder_kind === 'member' && row.member_id ? (
+                      <MemberPinControls
+                        layout="compact"
+                        memberId={row.member_id}
+                        fullName={row.holder_name ?? 'this member'}
+                      />
+                    ) : null}
                     {!linked && row.status === 'free' ? (
                       <LinkUidDialog cardNo={row.card_no} scans={scans} />
                     ) : null}

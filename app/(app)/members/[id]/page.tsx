@@ -9,6 +9,7 @@ import { MemberMessageActions } from '@/components/members/member-message-action
 import { MemberRecordActions } from '@/components/members/member-record-actions'
 import { MemberRenewalRequests } from '@/components/members/member-renewal-requests'
 import { MemberStatusActions } from '@/components/members/member-status-actions'
+import { MemberPinControls } from '@/components/members/member-pin-controls'
 import { MemberPhoto } from '@/components/members/member-photo'
 import { MemberStatusBadge } from '@/components/members/member-status-badge'
 import { StatTile } from '@/components/app/stat-tile'
@@ -21,6 +22,7 @@ import { listBranches } from '@/lib/db/branches'
 import { countAttendanceForMember } from '@/lib/db/member-attendance'
 import { listMemberCards, listUnassignedCardScans } from '@/lib/db/member-cards'
 import { getMember, getMemberOverview } from '@/lib/db/members'
+import { getMemberPinStatus } from '@/lib/db/member-pin'
 import { listInvoicesForMember, listMembershipsForMember } from '@/lib/db/memberships'
 import { listNotificationsForMember } from '@/lib/db/notifications'
 import { listPaymentsForMember } from '@/lib/db/payments'
@@ -116,6 +118,7 @@ export default async function MemberProfilePage({
     cards,
     cardScans,
     renewalRequests,
+    pinStatus,
   ] = await Promise.all([
     getMemberOverview(id),
     getMember(id),
@@ -150,6 +153,9 @@ export default async function MemberProfilePage({
       : Promise.resolve([]),
     // Asks from the balance page. A failed read is an empty panel, not a 500.
     listRenewalRequestsForMember(id).catch(() => []),
+    // A trainer cannot set PINs, so they are not shown the card. A failed read
+    // is a card that says so, not a 500.
+    canManage ? getMemberPinStatus(id).catch(() => null) : Promise.resolve(null),
   ])
 
   if (!overview || !member) notFound()
@@ -362,6 +368,14 @@ export default async function MemberProfilePage({
               invitedAt={member.invited_at}
               acceptedAt={member.accepted_at}
               hasAuthUser={Boolean(member.auth_user_id)}
+            />
+          ) : null}
+
+          {canManage ? (
+            <MemberPinControls
+              memberId={id}
+              fullName={overview.full_name}
+              initialStatus={pinStatus}
             />
           ) : null}
 
