@@ -109,6 +109,7 @@ while it is open.
 | Repeat wait | A card just read is ignored if tapped again within 0.5 / 1 / 2 / 3 s (default 0.5 s). Also on the web page. |
 | Relay test | Pulses the relay once now, even if Relay is OFF (it is a wiring check). |
 | Sound | ON/OFF (saved). |
+| Door QR | ON/OFF (saved, fw 1.4.0). ON shows the rotating QR on the idle screen and polls for scans; OFF gives the plain clock screen back and stops all QR traffic. Reads `NO KEY` while ON but the secret has not been fetched yet. Also on the web page. |
 | Sync now | Fetches the card list straight away. |
 | Back | Close the menu. |
 
@@ -135,8 +136,11 @@ same switches are on USB serial (115200): `o` offline test, `r` relay test,
    | Adafruit SSD1306 | Adafruit | 2.5.x |
    | ArduinoJson | Benoit Blanchon | **6.21.x** (not 7.x) |
 
-   `WiFi`, `WiFiClientSecure`, `HTTPClient`, `SPI` and `Wire` come with the
-   ESP32 core. ArduinoJson 7 still compiles this sketch with deprecation
+   `WiFi`, `WiFiClientSecure`, `HTTPClient`, `SPI`, `Wire`, LittleFS and mbedTLS
+   come with the ESP32 core. The QR encoder (fw 1.4.0) is **vendored** in this
+   folder (`lg_qrcode.c` / `lg_qrcode.h`, from ricmoo/QRCode, MIT): there is
+   nothing extra to install, and the IDE compiles it with the sketch. Keep the
+   two files next to `rfid-check-in.ino`. ArduinoJson 7 still compiles this sketch with deprecation
    warnings, but 6.21.x is what it was written against.
 
 ## Register the reader and get its key
@@ -177,6 +181,8 @@ converted back to real Unix seconds.
 |---|---|---|
 | Boot | `BOOT`, then `WIFI` + SSID + progress dots (up to 20 s) | one short beep when ready |
 | Idle | label + WiFi state, large clock, date, `TAP CARD` | - |
+| Idle with Door QR (fw 1.4.0, default ON once the secret is fetched) | the QR tile on the left, on the right the clock, `SCAN WITH APP or TAP CARD` and a bar that drains over the 30 s the code lives. With WiFi down the right side says `WIFI DOWN` / `TAP CARD` (the code still rotates, but a scan cannot open the door) | - |
+| Phone scan accepted | same as Allowed, with the member code in the top-left; the visit is recorded by the server | 1 short |
 | Checking | `CHECKING` + card UID | - |
 | Allowed | top row: the card number (small, left) and the name (small, right; a long name is shortened to `Ramesh S.`); then the days left as the biggest number with `DAYS LEFT` under it (`1` / `DAY LEFT`, `LAST` / `DAY` on the last day, `OK` / `NO LIMIT` for open-ended plans). A second tap today looks the same. No `ALLOW`, `WELCOME` or `ALREADY IN` word | 1 short |
 | Denied: dues | `PAY DUES` and `Rs 1,500.5` big (from `due_paisa`, grouped like the console; paisa dropped from Rs 1,00,000) | 1 long |
@@ -300,7 +306,7 @@ screen and in the Serial log) or `http://rfid-reader.local/`. Set `WEB_PASSWORD`
 in `config.h` to turn it on; **an empty password turns the page off**. Username
 is `WEB_USER` (default `admin`).
 
-- **Can do:** Offline test on/off, Relay on/off, Open time, Sound, Sync now.
+- **Can do:** Offline test on/off, Relay on/off, Open time, Sound, Door QR on/off, Sync now.
   Shows firmware, clock, WiFi, cards cached, last sync, queued taps and the last
   10 taps (time, last 4 hex of the UID, result). `/status.json` has the same
   status for scripts.
@@ -312,6 +318,112 @@ is `WEB_USER` (default `admin`).
 - **Limit:** it is plain HTTP (the ESP32 does not serve HTTPS here), so the
   password crosses the LAN unencrypted. Use a long password used nowhere else and
   keep the reader's WiFi trusted.
+
+## Door QR (fw 1.4.0)
+
+The idle screen shows a QR code that changes every 30 seconds. A member scans it
+with the app; the server checks the code, records the visit (`method = 'qr'`) and
+queues an unlock; the reader polls for it and opens the relay exactly like an
+allowed card tap (ALLOWED screen with the name and days left). Cards keep working
+as before; the QR is an extra way in. The server side (migration
+`20261109131000_door_qr`, Edge Functions `rfid-sync?qr=1` and `rfid-poll`) must be
+deployed first; against an older server the reader just keeps the plain clock
+screen (`NO KEY`).
+
+- **Code on screen.** `LG1.<qr_id>.<8 digits>`, at most 19 characters, which is
+  always a **version 1** QR (21x21 modules, alphanumeric mode, error correction
+  L). It is drawn at 2 px per module with a 4-module white quiet zone: a 58 x 58 px
+  white tile on the left of the OLED (black modules on white reads best), 58 x 58
+  of the 64 px height. 3 px modules do not fit (21 modules x 3 = 63 px leaves no
+  quiet zone), so 2 px is the best fit for 128x64. Physical size: on a **0.96"**
+  panel (about 0.17 mm pixels) a module is ~0.34 mm, the code ~7.1 mm and the tile
+  ~9.9 mm; on a **1.3"** panel (about 0.23 mm pixels) ~0.46 mm, ~9.7 mm and ~13.3 mm.
+  Both scan from roughly 5-15 cm with a phone; the larger 1.3" panel is easier,
+  and the member should hold the phone steady rather than far away. Panels vary,
+  so check the real figures with a ruler on your module.
+- **Needs a clock.** The code is computed from the secret and the time, so it
+  needs a valid RTC. The reader corrects for a drifting RTC from the server's
+  `server_time` (every poll), so a clock a minute off still gives valid codes;
+  the RTC itself is only rewritten from NTP.
+- **Rotates offline.** The secret and `qr_id` are cached in flash (`/qr.bin`), so
+  the code keeps rotating through a WiFi outage. A scan can only open the door
+  while the reader is online (it learns about the scan by polling), so the screen
+  then says `WIFI DOWN` / `TAP CARD`.
+- **Polling.** About once a second while idle, online and not in offline test,
+  with a 1.5 s timeout and a kept-open TLS connection so a card tap is never held
+  up. After 3 failures in a row it slows to every 5 s; a 401/403/404 (setup
+  problem) is retried every 30 s. With the QR switched off (menu **Door QR** or the
+  web page) the reader makes no QR requests at all; Offline test also suspends it.
+- **`RFID_POLL_ENDPOINT`.** The poll URL is derived from `RFID_SYNC_ENDPOINT` by
+  replacing `rfid-sync` with `rfid-poll`. If your functions live elsewhere, add
+  the commented line from `config.h.example` and set it explicitly.
+- **Security.** The code is HMAC-SHA256 with a per-reader secret, valid for the
+  current 30 s window and one either side. Like the device key, the secret is in
+  the reader's flash; rotating the device key rotates the secret. The reader
+  throws it away on a 401/403.
+
+### Protocol
+
+Everything is decimal ASCII, no padding in the message.
+
+```
+window  = floor(unix_epoch_seconds / 30)          // RTC/NTP time, UTC
+message = "<qr_id>:<window>"                       // e.g. "7:56789012"
+mac     = HMAC-SHA256(key = qr_secret (32 raw bytes), message)
+code    = lpad( (uint32_big_endian(mac[0..3]) % 100000000), 8, "0" )
+payload = "LG1." + qr_id + "." + code              // QR text, e.g. "LG1.7.06036629"
+```
+
+The server accepts the current window and the one either side. The app needs
+the `LG1.` prefix, so the payload cannot be shortened.
+
+**Fetch the secret** -- `GET rfid-sync?qr=1&limit=1`, header `x-device-key`
+(the reader adds `limit=1` so an older server that ignores `qr=1` answers with one
+card line instead of the whole list). Fetched at boot once online, then every sync
+interval:
+
+```
+200 { "qr": { "qr_id": 7, "secret_b64": "mgmsgcWJqvfoj8oBaHvV8fz6dM5uXhvd+7zhtOfKRx8=" },
+      "server_time": 1794206366 }
+401 { "decision":"deny", "reason":"device_unknown" }
+403 { "decision":"deny", "reason":"device_disabled" }   (no secret returned)
+```
+
+**Poll for an unlock** -- `GET rfid-poll`, header `x-device-key`:
+
+```
+200 { "unlock": null, "server_time": 1794206371 }
+200 { "unlock": { "member_name": "Zed Proof", "member_code": "M00001",
+                  "days_to_expiry": 25, "status": "active" }, "server_time": 1794206412 }
+401 / 403 / 404 / 405  setup problem, see Troubleshooting
+```
+
+An unlock is handed out once and expires after 20 s. The reader does **not** POST a
+check-in for it; the server has already recorded the visit.
+
+**Test vector** (the SQL test and `scripts/door-qr-sim.mjs` assert it too). Secret =
+bytes `00 01 02 ... 1f` (base64 `AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=`):
+
+| qr_id, window | code |
+|---|---|
+| 7, 56789012 | `06036629` (payload `LG1.7.06036629`) |
+| 7, 56789013 | `61789799` |
+| 1, 0 | `75481906` |
+
+To check a flashed reader, add `#define QR_SELFTEST` above the includes in the
+sketch (or in `config.h`), upload, and read the Serial log at boot: every
+`[qr-selftest]` line must say `PASS` (it checks HMAC-SHA256 against RFC 4231 test
+case 1 and these vectors). Remove it again for the field build; it costs ~0.5 KB.
+
+### Rolling back to 1.3.0
+
+Check out the 1.3.0 sketch (`git checkout 05ce180 -- firmware/rfid-check-in/rfid-check-in.ino`;
+`lg_qrcode.*` may stay, an unused file is ignored) and upload it. The door then
+behaves exactly as before; the server's QR functions are simply never called.
+1.3.0 does not recognise the 1.4.0 settings file, so its saved settings (relay,
+open/exit/result times, sound) go back to the defaults once: set them again in the
+menu. The card list and queued taps are unaffected; `/qr.bin` is ignored.
+Going forward again, 1.4.0 reads the 1.3.0 settings file and turns the QR on.
 
 ## Security
 
@@ -343,6 +455,12 @@ is `WEB_USER` (default `admin`).
 | `OFFLINE` + `No WiFi` | Wrong SSID/password or a 5 GHz-only network. The reader retries every 15 s. If it has synced before, taps are now decided from the cached list instead (see Offline mode). |
 | Always `OFFLINE MODE`, never a name | The server is failing. Open Serial: `[http]` shows the error. Offline decisions keep the door working meanwhile. |
 | K1 shows `C0` | No successful sync yet. Serial `[sync]` lines say why (HTTP 401 = key, 403 = disabled, anything else = network). |
+| Menu shows Door QR `NO KEY`, idle screen is the plain clock | The QR secret has not been fetched. Serial `[qr]` says why: `config reply not usable` = the server is not updated (deploy the `door_qr` migration and the `rfid-sync` / `rfid-poll` functions), `device key unknown` / `reader disabled` = fix the key in the console. It retries every minute (every 5 min after a bad key); a reboot retries at once. Needs WiFi and a valid clock. |
+| Idle screen shows `WIFI DOWN` / `TAP CARD` | WiFi is not connected, so a phone scan could not open the door. The code still rotates. Cards still work (cached list). |
+| App says the code is invalid for every scan | Clock drift. The server accepts the current 30 s window +-1. The reader corrects its RTC from `server_time` on every poll, but only while online: after a long outage with a drifting RTC, or if the Serial log says `server time differs from the RTC by over 30 days`, reset the RTC (replace the CR2032, let NTP set it). Also check the app is scanning the right gym's reader (`qr_id` is per reader). |
+| Scan shows success in the app but the door does not open | The reader is not polling or the unlock expired (20 s). Check Serial for `[qr] poll failed (401/403/404/-1)`: 404 = `rfid-poll` not deployed or a wrong `RFID_POLL_ENDPOINT`; -1/timeouts = weak WiFi. Offline test and Relay OFF also stop it. |
+| QR is hard to scan | Hold the phone 5-15 cm away and steady; the code is small on a 0.96" panel. Turn the room light down or the phone brightness up if the OLED glares. If it never scans, turn Door QR OFF and tell us the panel size. |
+| Compile error `lg_qrcode.h: No such file` | `lg_qrcode.c` and `lg_qrcode.h` must sit in the same folder as the `.ino`. |
 | Compile error `RFID_SYNC_ENDPOINT` | Add the `RFID_SYNC_ENDPOINT` line from `config.h.example` to your `config.h`. |
 | `OFFLINE` + `No server reply` / `HTTP 5xx` | Internet down or a server error. Check Serial for the HTTP error. |
 | `DEVICE KEY UNKNOWN` | Key mistyped, rotated, or the reader was registered on another project. Re-copy or rotate. |
