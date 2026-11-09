@@ -17,6 +17,55 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-11-09 — Printed card numbers, a public balance page, renewal requests, a card designer
+
+### Added
+
+- **Cards** (`/cards`, owner/manager/front desk). Every printed RFID card
+  (`NO. 0004`) is a row of stock: its chip, whether it is free, in a member's
+  hand, lost or retired, and who holds it. Owners and managers number a new
+  run; the desk links a chip from the reader inbox or by typing the UID, marks
+  a card lost or found, and hands it to a member. Taking a card back (revoke)
+  frees it for the next member with nothing else to do. The member profile's
+  assign dialog now takes the printed number first and only asks for the chip
+  when the card has none yet; members search matches card numbers.
+- **Card designer** (`/cards/designer`, owner/manager). Upload the card
+  artwork, drag the number and a QR into place, pick the run (e.g. 0001–0100)
+  and download one PDF page per card for the print shop. The QR opens the
+  gym's balance page with that card's number. Past runs can be downloaded
+  again. First use of a PDF library in the console (`pdf-lib`, browser only).
+- **Public balance page.** Scanning a card opens `…/balance?card_no=0004` —
+  the gym's own site (`lordofgyms.com/balance`, set under Settings → "Card
+  balance link") or the console's own `/balance?org=<slug>&card_no=` — and
+  shows a masked name, the plan, whether it is active and how many days are
+  left, to anyone holding the card. No login, no phone, no dues. "Request
+  renewal" leaves a note for the desk. Served by the new `public-balance`
+  Edge Function (`supabase/functions/README.md`).
+- **Renewal requests.** One pending request per member; a repeat within ten
+  minutes is refused and a later one is counted on the same row (the first
+  phone and note stand). Renewing the member at the desk closes it by itself;
+  the desk can also mark it done or reject it. `/members` shows how many are
+  waiting; `/members/requests` lists them.
+
+### Database
+
+- `card_stock`, `card_batches`, `card_designs` (+ private `card-templates`
+  bucket), `renewal_requests`; `member_overview.card_no`; view
+  `card_stock_overview`; RPCs `create_card_stock_range`, `next_free_card_no`,
+  `link_card_stock_uid`, `assign_card_stock_to_member`,
+  `set_card_stock_status`, `save_card_design`, `delete_card_design`,
+  `handle_renewal_request`; service-role-only `public_card_balance`,
+  `public_renewal_request`; `orgs.settings.balance_url`. Gates
+  `card_stock.sql`, `public_balance.sql`, `card_designs.sql`.
+
+### Security
+
+- `card_uid_holder_kind` was briefly callable by any signed-in user for any
+  org; it now answers only for the caller's org, and the unguarded lookup has
+  no API grant. A repeat renewal request from the public page could overwrite
+  the phone the desk would call; the first values now stand. Renewal requests
+  follow the member's branch like the rest of the desk.
+
 ## 2026-11-05 — Check-out is a setting, off by default
 
 ### Added
