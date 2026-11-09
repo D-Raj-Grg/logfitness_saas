@@ -25,14 +25,17 @@ Two conventions worth knowing while reading:
   member's 4-6 digit PIN (or have a random 6-digit one generated and shown
   once), reset it (also clears a lock) and clear it. Members sign in with the
   printed card number or phone plus the PIN; five wrong PINs lock the member for
-  15 minutes. Nothing about the PIN reaches the audit log.
+  15 minutes, doubling on each repeat lock (up to about 16 hours) until a correct
+  PIN or a desk reset. Nothing about the PIN reaches the audit log. Sign-in only
+  ever works for app accounts made for PIN login, never for an email-invited or
+  staff account.
 - **Member self-calls:** `my_card()` (printed number of the member's live card)
   and `request_renewal()` (the same one-pending-request rules as the public
   balance page, from inside the app).
 
 ### Database
 
-- `member_pins`, `verify_member_pin`, `member_login_lookup` (service role
+- `member_pins` (+ `lock_level`, hardening migration `20261109120100`), `verify_member_pin`, `member_login_lookup` (service role
   only), `set_member_pin`, `clear_member_pin`, `member_pin_status`, `my_card`,
   `request_renewal`, internal `file_renewal_request`. Migration
   `20261109120000_member_pin.sql`; gate `supabase/tests/member_pin_login.sql`.

@@ -20,9 +20,15 @@
 // session. The access-token hook then stamps org_id / member_id claims exactly as
 // for an invited member, so every member RLS policy and RPC works unchanged.
 //
+// Only SYNTHETIC member users are ever signed in here: a linked auth user must
+// carry app_metadata.member_login === true (or the m-<id>@members.invalid email)
+// and must not be a staff login; anything else (an email-invited user, a staff
+// account) answers the generic 'invalid'.
+//
 // Rate limits are in-memory and per instance (best effort): 10 requests/min per
-// client IP and 60 attempts/10 min per org. The database lockout (5 wrong PINs
-// -> 15 min) is the real backstop. Never log pins or tokens.
+// client IP, and per org 300 FAILED verifications per 10 min (successes are
+// never counted or throttled). The database lockout (5 wrong PINs -> 15 min,
+// doubling per repeat lock) is the real backstop. Never log pins or tokens.
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
@@ -33,7 +39,7 @@ const PIN_RE = /^[0-9]{4,6}$/
 
 const IP_LIMIT = 10
 const IP_WINDOW_MS = 60_000
-const ORG_LIMIT = 60
+const ORG_FAIL_LIMIT = 300
 const ORG_WINDOW_MS = 10 * 60_000
 
 const ipHits = new Map<string, number[]>()
@@ -52,6 +58,25 @@ function hit(map: Map<string, number[]>, key: string, limit: number, windowMs: n
   return recent.length > limit
 }
 
+function failCount(map: Map<string, number[]>, key: string, windowMs: number): number {
+  const now = Date.now()
+  const recent = (map.get(key) ?? []).filter((t) => now - t < windowMs)
+  map.set(key, recent)
+  return recent.length
+}
+
+function recordFail(map: Map<string, number[]>, key: string) {
+  const list = map.get(key) ?? []
+  list.push(Date.now())
+  map.set(key, list)
+  if (map.size > 5000) {
+    const now = Date.now()
+    for (const [k, times] of map) {
+      if (times.every((t) => now - t >= ORG_WINDOW_MS)) map.delete(k)
+    }
+  }
+}
+
 // Last x-forwarded-for hop is the one Supabase's proxy appended.
 function clientIp(req: Request): string {
   const fwd = req.headers.get('x-forwarded-for')
@@ -68,8 +93,6 @@ function json(body: unknown, status = 200, extra: Record<string, string> = {}) {
     headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...extra },
   })
 }
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 function randomSecret(): string {
   const b = crypto.getRandomValues(new Uint8Array(32))
@@ -103,7 +126,9 @@ Deno.serve(async (req: Request) => {
   if (!IDENT_RE.test(identifier)) return json({ error: 'identifier must be digits' }, 400)
   if (!PIN_RE.test(pin)) return json({ error: 'pin must be 4 to 6 digits' }, 400)
 
-  if (hit(orgHits, orgSlug, ORG_LIMIT, ORG_WINDOW_MS)) {
+  // Per-org ceiling counts failed verifications only, and is checked (not
+  // incremented) here, so successful logins are never throttled by it.
+  if (failCount(orgHits, orgSlug, ORG_WINDOW_MS) >= ORG_FAIL_LIMIT) {
     return json({ result: 'rate_limited' }, 429)
   }
 
@@ -130,13 +155,17 @@ Deno.serve(async (req: Request) => {
     const verdict = verify.data as { result: string; retry_after_seconds?: number }
 
     if (!memberId) {
-      await sleep(0)
+      recordFail(orgHits, orgSlug)
       return json({ result: 'invalid' })
     }
     if (verdict.result === 'locked') {
+      recordFail(orgHits, orgSlug)
       return json({ result: 'locked', retry_after_seconds: verdict.retry_after_seconds })
     }
-    if (verdict.result !== 'ok') return json({ result: 'invalid' })
+    if (verdict.result !== 'ok') {
+      recordFail(orgHits, orgSlug)
+      return json({ result: 'invalid' })
+    }
 
     // PIN is right: make sure the member has an auth user.
     const { data: m, error: mErr } = await admin
@@ -151,6 +180,24 @@ Deno.serve(async (req: Request) => {
     if (userId) {
       const { data: u, error: uErr } = await admin.auth.admin.getUserById(userId)
       if (uErr || !u?.user?.email) throw new Error('auth user read failed')
+      const synthetic =
+        u.user.app_metadata?.member_login === true ||
+        u.user.email === `m-${memberId}@members.invalid`
+      let isStaff = true
+      if (synthetic) {
+        const { data: st, error: stErr } = await admin
+          .from('staff')
+          .select('id')
+          .eq('auth_user_id', userId)
+          .limit(1)
+        if (stErr) throw new Error(`staff check ${stErr.code}`)
+        isStaff = (st ?? []).length > 0
+      }
+      if (!synthetic || isStaff) {
+        // Never mint a session for an email-invited or staff account.
+        console.warn('member-login refused: linked auth user is not a synthetic member user')
+        return json({ result: 'invalid' })
+      }
       email = u.user.email
     } else {
       email = `m-${memberId}@members.invalid`

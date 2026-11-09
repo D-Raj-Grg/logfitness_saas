@@ -1108,6 +1108,7 @@ export type Database = {
       member_pins: {
         Row: {
           failed_attempts: number
+          lock_level: number
           locked_until: string | null
           member_id: string
           org_id: string
@@ -1117,6 +1118,7 @@ export type Database = {
         }
         Insert: {
           failed_attempts?: number
+          lock_level?: number
           locked_until?: string | null
           member_id: string
           org_id: string
@@ -1126,6 +1128,7 @@ export type Database = {
         }
         Update: {
           failed_attempts?: number
+          lock_level?: number
           locked_until?: string | null
           member_id?: string
           org_id?: string

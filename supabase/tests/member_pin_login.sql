@@ -26,6 +26,7 @@ declare
   hash0 text;
   st_id uuid;
   gen_pin text;
+  u_staff uuid := 'd7a00000-0000-0000-0000-0000000000a1';
 begin
   -- fixtures (owner role) -------------------------------------------------------
   insert into public.orgs (id, name, slug) values
@@ -97,6 +98,39 @@ begin
   assert r ->> 'result' = 'ok', format('after the lock expires: %s', r);
   select count(*) into n from public.member_pins where member_id = m1 and failed_attempts = 0 and locked_until is null;
   assert n = 1, 'success clears failed_attempts and locked_until';
+
+  -- escalating lockout: first lock 900s, second 1800s, a success resets the level
+  select count(*) into n from public.member_pins where member_id = m1 and lock_level = 0;
+  assert n = 1, 'success resets lock_level';
+  for i in 1..4 loop perform public.verify_member_pin(m1, '1'); end loop;
+  r := public.verify_member_pin(m1, '1');
+  assert r ->> 'result' = 'locked' and (r ->> 'retry_after_seconds')::integer = 900, format('first lock is 900s: %s', r);
+  execute 'reset role';
+  update public.member_pins set locked_until = now() - interval '1 second' where member_id = m1;
+  execute 'set local role service_role';
+  for i in 1..4 loop
+    r := public.verify_member_pin(m1, '1');
+    assert r ->> 'result' = 'invalid', format('fresh streak after a lock expires: %s', r);
+  end loop;
+  r := public.verify_member_pin(m1, '1');
+  assert r ->> 'result' = 'locked' and (r ->> 'retry_after_seconds')::integer = 1800, format('second lock is 1800s: %s', r);
+  execute 'reset role';
+  select count(*) into n from public.member_pins where member_id = m1 and lock_level = 2 and failed_attempts = 0;
+  assert n = 1, 'lock_level is 2 after two locks';
+  update public.member_pins set locked_until = now() - interval '1 second', lock_level = 9 where member_id = m1;
+  execute 'set local role service_role';
+  for i in 1..4 loop perform public.verify_member_pin(m1, '1'); end loop;
+  r := public.verify_member_pin(m1, '1');
+  assert (r ->> 'retry_after_seconds')::integer = 900 * 64, format('lock length is capped at 2^6: %s', r);
+  execute 'reset role';
+  update public.member_pins set locked_until = now() - interval '1 second' where member_id = m1;
+  execute 'set local role service_role';
+  r := public.verify_member_pin(m1, '4821');
+  assert r ->> 'result' = 'ok', 'right pin after the lock';
+  execute 'reset role';
+  select count(*) into n from public.member_pins where member_id = m1 and lock_level = 0 and failed_attempts = 0;
+  assert n = 1, 'success resets lock_level and failed_attempts';
+  execute 'set local role service_role';
 
   -- member_login_lookup ----------------------------------------------------------
   assert public.member_login_lookup('omicron-pin-test', '0001') = m1, 'card 0001 -> m1';
@@ -265,6 +299,34 @@ begin
   failed := false;
   begin perform public.my_card(); exception when insufficient_privilege then failed := true; end;
   assert failed, 'staff called my_card';
+
+  -- set_member_pin resets the escalation; refuses a member whose account is a staff login
+  execute 'reset role';
+  update public.member_pins set failed_attempts = 3, lock_level = 4, locked_until = now() + interval '1 hour'
+  where member_id = m1;
+  perform set_config('request.jwt.claims', json_build_object('sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', org_a::text, 'staff_id', st_owner::text, 'staff_role', 'owner', 'branch_ids', json_build_array())::text, true);
+  execute 'set local role authenticated';
+  perform public.set_member_pin(m1, '4822');
+  execute 'reset role';
+  select count(*) into n from public.member_pins
+  where member_id = m1 and lock_level = 0 and failed_attempts = 0 and locked_until is null;
+  assert n = 1, 'set_member_pin resets lock_level, failed_attempts and the lock';
+
+  insert into auth.users (id, instance_id, aud, role, email, email_confirmed_at, created_at, updated_at)
+  values (u_staff, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+          'staffmember@omicron.test', now(), now(), now());
+  update public.staff set auth_user_id = u_staff where id = st_desk;
+  update public.members set auth_user_id = u_staff where id = m2;
+  execute 'set local role authenticated';
+  failed := false;
+  begin perform public.set_member_pin(m2, '4823'); exception when insufficient_privilege then failed := true; end;
+  assert failed, 'a PIN was set for a member whose account is a staff login';
+  execute 'reset role';
+  update public.members set auth_user_id = null where id = m2;
+  update public.staff set auth_user_id = null where id = st_desk;
+  delete from auth.users where id = u_staff;
+  perform set_config('request.jwt.claims', null, true);
 
   -- audit: the pin and its hash never reach audit_log -----------------------------------
   execute 'reset role';
