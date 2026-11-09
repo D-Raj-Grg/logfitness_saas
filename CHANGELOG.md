@@ -17,6 +17,37 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-11-09 — Gym schedule, attendance calendar, renewal read (backend)
+
+### Added
+
+- **Gym schedule (org-wide, every branch).** Weekly off days live in
+  `orgs.settings.weekly_off` (ISO weekdays 1=Mon..7=Sun, stored sorted and
+  deduplicated, `[]` = open every day), set through `set_org_setting`; owners and
+  managers may set it. Closed dates live in the new `org_holidays` table, added and
+  removed through `add_org_holiday(date, name)` / `remove_org_holiday(id)` (owner or
+  manager; audited; staff read their own org's rows).
+- **`my_attendance_calendar(year, month)`** for the members' app: every day of the
+  month as present / absent / off / holiday / none in the gym's timezone, with
+  present/absent counts and today's date. Only a member's own data; staff are refused.
+- **`my_renewal_request()`**: the member's own pending renewal request (or null), so
+  the app can keep showing "requested" after a restart. `renewal_requests` is now in
+  the `supabase_realtime` publication for the console's live toast.
+
+### Security
+
+- **`set_org_setting` let a member through.** The owner check was null-unsafe: for a
+  member principal `jwt_is_owner()` is null, so the guard never fired and a signed-in
+  member could change their gym's settings (`track_check_out`, `balance_url`, ...).
+  Fixed in `20261109130100`; the new gate asserts desk, trainer and member are refused.
+
+### Database
+
+- `20261109130000_gym_schedule_and_calendar.sql`, `20261109130100_set_org_setting_null_guard.sql`,
+  `20261109130200_org_holidays_revoke_anon.sql`; gate `supabase/tests/attendance_calendar.sql`.
+
+---
+
 ## 2026-11-09 — Member app PIN login (backend)
 
 ### Added

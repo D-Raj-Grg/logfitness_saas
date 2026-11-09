@@ -276,6 +276,16 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 
 ## Discovered
 
+### Gym schedule, attendance calendar, renewal read (backend B1, 2026-11-09)
+
+- [x] `org_holidays` (RLS: staff read own org; audited) + `add_org_holiday(p_on_date, p_name)` / `remove_org_holiday(p_id)` (owner/manager only).
+- [x] `orgs.settings.weekly_off` via `set_org_setting('weekly_off', '[6]')` (int array 1..7, deduped+sorted; owner or manager).
+- [x] `my_attendance_calendar(p_year, p_month)` and `my_renewal_request()`; `renewal_requests` added to `supabase_realtime`.
+- [x] Gate `supabase/tests/attendance_calendar.sql` (in `db:test`); `lib/types/database.ts` regenerated.
+- [x] **Fixed:** `set_org_setting` null-unsafe owner guard let a member principal change org settings (`20261109130100`).
+- [ ] Console: Settings "Gym schedule" section (workstream C). Calendar UI in the Flutter app (E2).
+- [ ] Past freeze periods are not stored, so a past frozen span can show red (only the *current* freeze is neutral). Needs a freeze-period table.
+
 ### Member app backend: PIN login and member self-calls (decided 2026-11-09)
 
 The members' app (`../logfitness_membership_flutter`, LOG-branded, separate from Gym Tross) signs members in with **printed card number or phone + a PIN staff set**. Full contract in that repo's `PLANNING.md` §4–5; its `TASKS.md` Phase 0 is the same list. The PIN belongs to the member, not the card (cards are reusable stock). Gym Tross keeps its member shell and `current_member()`'s signature until the new app ships.
