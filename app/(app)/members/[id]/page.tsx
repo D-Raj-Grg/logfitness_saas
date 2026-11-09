@@ -7,6 +7,7 @@ import { MemberCardAccess } from '@/components/members/member-card-access'
 import { MemberHistoryTabs } from '@/components/members/member-history-tabs'
 import { MemberMessageActions } from '@/components/members/member-message-actions'
 import { MemberRecordActions } from '@/components/members/member-record-actions'
+import { MemberRenewalRequests } from '@/components/members/member-renewal-requests'
 import { MemberStatusActions } from '@/components/members/member-status-actions'
 import { MemberPhoto } from '@/components/members/member-photo'
 import { MemberStatusBadge } from '@/components/members/member-status-badge'
@@ -23,6 +24,7 @@ import { getMember, getMemberOverview } from '@/lib/db/members'
 import { listInvoicesForMember, listMembershipsForMember } from '@/lib/db/memberships'
 import { listNotificationsForMember } from '@/lib/db/notifications'
 import { listPaymentsForMember } from '@/lib/db/payments'
+import { listRenewalRequestsForMember } from '@/lib/db/renewal-requests'
 import { memberPhotoUrl } from '@/lib/db/photos'
 import { getTrackCheckOut } from '@/lib/db/orgs'
 import { formatDate, formatMoney, isRealIsoDate, todayInTimezone } from '@/lib/format'
@@ -113,6 +115,7 @@ export default async function MemberProfilePage({
     messages,
     cards,
     cardScans,
+    renewalRequests,
   ] = await Promise.all([
     getMemberOverview(id),
     getMember(id),
@@ -145,6 +148,8 @@ export default async function MemberProfilePage({
           () => []
         )
       : Promise.resolve([]),
+    // Asks from the balance page. A failed read is an empty panel, not a 500.
+    listRenewalRequestsForMember(id).catch(() => []),
   ])
 
   if (!overview || !member) notFound()
@@ -361,8 +366,19 @@ export default async function MemberProfilePage({
           ) : null}
 
           {canManage ? (
-            <MemberCardAccess memberId={id} cards={cards} scans={cardScans} />
+            <MemberCardAccess
+              memberId={id}
+              cards={cards}
+              scans={cardScans}
+              cardNo={overview.card_no ?? null}
+            />
           ) : null}
+
+          <MemberRenewalRequests
+            requests={renewalRequests}
+            fullName={overview.full_name}
+            canManage={canManage}
+          />
 
           <MemberHistoryTabs
             memberships={memberships}

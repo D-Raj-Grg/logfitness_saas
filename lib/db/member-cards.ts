@@ -12,6 +12,8 @@ export type UnassignedCardScan = {
   last_seen_at: string
   scan_count: number
   devices: { name: string } | null
+  /** The printed number when the chip is already linked to a numbered card. */
+  card_no: number | null
 }
 
 function unwrap<T>(result: {
@@ -62,19 +64,27 @@ export async function listUnassignedCardScans(branchIds?: string[] | null) {
 
   if (branchIds) request = request.in('branch_id', branchIds)
 
-  const scans = unwrap<UnassignedCardScan[]>(await request) ?? []
-  if (scans.length === 0) return scans
+  const scans = unwrap<Omit<UnassignedCardScan, 'card_no'>[]>(await request) ?? []
+  if (scans.length === 0) return [] as UnassignedCardScan[]
 
-  const live = unwrap<{ card_uid: string }[]>(
-    await supabase
-      .from('member_cards')
-      .select('card_uid')
-      .is('revoked_at', null)
-      .in('card_uid', [...new Set(scans.map((scan) => scan.card_uid))])
-  ) ?? []
-  const assigned = new Set(live.map((row) => row.card_uid))
+  const uids = [...new Set(scans.map((scan) => scan.card_uid))]
+  const [live, stock] = await Promise.all([
+    supabase.from('member_cards').select('card_uid').is('revoked_at', null).in('card_uid', uids),
+    // Which taps came from a printed, numbered card, so the picker can say
+    // "Card 0004" instead of a bare UID.
+    supabase.from('card_stock').select('card_uid, card_no').in('card_uid', uids),
+  ])
+  const assigned = new Set((unwrap<{ card_uid: string }[]>(live) ?? []).map((row) => row.card_uid))
+  const numbered = new Map(
+    (unwrap<{ card_uid: string | null; card_no: number }[]>(stock) ?? [])
+      .filter((row): row is { card_uid: string; card_no: number } => Boolean(row.card_uid))
+      .map((row) => [row.card_uid, row.card_no])
+  )
 
-  return scans.filter((scan) => !assigned.has(scan.card_uid)).slice(0, 10)
+  return scans
+    .filter((scan) => !assigned.has(scan.card_uid))
+    .slice(0, 10)
+    .map((scan) => ({ ...scan, card_no: numbered.get(scan.card_uid) ?? null }))
 }
 
 export async function assignMemberCard(args: {

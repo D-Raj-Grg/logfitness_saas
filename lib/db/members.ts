@@ -1,3 +1,4 @@
+import { parseCardNo } from '@/lib/cards/card-no'
 import { createClient } from '@/lib/supabase/server'
 import type { Database } from '@/lib/types/database'
 
@@ -37,6 +38,17 @@ export type MemberListResult = {
 }
 
 /**
+ * A short run of digits ("4", "0004", "no. 4") is also the number printed on
+ * a member's card, so the search finds the holder of card 0004 as well as the
+ * phones that start with 4. Anything that is not a card number adds nothing.
+ */
+function cardNoClause(term: string) {
+  if (!/^(no\.?\s*)?\d{1,4}$/i.test(term.trim())) return ''
+  const n = parseCardNo(term)
+  return n === null ? '' : `,card_no.eq.${n}`
+}
+
+/**
  * Server-side search, filter, and pagination over the overview view. The
  * search term matches the phone prefix, the member code prefix, or any part of
  * the name -- the three things a front desk is ever told.
@@ -64,7 +76,7 @@ export async function listMembers(
     const escaped = term.replace(/[%_,()]/g, ' ').trim()
     if (escaped) {
       request = request.or(
-        `phone.ilike.${escaped}%,member_code.ilike.${escaped}%,full_name.ilike.%${escaped}%`
+        `phone.ilike.${escaped}%,member_code.ilike.${escaped}%,full_name.ilike.%${escaped}%${cardNoClause(term)}`
       )
     }
   }
@@ -151,7 +163,7 @@ export async function searchMembersForCheckIn(term: string, limit = 8) {
     .select('*')
     .is('archived_at', null)
     .or(
-      `phone.ilike.${cleaned}%,member_code.ilike.${cleaned}%,full_name.ilike.%${cleaned}%`
+      `phone.ilike.${cleaned}%,member_code.ilike.${cleaned}%,full_name.ilike.%${cleaned}%${cardNoClause(term)}`
     )
     .order('full_name')
     .limit(limit)

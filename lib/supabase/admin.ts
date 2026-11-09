@@ -4,12 +4,19 @@ import type { Database } from '@/lib/types/database'
 
 /**
  * A service-role client for the handful of operations that the caller's own
- * session cannot perform -- today, only setting another staff member's
- * password through the Auth admin API.
+ * session cannot perform. Two sanctioned uses:
  *
- * This bypasses RLS entirely, so it must only ever be created inside a Server
- * Action or Route Handler that has already authorised the caller through the
- * normal RLS-bound client. Never hand it a query that RLS could have run.
+ *   1. Setting another staff member's password through the Auth admin API,
+ *      from a Server Action that has already authorised the caller through
+ *      the normal RLS-bound client.
+ *   2. The public balance page (lib/db/public-balance.ts), which has no
+ *      caller to authorise: it calls `public_card_balance` and
+ *      `public_renewal_request`, RPCs executable by service_role only that
+ *      are the anonymous contract and scope themselves -- org by slug, and
+ *      only what a stranger holding the card could already guess.
+ *
+ * This bypasses RLS entirely. Never hand it a query that RLS could have run,
+ * and never a table read on behalf of an anonymous visitor.
  *
  * Fluid compute reuses instances across requests, so this is created per call
  * rather than hoisted to module scope, matching lib/supabase/server.ts.

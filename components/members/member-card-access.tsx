@@ -1,8 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
-import { RefreshCw } from 'lucide-react'
+import { useState } from 'react'
 
 import {
   assignMemberCard,
@@ -10,6 +8,8 @@ import {
   type MemberFormState,
 } from '@/app/(app)/members/actions'
 import { AuthFormMessage, FieldError } from '@/components/auth/auth-form-message'
+import { CardUidPicker, useCardUidPicker } from '@/components/cards/card-uid-picker'
+import { useCardStockLookup } from '@/components/cards/use-card-stock-lookup'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,17 +33,17 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { cardLabel, parseCardNo } from '@/lib/cards/card-no'
 import type { MemberCardRow, UnassignedCardScan } from '@/lib/db/member-cards'
-import { formatDate, formatDateTime } from '@/lib/format'
+import { formatDate } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { useDismissibleActionState } from '@/hooks/use-dismissible-action-state'
 
-const MANUAL = 'manual'
-
 /**
- * Enrollment is a tap, not a typing exercise: the member taps the new card on
- * a reader, the reader does not know it and files it as an unassigned scan, and
- * the desk picks it from this list. Typing the UID is the fallback for a card
- * read some other way.
+ * Hand a member a card. The desk starts from the number printed on it: a
+ * numbered card whose chip is already linked needs nothing more, one whose
+ * chip is not linked yet also needs a tap (or a typed UID), and a card with no
+ * printed number is picked from the taps alone, as before.
  */
 function AssignCardDialog({
   memberId,
@@ -54,13 +54,15 @@ function AssignCardDialog({
   replacing: boolean
   scans: UnassignedCardScan[]
 }) {
-  const router = useRouter()
-  const [refreshing, startRefresh] = useTransition()
   const [open, setOpen] = useState(false)
-  // Null until the desk picks something. Until then the newest tap is selected
-  // -- including one that "Check for new taps" just brought in -- else typing.
-  const [choice, setChoice] = useState<string | null>(null)
-  const [manualUid, setManualUid] = useState('')
+  const picker = useCardUidPicker(scans)
+  const {
+    text: cardNoText,
+    setText: setCardNoText,
+    lookup,
+    pending: looking,
+    reset: resetCardNo,
+  } = useCardStockLookup()
   const [state, formAction, pending, dismiss] = useDismissibleActionState<MemberFormState>(
     async (prev, formData) => {
       const result = await assignMemberCard(prev, formData)
@@ -73,17 +75,30 @@ function AssignCardDialog({
   function onOpenChange(next: boolean) {
     dismiss()
     // Every opening starts from the newest tap, not from last time's pick.
-    setChoice(null)
+    picker.reset()
+    resetCardNo()
     setOpen(next)
   }
 
-  // A refresh can also take the chosen tap away (assigned meanwhile); fall
-  // back the same way.
-  const selected =
-    choice === MANUAL || (choice && scans.some((scan) => scan.card_uid === choice))
-      ? choice
-      : (scans[0]?.card_uid ?? MANUAL)
-  const cardUid = selected === MANUAL ? manualUid : selected
+  const typedNo = parseCardNo(cardNoText)
+  const hasNumber = cardNoText.trim() !== ''
+  // A numbered card with its chip linked wants no UID: the number alone is
+  // the whole instruction. Otherwise the picker supplies it.
+  const chipKnown = Boolean(lookup?.found && lookup.hasChip)
+  const needsUid = !hasNumber || (lookup?.found === true && !lookup.hasChip)
+  const cardUid = needsUid ? picker.cardUid : ''
+
+  const unusable =
+    lookup?.found === true &&
+    (lookup.effectiveStatus === 'assigned' ||
+      lookup.effectiveStatus === 'lost' ||
+      lookup.effectiveStatus === 'retired')
+  const canSubmit =
+    !pending &&
+    !looking &&
+    (hasNumber
+      ? typedNo !== null && !unusable && lookup?.found === true && (chipKnown || Boolean(cardUid))
+      : Boolean(cardUid))
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -99,93 +114,56 @@ function AssignCardDialog({
           <DialogHeader>
             <DialogTitle>{replacing ? 'Replace their card' : 'Assign a card'}</DialogTitle>
             <DialogDescription>
-              Have the member tap the new card on a reader, then pick it below.
-              {replacing
-                ? ' The card they have now stops working, recorded as replaced.'
-                : null}
+              Type the number printed on the card. If it has not been tapped on a reader yet,
+              have the member tap it and pick it below.
+              {replacing ? ' The card they have now stops working, recorded as replaced.' : null}
             </DialogDescription>
           </DialogHeader>
 
           <AuthFormMessage error={state.error} />
 
-          <fieldset className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
-              <legend className="text-sm font-medium">Recent unknown cards</legend>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={refreshing}
-                onClick={() => startRefresh(() => router.refresh())}
-              >
-                <RefreshCw className={refreshing ? 'animate-spin' : undefined} />
-                Check for new taps
-              </Button>
-            </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="assign-card-no">Printed card number</Label>
+            <Input
+              id="assign-card-no"
+              name="cardNo"
+              value={cardNoText}
+              onChange={(event) => setCardNoText(event.target.value)}
+              placeholder="e.g. 0004"
+              inputMode="numeric"
+              autoComplete="off"
+              className="font-mono"
+              aria-describedby="assign-card-no-hint"
+            />
+            <p
+              id="assign-card-no-hint"
+              className={cn(
+                'text-xs',
+                unusable || lookup?.found === false ? 'text-destructive' : 'text-muted-foreground'
+              )}
+            >
+              {!hasNumber
+                ? 'Leave blank for a card with no printed number.'
+                : typedNo === null
+                  ? 'Enter the number printed on the card (1–9999)'
+                  : looking || !lookup
+                    ? 'Looking up the card...'
+                    : !lookup.found
+                      ? lookup.label
+                      : lookup.effectiveStatus === 'free' && !lookup.hasChip
+                        ? `${lookup.label} has no chip linked yet — tap it on a reader or type its UID`
+                        : `${lookup.label} · ${lookup.summary}`}
+            </p>
+            <FieldError messages={state.fieldErrors?.cardNo} />
+          </div>
 
-            {scans.length === 0 ? (
-              <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
-                No unknown cards tapped in the last week.
-              </p>
-            ) : (
-              <div className="flex max-h-56 flex-col divide-y overflow-y-auto rounded-md border">
-                {scans.map((scan) => (
-                  <label
-                    key={scan.id}
-                    className="flex cursor-pointer items-start gap-3 px-3 py-2 text-sm has-[:checked]:bg-muted/60"
-                  >
-                    <input
-                      type="radio"
-                      name="cardChoice"
-                      value={scan.card_uid}
-                      checked={selected === scan.card_uid}
-                      onChange={() => setChoice(scan.card_uid)}
-                      className="mt-1"
-                    />
-                    <span className="flex min-w-0 flex-col">
-                      <span className="font-mono break-all">{scan.card_uid}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {scan.devices?.name ?? 'A reader'} · {formatDateTime(scan.last_seen_at)}
-                        {scan.scan_count > 1 ? ` · ${scan.scan_count} taps` : ''}
-                      </span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            )}
-
-            <label className="flex cursor-pointer items-center gap-3 px-3 py-1 text-sm">
-              <input
-                type="radio"
-                name="cardChoice"
-                value={MANUAL}
-                checked={selected === MANUAL}
-                onChange={() => setChoice(MANUAL)}
-              />
-              Type the card number instead
-            </label>
-          </fieldset>
-
-          {selected === MANUAL ? (
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="manual-card-uid">Card UID</Label>
-              <Input
-                id="manual-card-uid"
-                value={manualUid}
-                onChange={(event) => setManualUid(event.target.value)}
-                placeholder="04:A3:1B:2C"
-                autoComplete="off"
-                className="font-mono"
-              />
-              <p className="text-xs text-muted-foreground">
-                Hex, with or without colons or spaces.
-              </p>
-            </div>
+          {needsUid ? (
+            <CardUidPicker scans={scans} picker={picker} idPrefix="assign-card-uid" />
           ) : null}
           <FieldError messages={state.fieldErrors?.cardUid} />
 
           <DialogFooter>
-            <Button type="submit" disabled={pending || !cardUid}>
+            <Button type="submit" disabled={!canSubmit}>
               {pending ? 'Saving...' : replacing ? 'Replace card' : 'Assign card'}
             </Button>
           </DialogFooter>
@@ -254,15 +232,18 @@ function RevokeCardDialog({ memberId, cardUid }: { memberId: string; cardUid: st
  * The member's door card, beside the app access row. `cards` is the member's
  * whole card history, newest first; at most one of them is live. Null means it
  * could not be read, and the row says so instead of guessing "no card".
+ * `cardNo` is the number printed on the live card, when it is a numbered one.
  */
 export function MemberCardAccess({
   memberId,
   cards,
   scans,
+  cardNo = null,
 }: {
   memberId: string
   cards: MemberCardRow[] | null
   scans: UnassignedCardScan[]
+  cardNo?: number | null
 }) {
   if (!cards) {
     return (
@@ -285,6 +266,14 @@ export function MemberCardAccess({
         <span className="text-sm break-words text-muted-foreground">
           {live ? (
             <>
+              {cardNo ? (
+                <>
+                  <span className="font-mono font-semibold text-foreground">
+                    {cardLabel(cardNo)}
+                  </span>
+                  {' · '}
+                </>
+              ) : null}
               <span className="font-mono">{live.card_uid}</span> · since{' '}
               {formatDate(live.assigned_at)}
             </>

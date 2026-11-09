@@ -124,7 +124,7 @@
 // ---------------------------------------------------------------------------
 // Behaviour
 // ---------------------------------------------------------------------------
-#define FW_VERSION            "1.2.0"
+#define FW_VERSION            "1.3.0"
 #define TZ_OFFSET_SEC         (5 * 3600 + 45 * 60)  // Nepal, UTC+5:45, no DST
 #define HTTP_TIMEOUT_MS       8000
 #define HTTP_TIMEOUT_DOWN_MS  5000UL   // after a failure, fail faster (TLS alone can take 2-3 s)
@@ -139,15 +139,29 @@
 #define UID_HEX_MAX           20       // matches member_cards.card_uid (8..20 hex)
 #define EVENTS_MAX            2000     // ~48 KB; taps beyond this are not queued
 #define UPLOAD_BATCH          50
-#define SYNC_PAGE_LIMIT       500
-#define SYNC_INTERVAL_MS      (15UL * 60UL * 1000UL)
+#define SYNC_PAGE_LIMIT       300   // a page is read into RAM whole: ~45 bytes a card with the name
+// A cached ALLOW is trusted until the next sync, so keep it short -- but a full
+// resync of a big list is many blocking pages and a lot of flash writes, so the
+// interval grows with the list (see syncIntervalMs()).
+#define SYNC_INTERVAL_SMALL_MS (3UL * 60UL * 1000UL)   // up to SYNC_SMALL_MAX cards
+#define SYNC_INTERVAL_MID_MS   (8UL * 60UL * 1000UL)   // up to SYNC_MID_MAX cards
+#define SYNC_INTERVAL_LARGE_MS (15UL * 60UL * 1000UL)  // more than that
+#define SYNC_SMALL_MAX         500UL
+#define SYNC_MID_MAX           2000UL
+// Cache-first taps (fw 1.2.1): a card the cached list says is allowed opens the
+// door at once, with no HTTPS round trip (which cost 3-5 s). Anything else
+// (unknown card, expired, dues, staff, no/stale cache, no clock) still asks the
+// server. The cache is trusted only while the last good sync is this fresh.
 #define SYNC_RETRY_MS         (60UL * 1000UL)
 #define UPLOAD_RETRY_MS       (30UL * 1000UL)
 #define UPLOAD_RETRY_BADKEY_MS (5UL * 60UL * 1000UL)  // 401/403: the key will not fix itself
 #define SYNC_RETRY_BADKEY_MS  (5UL * 60UL * 1000UL)
 #define BG_TIMEOUT_MS         4000UL   // background sync/upload: never hold the door long
-#define RESULT_HOLD_MS        3000UL
-#define SAME_UID_DEBOUNCE_MS  3000UL
+// How long the result screen stays up (nothing is read meanwhile) and how long a
+// card just read is ignored if it is presented again. Both are settings now
+// (web page and menu); these are the defaults.
+#define RESULT_HOLD_DEFAULT_MS   500
+#define SAME_UID_DEFAULT_MS      500
 #define INFO_HOLD_MS          5000UL
 #define WIFI_BOOT_WAIT_MS     20000UL
 #define WIFI_RETRY_MS         15000UL
@@ -162,7 +176,7 @@
 #define MENU_IDLE_TIMEOUT_MS  30000UL
 #define PIN_IDLE_TIMEOUT_MS   15000UL
 #define SETTINGS_FILE         "/settings.bin"
-#define SETTINGS_MAGIC        0x4C4F5333UL  // "LOS3" (v1.2.0 added exitMs; old files reset to defaults)
+#define SETTINGS_MAGIC        0x4C4F5334UL  // "LOS4" (v1.3.0 added resultMs/repeatMs; old files reset to defaults)
 #define EXIT_LOCKOUT_MS       1000UL   // ignore further exit presses this long after one
 #define WEB_MAX_FAILS         5
 #define WEB_LOCKOUT_MS        60000UL
@@ -192,7 +206,8 @@ enum CacheVerdict {
   CV_UPCOMING,   // membership not started yet
   CV_NONE,       // card assigned, member never bought a membership
   CV_LEFT,
-  CV_DUES
+  CV_DUES,
+  CV_STAFF       // status S: a staff card allowed at this door (clock in/out, no expiry)
 };
 
 // One entry in /cards.bin: the card UID as upper-case hex text (NUL-padded),
@@ -201,10 +216,11 @@ enum CacheVerdict {
 // F frozen, U not started, N no membership, L left. Same letters rfid-sync sends.
 struct CardRec {
   char uid[UID_HEX_MAX];
-  uint32_t until;
+  uint32_t until;   // A/S: last day it may enter; E: the day it ended (0 = unknown)
   char st;
-  char pad[3];
+  char name[23];    // the holder, printable ASCII, up to NAME_MAX_CHARS, NUL-terminated
 };
+static_assert(sizeof(CardRec) == 48, "CardRec must stay 48 bytes: the cache file is searched by record number");
 
 // One queued offline tap in /events.bin. ts is Unix seconds (UTC), 0 if the
 // clock was not set (the server then records the upload time).
@@ -218,8 +234,10 @@ struct CacheMeta {
   uint32_t magic;
   uint32_t syncDay;     // org-local YYYYMMDD at the last full sync
   uint32_t count;       // cards in /cards.bin
+  uint32_t flags;       // META_FLAG_SORTED: records strictly ascending by uid
 };
-#define META_MAGIC 0x4C4F4731UL  // "LOG1"
+#define META_MAGIC 0x4C4F4733UL  // "LOG3" (LOG2 records had no name and were 28 bytes; rejected and re-synced)
+#define META_FLAG_SORTED 1UL
 
 // Reader settings kept in /settings.bin. The offline test switch is deliberately
 // NOT in here: it lives only in RAM, so a reboot always returns to normal.
@@ -229,6 +247,8 @@ struct Settings {
   uint8_t soundOn;
   uint16_t openMs;
   uint16_t exitMs;      // how long the exit switch releases the door
+  uint16_t resultMs;    // how long the result screen stays (cards are not read meanwhile)
+  uint16_t repeatMs;    // the same card presented again within this is ignored
 };
 
 enum MenuItem {
@@ -236,6 +256,8 @@ enum MenuItem {
   MI_RELAY,
   MI_OPEN_TIME,
   MI_EXIT_TIME,
+  MI_RESULT_TIME,
+  MI_REPEAT_TIME,
   MI_RELAY_TEST,
   MI_SOUND,
   MI_SOUND_TEST,
@@ -256,6 +278,7 @@ struct CheckResult {
   int httpCode;
   char reason[20];
   char name[NAME_MAX_CHARS + 1];
+  char uid[21];     // the card number, set by handleCard() for every outcome
   char code[17];
   char status[12];
   bool hasDays;
@@ -264,6 +287,9 @@ struct CheckResult {
   bool alreadyIn;
   uint32_t until;  // RES_OFFLINE_ALLOW: last day (YYYYMMDD) the cached card may enter
   bool notLogged;  // RES_OFFLINE_ALLOW: the tap could not be queued (queue full / no flash)
+  bool fast;       // RES_OFFLINE_ALLOW: decided from the cache on purpose (server is up)
+  bool staff;      // a staff card: online reply kind "staff", or offline cache status S
+  char clock;      // online staff reply: 'i' clocked in, 'o' clocked out, 'a' already in
 };
 
 // ---------------------------------------------------------------------------
@@ -297,7 +323,8 @@ char lastUid[21] = "";
 uint32_t lastUidMs = 0;
 
 // Settings, relay, keypad, menu
-Settings settings = { SETTINGS_MAGIC, 1, 1, (uint16_t)RELAY_OPEN_MS, (uint16_t)EXIT_OPEN_MS };
+Settings settings = { SETTINGS_MAGIC, 1, 1, (uint16_t)RELAY_OPEN_MS, (uint16_t)EXIT_OPEN_MS,
+                      (uint16_t)RESULT_HOLD_DEFAULT_MS, (uint16_t)SAME_UID_DEFAULT_MS };
 bool testOffline = false;         // menu "Offline test": skip the server, decide from the cache
 bool relayActive = false;
 uint32_t relayUntilMs = 0;
@@ -336,7 +363,7 @@ uint32_t serverFailAtMs = 0;      // when the last one happened
 
 bool syncActive = false;          // a multi-page sync is in progress
 bool syncEverDone = false;
-bool syncDue = true;              // sync as soon as WiFi is up, then every SYNC_INTERVAL_MS
+bool syncDue = true;              // sync as soon as WiFi is up, then every syncIntervalMs()
 bool syncBackoffOn = false;       // a failed sync waits until syncBackoffUntilMs
 uint32_t syncBackoffUntilMs = 0;  // (a flag, not "0 = none": signed millis() compares flip at ~25 days)
 uint32_t uploadRetryMs = UPLOAD_RETRY_MS;
@@ -349,6 +376,10 @@ File syncFile;
 uint32_t lastUploadAttemptMs = 0;
 uint32_t eventsQueued = 0;        // mirror of /events.bin, refreshed on change
 uint32_t cardsCached = 0;         // mirror of /meta.bin count
+bool cacheSorted = false;         // mirror of /meta.bin flag: binary search is allowed
+bool syncSorted = true;           // while syncing: every record so far was > the previous one
+char syncPrevUid[20];             // last record written to the temp list (UID_HEX_MAX)
+bool syncHavePrev = false;
 uint32_t cacheSyncDay = 0;        // org-local YYYYMMDD of the last sync (0 = never)
 
 // Beep patterns: alternating on/off durations in ms, starting with "on".
@@ -611,95 +642,195 @@ void drawExit() {
   display.display();
 }
 
+long ymdToDays(uint32_t ymd);
+uint32_t daysToYmd(long days);
+uint32_t todayYmd();
+
+static const char *const MONTH_ABBR[12] = {
+  "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"
+};
+
+// Largest text size <= maxSize at which the text still fits the 128 px width.
+uint8_t fitSize(const char *text, uint8_t maxSize) {
+  uint8_t sz = maxSize;
+  while (sz > 1 && (int)strlen(text) * 6 * sz > OLED_W) sz--;
+  return sz;
+}
+
+void printRight(const char *text, int16_t y, uint8_t size) {
+  int16_t x = OLED_W - (int16_t)strlen(text) * 6 * size;
+  if (x < 0) x = 0;
+  display.setTextSize(size);
+  display.setCursor(x, y);
+  display.print(text);
+}
+
+// Days-left wording: the number is the big line, the words go under it.
+void daysLeftText(bool hasDays, long days, char *huge, size_t hugeSize, char *words, size_t wordsSize) {
+  if (!hasDays) { snprintf(huge, hugeSize, "OK"); snprintf(words, wordsSize, "NO LIMIT"); }
+  else if (days <= 0) { snprintf(huge, hugeSize, "LAST"); snprintf(words, wordsSize, "DAY"); }
+  else if (days == 1) { snprintf(huge, hugeSize, "1"); snprintf(words, wordsSize, "DAY LEFT"); }
+  else { snprintf(huge, hugeSize, "%ld", days); snprintf(words, wordsSize, "DAYS LEFT"); }
+}
+
+// The name for the top-right corner, shortened to what fits next to the card
+// number (21 characters a row at size 1): the full name, else "Ramesh S.", else
+// the first name cut to fit.
+void shortName(const char *name, size_t cardLen, char *out, size_t outSize) {
+  size_t room = cardLen + 1 < 21 ? 21 - cardLen - 1 : 0;
+  if (room >= outSize) room = outSize - 1;
+  if (strlen(name) <= room) { snprintf(out, outSize, "%s", name); return; }
+  const char *sp = strchr(name, ' ');
+  const char *lastSp = strrchr(name, ' ');
+  if (sp && lastSp && lastSp[1] != '\0') {
+    char cand[24];
+    snprintf(cand, sizeof(cand), "%.*s %c.", (int)(sp - name), name, lastSp[1]);
+    if (strlen(cand) <= room) { snprintf(out, outSize, "%s", cand); return; }
+  }
+  size_t n = sp ? (size_t)(sp - name) : strlen(name);
+  if (n > room) n = room;
+  memcpy(out, name, n);
+  out[n] = '\0';
+}
+
+// What the door shows after a tap (128x64):
+//   y0   card number (left, small) and the name (right, small, shortened)
+//   y9   optional small status label, centred (OFFLINE, NOT LOGGED)
+// then one of two layouts:
+//   "huge":      days left / STAFF at size 4 (size 3 when a label is shown), the
+//                words under it at size 2 (y46)
+//   "two lines": up to two lines at the largest size that fits (max 3), centred
+//                in the space below; setup screens add a small footer at y56
 void drawResult(const CheckResult &r) {
-  char big[12];
-  char line1[22];
-  char line2[22];
-  line1[0] = '\0';
-  line2[0] = '\0';
+  char card[12];
+  size_t ul = strlen(r.uid);
+  if (ul <= 8) snprintf(card, sizeof(card), "%s", r.uid);
+  else snprintf(card, sizeof(card), "..%s", r.uid + ul - 8);
+  char nameShown[22];
+  shortName(r.name, strlen(card), nameShown, sizeof(nameShown));
+
+  char label[12] = "";
+  char huge[8] = "";
+  char big1[16] = "";
+  char big2[16] = "";
+  char foot[22] = "";
+  bool hugeLayout = false;
 
   switch (r.kind) {
     case RES_ALLOW:
-      snprintf(big, sizeof(big), "ALLOW");
-      if (r.alreadyIn) {
-        snprintf(line1, sizeof(line1), "ALREADY IN");
-      } else {
-        snprintf(line1, sizeof(line1), "WELCOME");
+      if (r.staff) {  // the server's answer to a staff tap
+        if (r.clock == 'i') { snprintf(big1, sizeof(big1), "CLOCK"); snprintf(big2, sizeof(big2), "IN"); }
+        else if (r.clock == 'o') { snprintf(big1, sizeof(big1), "CLOCK"); snprintf(big2, sizeof(big2), "OUT"); }
+        else { snprintf(big1, sizeof(big1), "ALREADY"); snprintf(big2, sizeof(big2), "IN"); }
+        break;
       }
-      if (r.hasDays) formatDaysLeft(line2, sizeof(line2), r.days);
+      hugeLayout = true;
+      daysLeftText(r.hasDays, r.days, huge, sizeof(huge), big1, sizeof(big1));
       break;
 
-    case RES_DENY:
-      snprintf(big, sizeof(big), "DENY");
-      if (strcmp(r.reason, "dues") == 0) {
-        snprintf(line1, sizeof(line1), "PAY DUES");
-        if (r.duePaisa > 0) formatRupees(line2, sizeof(line2), r.duePaisa);  // not known offline
-      } else if (strcmp(r.reason, "expired") == 0) {
-        snprintf(line1, sizeof(line1), "EXPIRED");
-      } else if (strcmp(r.reason, "frozen") == 0) {
-        snprintf(line1, sizeof(line1), "FROZEN");
-      } else if (strcmp(r.reason, "upcoming") == 0) {
-        snprintf(line1, sizeof(line1), "NOT STARTED YET");
-      } else if (strcmp(r.reason, "none") == 0) {
-        snprintf(line1, sizeof(line1), "NO MEMBERSHIP");
-      } else if (strcmp(r.reason, "left") == 0) {
-        snprintf(line1, sizeof(line1), "NOT A MEMBER");
-      } else if (strcmp(r.reason, "unknown_card") == 0) {
-        snprintf(line1, sizeof(line1), "UNKNOWN CARD");
-        snprintf(line2, sizeof(line2), "Ask desk to assign");
-      } else if (strcmp(r.reason, "bad_uid") == 0) {
-        snprintf(line1, sizeof(line1), "BAD READ");
-        snprintf(line2, sizeof(line2), "Tap again");
+    case RES_DENY: {
+      const char *why = r.reason;
+      if (strcmp(why, "expired") == 0) {
+        // The day it ended: cached (offline) or today + the server's negative days.
+        uint32_t today = todayYmd();
+        if (today == 0) today = cacheSyncDay;
+        uint32_t ended = r.until;
+        if (ended == 0 && r.hasDays && r.days < 0 && today != 0) ended = daysToYmd(ymdToDays(today) + r.days);
+        uint32_t mo = (ended / 100) % 100;
+        snprintf(big1, sizeof(big1), "EXPIRED");
+        if (ended >= 20000101UL && mo >= 1 && mo <= 12) {
+          uint32_t year = ended / 10000;
+          if (today != 0 && year == today / 10000) {
+            snprintf(big2, sizeof(big2), "%u %s", (unsigned)(ended % 100), MONTH_ABBR[mo - 1]);
+          } else {
+            snprintf(big2, sizeof(big2), "%u %s %02u", (unsigned)(ended % 100), MONTH_ABBR[mo - 1], (unsigned)(year % 100));
+          }
+        }
+      } else if (strcmp(why, "dues") == 0) {
+        snprintf(big1, sizeof(big1), "PAY DUES");
+        if (r.duePaisa > 0) formatRupees(big2, sizeof(big2), r.duePaisa);  // not known offline
+      } else if (strcmp(why, "frozen") == 0) {
+        snprintf(big1, sizeof(big1), "FROZEN");
+      } else if (strcmp(why, "upcoming") == 0) {
+        snprintf(big1, sizeof(big1), "NOT");
+        snprintf(big2, sizeof(big2), "STARTED");
+      } else if (strcmp(why, "none") == 0) {
+        snprintf(big1, sizeof(big1), "NO PLAN");
+      } else if (strcmp(why, "left") == 0) {
+        snprintf(big1, sizeof(big1), "NOT A");
+        snprintf(big2, sizeof(big2), "MEMBER");
+      } else if (strcmp(why, "unknown_card") == 0) {
+        snprintf(big1, sizeof(big1), "UNKNOWN");
+        snprintf(big2, sizeof(big2), "CARD");
+      } else if (strcmp(why, "bad_uid") == 0) {
+        snprintf(big1, sizeof(big1), "BAD READ");
+        snprintf(big2, sizeof(big2), "TAP AGAIN");
       } else {
-        copyDisplayText(line1, sizeof(line1), r.reason, 21);
+        copyDisplayText(big1, sizeof(big1), why, 15);
       }
-      if (line2[0] == '\0') snprintf(line2, sizeof(line2), "See front desk");
       break;
+    }
 
     case RES_KEY_BAD:
-      snprintf(big, sizeof(big), "SETUP");
-      snprintf(line1, sizeof(line1), "DEVICE KEY UNKNOWN");
-      snprintf(line2, sizeof(line2), "Check config.h");
+      snprintf(big1, sizeof(big1), "SETUP");
+      snprintf(big2, sizeof(big2), "DEVICE KEY");
+      snprintf(foot, sizeof(foot), "Check config.h");
       break;
 
     case RES_DISABLED:
-      snprintf(big, sizeof(big), "DISABLED");
-      snprintf(line1, sizeof(line1), "READER DISABLED");
-      snprintf(line2, sizeof(line2), "Enable in console");
+      snprintf(big1, sizeof(big1), "READER");
+      snprintf(big2, sizeof(big2), "DISABLED");
+      snprintf(foot, sizeof(foot), "Enable in console");
       break;
 
     case RES_OFFLINE_ALLOW:
-      snprintf(big, sizeof(big), "ALLOW");
-      snprintf(line1, sizeof(line1), "%s", r.notLogged ? "NOT LOGGED" : "OFFLINE MODE");
-      if (r.hasDays) formatDaysLeft(line2, sizeof(line2), r.days);
-      else snprintf(line2, sizeof(line2), "No Expiry");
+      hugeLayout = true;
+      if (r.notLogged) snprintf(label, sizeof(label), "NOT LOGGED");
+      else if (!r.fast) snprintf(label, sizeof(label), "OFFLINE");
+      if (r.staff) {  // door opened from the cache; the server decides in or out later
+        snprintf(huge, sizeof(huge), "STAFF");
+        snprintf(big1, sizeof(big1), "%s", r.notLogged ? "SET CLOCK" : "TIME SAVED");
+      } else {
+        daysLeftText(r.hasDays, r.days, huge, sizeof(huge), big1, sizeof(big1));
+      }
       break;
 
     case RES_OFFLINE:
     default:
-      snprintf(big, sizeof(big), "OFFLINE");
-      snprintf(line1, sizeof(line1), "NOT RECORDED");
-      if (r.httpCode > 0) snprintf(line2, sizeof(line2), "HTTP %d", r.httpCode);
-      else if (WiFi.status() != WL_CONNECTED) snprintf(line2, sizeof(line2), "No WiFi");
-      else snprintf(line2, sizeof(line2), "No server reply");
+      snprintf(big1, sizeof(big1), "OFFLINE");
+      snprintf(big2, sizeof(big2), "NOT SAVED");
+      if (r.httpCode > 0) snprintf(foot, sizeof(foot), "HTTP %d", r.httpCode);
+      else if (WiFi.status() != WL_CONNECTED) snprintf(foot, sizeof(foot), "No WiFi");
+      else snprintf(foot, sizeof(foot), "No server reply");
       break;
   }
 
-  Serial.printf("[result] %s | %s | %s | %s\n", r.name, big, line1, line2);
+  Serial.printf("[result] %s %s | %s %s | %s %s | %s\n", card, r.name, label, huge, big1, big2, foot);
   if (!oledOk) return;
 
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
   display.setTextSize(1);
   display.setCursor(0, 0);
-  display.print(r.name);            // y 0..7, <= 20 chars
-  if (r.code[0] != '\0') {
-    display.setCursor(0, 10);
-    display.print(r.code);          // y 10..17
+  display.print(card);
+  printRight(nameShown, 0, 1);
+  if (label[0] != '\0') printCentered(label, 9, 1);
+  if (hugeLayout) {
+    if (label[0] != '\0') printCentered(huge, 19, fitSize(huge, 3));
+    else printCentered(huge, 11, fitSize(huge, 4));
+    printCentered(big1, 46, fitSize(big1, 2));
+  } else {
+    // Lines at the largest size that fits (a setup screen leaves room for its footer).
+    uint8_t s1 = fitSize(big1, foot[0] ? 2 : 3);
+    uint8_t s2 = big2[0] ? fitSize(big2, foot[0] ? 2 : 3) : 0;
+    int16_t total = 8 * s1 + (s2 ? 8 * s2 + 4 : 0);
+    int16_t top = 10;
+    int16_t space = (foot[0] ? 56 : 64) - top;
+    int16_t y = top + (space - total) / 2;
+    printCentered(big1, y, s1);
+    if (s2) printCentered(big2, y + 8 * s1 + 4, s2);
+    if (foot[0] != '\0') printCentered(foot, 56, 1);
   }
-  printCentered(big, 22, 2);        // y 22..37
-  printCentered(line1, 42, 1);      // y 42..49
-  printCentered(line2, 54, 1);      // y 54..61
   display.display();
 }
 
@@ -898,6 +1029,11 @@ void postCheck(const char *uid, CheckResult &r) {
   r.days = doc["days_to_expiry"] | 0L;
   r.duePaisa = doc["due_paisa"] | 0L;
   r.alreadyIn = doc["already_checked_in_today"] | false;
+  if (strcmp(doc["kind"] | "", "staff") == 0) {
+    r.staff = true;
+    const char *clk = doc["clock"] | "";
+    r.clock = strcmp(clk, "in") == 0 ? 'i' : strcmp(clk, "out") == 0 ? 'o' : 'a';
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -911,8 +1047,22 @@ uint32_t todayYmd() {
   return (uint32_t)t.year() * 10000UL + (uint32_t)t.month() * 100UL + (uint32_t)t.day();
 }
 
+// How often to pull the list: short for a small gym, longer as it grows.
+uint32_t syncIntervalMs() {
+  if (cardsCached <= SYNC_SMALL_MAX) return SYNC_INTERVAL_SMALL_MS;
+  if (cardsCached <= SYNC_MID_MAX) return SYNC_INTERVAL_MID_MS;
+  return SYNC_INTERVAL_LARGE_MS;
+}
+
+// The cache is trusted for a cache-first tap only while the last good sync is
+// this fresh (two intervals and a minute of slack for one failed attempt).
+uint32_t fastPathMaxAgeMs() {
+  return 2UL * syncIntervalMs() + 60000UL;
+}
+
 void loadMeta() {
   cardsCached = 0;
+  cacheSorted = false;
   cacheSyncDay = 0;
   if (!fsOk) return;
   File f = LittleFS.open(META_FILE, "r");
@@ -921,17 +1071,19 @@ void loadMeta() {
   if (f.read((uint8_t *)&m, sizeof(m)) == sizeof(m) && m.magic == META_MAGIC) {
     cardsCached = m.count;
     cacheSyncDay = m.syncDay;
+    cacheSorted = (m.flags & META_FLAG_SORTED) != 0;
   }
   f.close();
 }
 
-void saveMeta(uint32_t syncDay, uint32_t count) {
+void saveMeta(uint32_t syncDay, uint32_t count, bool sorted) {
   File f = LittleFS.open(META_FILE, "w");
   if (!f) return;
-  CacheMeta m = { META_MAGIC, syncDay, count };
+  CacheMeta m = { META_MAGIC, syncDay, count, sorted ? META_FLAG_SORTED : 0UL };
   f.write((const uint8_t *)&m, sizeof(m));
   f.close();
   cardsCached = count;
+  cacheSorted = sorted;
   cacheSyncDay = syncDay;
 }
 
@@ -957,6 +1109,21 @@ long ymdToDays(uint32_t ymd) {
   return era * 146097 + doe - 719468;
 }
 
+// Inverse of ymdToDays: YYYYMMDD for a day count since 1970-01-01.
+uint32_t daysToYmd(long z) {
+  z += 719468;
+  long era = (z >= 0 ? z : z - 146096) / 146097;
+  long doe = z - era * 146097;
+  long yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+  long y = yoe + era * 400;
+  long doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+  long mp = (5 * doy + 2) / 153;
+  long d = doy - (153 * mp + 2) / 5 + 1;
+  long m = mp < 10 ? mp + 3 : mp - 9;
+  if (m <= 2) y++;
+  return (uint32_t)(y * 10000 + m * 100 + d);
+}
+
 // "30 Days Left", "1 Day Left", "Expires Today"; blank when there is no date.
 void formatDaysLeft(char *out, size_t outSize, long days) {
   if (days < 0) snprintf(out, outSize, "Expired");
@@ -968,9 +1135,11 @@ void formatDaysLeft(char *out, size_t outSize, long days) {
 // What does the cached list say about this card? For an allowed card `days`
 // is the whole days left (0 = last day). With the clock unset, "today" is the
 // day of the last sync -- the date the server last vouched for -- not a guess.
-CacheVerdict cacheLookup(const char *uid, uint32_t &until, long &days) {
+CacheVerdict cacheLookup(const char *uid, uint32_t &until, long &days,
+                         char *nameOut = nullptr, size_t nameSize = 0) {
   until = 0;
   days = 0;
+  if (nameOut && nameSize) nameOut[0] = '\0';
   if (!fsOk || cacheSyncDay == 0) return CV_NO_CACHE;
   File f = LittleFS.open(CARDS_FILE, "r");
   if (!f) return CV_NO_CACHE;
@@ -985,34 +1154,74 @@ CacheVerdict cacheLookup(const char *uid, uint32_t &until, long &days) {
   memset(want, 0, sizeof(want));
   strncpy(want, uid, UID_HEX_MAX);
 
-  CardRec buf[16];
-  for (;;) {
-    size_t n = f.read((uint8_t *)buf, sizeof(buf)) / sizeof(CardRec);
-    if (n == 0) break;
-    for (size_t i = 0; i < n; i++) {
-      if (memcmp(buf[i].uid, want, UID_HEX_MAX) != 0) continue;
-      f.close();
-      switch (buf[i].st) {
-        case 'A':
-          until = buf[i].until;
-          days = ymdToDays(until) - ymdToDays(today);
-          return days >= 0 ? CV_ALLOW : CV_EXPIRED;
-        case 'D': return CV_DUES;
-        case 'F': return CV_FROZEN;
-        case 'U': return CV_UPCOMING;
-        case 'N': return CV_NONE;
-        case 'L': return CV_LEFT;
-        default:  return CV_EXPIRED;  // 'E' and anything unforeseen
+  uint32_t t0 = micros();
+  size_t total = f.size() / sizeof(CardRec);
+  CardRec rec;
+  bool hit = false;
+  bool binary = cacheSorted;
+
+  if (binary) {
+    // The list is fixed-size records in strictly ascending uid order (checked
+    // when it was synced), so halve the range each step: ~13 reads for 5,000
+    // cards instead of reading all 140 KB.
+    size_t lo = 0, hi = total;
+    bool ioOk = true;
+    while (lo < hi) {
+      size_t mid = lo + (hi - lo) / 2;
+      if (!f.seek((uint32_t)(mid * sizeof(CardRec))) ||
+          f.read((uint8_t *)&rec, sizeof(rec)) != sizeof(rec)) {
+        ioOk = false;
+        break;
       }
+      int c = memcmp(rec.uid, want, UID_HEX_MAX);
+      if (c == 0) { hit = true; break; }
+      if (c < 0) lo = mid + 1; else hi = mid;
+    }
+    if (!ioOk) {  // a read hiccup must not turn a member away: scan instead
+      Serial.println("[cache] seek/read failed: linear scan");
+      binary = false;
+    }
+  }
+  if (!binary) {
+    f.seek(0);
+    CardRec buf[16];
+    for (;;) {
+      size_t n = f.read((uint8_t *)buf, sizeof(buf)) / sizeof(CardRec);
+      if (n == 0) break;
+      for (size_t i = 0; i < n && !hit; i++) {
+        if (memcmp(buf[i].uid, want, UID_HEX_MAX) == 0) { rec = buf[i]; hit = true; }
+      }
+      if (hit) break;
     }
   }
   f.close();
-  return CV_UNKNOWN;
+  Serial.printf("[cache] lookup %lu us (%lu cards, %s)\n", (unsigned long)(micros() - t0),
+                (unsigned long)total, binary ? "binary" : "linear");
+
+  if (!hit) return CV_UNKNOWN;
+  if (nameOut && nameSize) copyDisplayText(nameOut, nameSize, rec.name, NAME_MAX_CHARS);
+  switch (rec.st) {
+    case 'A':
+      until = rec.until;
+      days = ymdToDays(until) - ymdToDays(today);
+      return days >= 0 ? CV_ALLOW : CV_EXPIRED;
+    case 'D': return CV_DUES;
+    case 'F': return CV_FROZEN;
+    case 'U': return CV_UPCOMING;
+    case 'N': return CV_NONE;
+    case 'L': return CV_LEFT;
+    case 'S': return CV_STAFF;  // no expiry: do not compute days
+    default:  until = rec.until; return CV_EXPIRED;  // 'E' (until = the day it ended, 0 if unknown) and anything unforeseen
+  }
 }
 
 // Queue an offline entry for upload. One per card per day: a member tapping
-// five times while the network is down is one visit.
-bool enqueueEvent(const char *uid) {
+// five times while the network is down is one visit. A STAFF card is different:
+// the same person taps in and later out the same day, and both must reach the
+// server, so staff only dedupe a repeat within STAFF_REPEAT_SEC (a door
+// double-tap; the server also ignores a second tap inside 2 minutes).
+#define STAFF_REPEAT_SEC 60UL
+bool enqueueEvent(const char *uid, bool staff) {
   if (!fsOk) return false;
   EventRec e;
   memset(&e, 0, sizeof(e));
@@ -1030,8 +1239,11 @@ bool enqueueEvent(const char *uid) {
         size_t got = f.read((uint8_t *)buf, sizeof(buf)) / sizeof(EventRec);
         if (got == 0) break;
         for (size_t i = 0; i < got; i++) {
-          if (buf[i].ts != 0 && memcmp(buf[i].uid, e.uid, UID_HEX_MAX) == 0 &&
-              (buf[i].ts + (uint32_t)TZ_OFFSET_SEC) / 86400UL == day) {
+          if (buf[i].ts == 0 || memcmp(buf[i].uid, e.uid, UID_HEX_MAX) != 0) continue;
+          bool repeat = staff
+              ? (e.ts >= buf[i].ts && e.ts - buf[i].ts < STAFF_REPEAT_SEC)
+              : ((buf[i].ts + (uint32_t)TZ_OFFSET_SEC) / 86400UL == day);
+          if (repeat) {
             f.close();
             return true;  // already queued for today
           }
@@ -1063,6 +1275,7 @@ void invalidateCache(const char *why) {
     LittleFS.remove(META_FILE);
   }
   cardsCached = 0;
+  cacheSorted = false;
   cacheSyncDay = 0;
   syncEverDone = false;
 }
@@ -1074,10 +1287,9 @@ void invalidateCache(const char *why) {
 void applyOfflineFallback(const char *uid, CheckResult &r) {
   uint32_t until = 0;
   long days = 0;
-  CacheVerdict v = cacheLookup(uid, until, days);
+  CacheVerdict v = cacheLookup(uid, until, days, r.name, sizeof(r.name));
   if (v == CV_NO_CACHE) return;  // never synced: stays RES_OFFLINE, "NOT RECORDED"
 
-  copyDisplayText(r.name, sizeof(r.name), uid, NAME_MAX_CHARS);
   const char *reason = "expired";
   switch (v) {
     case CV_ALLOW:
@@ -1085,7 +1297,16 @@ void applyOfflineFallback(const char *uid, CheckResult &r) {
       r.until = until;
       r.hasDays = until < 20991231UL;  // 2099-12-31 stands for "no end date"
       r.days = days;
-      r.notLogged = !enqueueEvent(uid);
+      r.notLogged = !enqueueEvent(uid, false);
+      return;
+    case CV_STAFF:
+      // Door opens (the card is only on this list if the person may enter here).
+      // The tap needs its real time to become a clock-in/out later; without a
+      // trusted clock it is not queued, and the screen says so.
+      r.kind = RES_OFFLINE_ALLOW;
+      r.staff = true;
+      r.hasDays = false;
+      r.notLogged = !(rtcOk && rtcTimeValid) || !enqueueEvent(uid, true);
       return;
     case CV_FROZEN:   reason = "frozen"; break;
     case CV_UPCOMING: reason = "upcoming"; break;
@@ -1093,7 +1314,7 @@ void applyOfflineFallback(const char *uid, CheckResult &r) {
     case CV_LEFT:     reason = "left"; break;
     case CV_DUES:     reason = "dues"; break;
     case CV_UNKNOWN:  reason = "unknown_card"; break;
-    default:          reason = "expired"; break;
+    default:          reason = "expired"; r.until = until; break;
   }
   // A denied tap is not queued -- denied taps write nothing, online or off.
   r.kind = RES_DENY;
@@ -1123,7 +1344,7 @@ bool syncStep() {
   uint32_t now = millis();
 
   if (!syncActive) {
-    if (syncEverDone && now - lastSyncOkMs >= SYNC_INTERVAL_MS) syncDue = true;
+    if (syncEverDone && now - lastSyncOkMs >= syncIntervalMs()) syncDue = true;
     if (syncBackoffOn) {
       if ((int32_t)(now - syncBackoffUntilMs) < 0) return false;
       syncBackoffOn = false;
@@ -1135,6 +1356,8 @@ bool syncStep() {
     syncAfter[0] = '\0';
     syncPages = 0;
     syncCount = 0;
+    syncSorted = true;
+    syncHavePrev = false;
     syncActive = true;
     Serial.println("[sync] starting");
   }
@@ -1216,7 +1439,15 @@ bool syncStep() {
     memcpy(rec.uid, line, uidLen);
     rec.until = (uint32_t)strtoul(comma + 1, nullptr, 10);
     rec.st = comma2[1];
+    // Optional 4th field: the holder's name (everything after the third comma).
+    char *comma3 = strchr(comma2 + 1, ',');
+    if (comma3) copyDisplayText(rec.name, sizeof(rec.name), comma3 + 1, NAME_MAX_CHARS);
     if (rec.st == 'A' && rec.until < 20240101UL) continue;
+    // Binary search needs strictly ascending uids in the same byte order the
+    // lookup compares. The server sorts by its own collation, so check here.
+    if (syncHavePrev && memcmp(syncPrevUid, rec.uid, UID_HEX_MAX) >= 0) syncSorted = false;
+    memcpy(syncPrevUid, rec.uid, UID_HEX_MAX);
+    syncHavePrev = true;
     if (syncFile.write((const uint8_t *)&rec, sizeof(rec)) != sizeof(rec)) writeFailed = true;
     syncCount++;
   }
@@ -1255,7 +1486,8 @@ bool syncStep() {
       return true;
     }
   }
-  saveMeta(orgToday, syncCount);
+  saveMeta(orgToday, syncCount, syncSorted);
+  if (!syncSorted) Serial.println("[sync] WARNING: list not sorted, lookups fall back to a linear scan");
   syncActive = false;
   syncEverDone = true;
   syncDue = false;
@@ -1378,7 +1610,12 @@ void beepForResult(const CheckResult &r) {
       else startBeep(BEEP_SHORT, PATTERN_LEN(BEEP_SHORT));
       break;
     case RES_OFFLINE_ALLOW:
-      startBeep(BEEP_OFFLINE, PATTERN_LEN(BEEP_OFFLINE));
+      if (r.fast) {  // sounds like an online allow
+        if (r.hasDays && r.days <= 7) startBeep(BEEP_DOUBLE, PATTERN_LEN(BEEP_DOUBLE));
+        else startBeep(BEEP_SHORT, PATTERN_LEN(BEEP_SHORT));
+      } else {
+        startBeep(BEEP_OFFLINE, PATTERN_LEN(BEEP_OFFLINE));
+      }
       break;
     case RES_DENY:
       if (strcmp(r.reason, "unknown_card") == 0 || strcmp(r.reason, "bad_uid") == 0) {
@@ -1395,6 +1632,37 @@ void beepForResult(const CheckResult &r) {
   }
 }
 
+// Cache-first decision. Returns true (and fills r) only for a clean ALLOW from a
+// fresh cache with a valid clock; the tap is queued for background upload, where
+// the server records it backdated and idempotently. Everything else returns
+// false so the caller asks the server, which knows names, dues and staff.
+bool tryFastAllow(const char *uid, CheckResult &r) {
+  if (!fsOk || !syncEverDone || lastSyncOkMs == 0) return false;
+  if (millis() - lastSyncOkMs > fastPathMaxAgeMs()) return false;
+  if (!(rtcOk && rtcTimeValid)) return false;  // the queued tap needs a real timestamp
+  uint32_t until = 0;
+  long days = 0;
+  char name[NAME_MAX_CHARS + 1];
+  CacheVerdict v = cacheLookup(uid, until, days, name, sizeof(name));
+  if (v != CV_ALLOW && v != CV_STAFF) return false;
+  bool staff = (v == CV_STAFF);
+  memset(&r, 0, sizeof(r));
+  r.kind = RES_OFFLINE_ALLOW;
+  r.fast = true;
+  r.staff = staff;
+  memcpy(r.name, name, sizeof(name));  // may be empty: the screen then shows no name
+  if (!staff) {
+    r.until = until;
+    r.hasDays = until < 20991231UL;
+    r.days = days;
+  }
+  // A staff tap is queued with its real time and becomes a clock-in or clock-out
+  // on the server (which holds the shift state), so the screen says STAFF, not IN/OUT.
+  r.notLogged = !enqueueEvent(uid, staff);
+  if (r.notLogged) return false;  // queue full: let the server record it properly
+  return true;
+}
+
 void handleCard() {
   if (!rfid.PICC_IsNewCardPresent()) return;
   if (!rfid.PICC_ReadCardSerial()) return;
@@ -1405,7 +1673,7 @@ void handleCard() {
   rfid.PCD_StopCrypto1();
 
   uint32_t now = millis();
-  if (strcmp(uid, lastUid) == 0 && now - lastUidMs < SAME_UID_DEBOUNCE_MS) {
+  if (strcmp(uid, lastUid) == 0 && now - lastUidMs < settings.repeatMs) {
     lastUidMs = now;  // still on the reader: keep suppressing
     return;
   }
@@ -1419,10 +1687,14 @@ void handleCard() {
   if (testOffline) {
     memset(&r, 0, sizeof(r));  // menu "Offline test": pretend the server is unreachable
     r.kind = RES_OFFLINE;
+  } else if (tryFastAllow(uid, r)) {
+    Serial.println("[tap] cache-first allow, no server round trip");
   } else {
     postCheck(uid, r);  // blocks for up to ~HTTP_TIMEOUT_MS (the only blocking call)
   }
-  if (r.kind == RES_OFFLINE) {
+  if (r.fast) {
+    // Decided from the cache: says nothing about the server's health.
+  } else if (r.kind == RES_OFFLINE) {
     if (!testOffline && WiFi.status() == WL_CONNECTED) noteServerFail();  // server trouble, not just no WiFi
     applyOfflineFallback(uid, r);  // may turn it into an offline allow / deny
   } else {
@@ -1432,6 +1704,8 @@ void handleCard() {
     if (r.kind == RES_KEY_BAD || r.kind == RES_DISABLED) invalidateCache("reader refused by server");
   }
   lastUidMs = millis();
+  strncpy(r.uid, uid, sizeof(r.uid) - 1);
+  r.uid[sizeof(r.uid) - 1] = '\0';
 
   logTap(uid, r);
 
@@ -1478,7 +1752,8 @@ void loadSettings() {
   if (!f) return;
   Settings t;
   if (f.read((uint8_t *)&t, sizeof(t)) == sizeof(t) && t.magic == SETTINGS_MAGIC &&
-      t.openMs >= 200 && t.openMs <= 30000 && t.exitMs >= 200 && t.exitMs <= 30000) {
+      t.openMs >= 200 && t.openMs <= 30000 && t.exitMs >= 200 && t.exitMs <= 30000 &&
+      t.resultMs >= 200 && t.resultMs <= 30000 && t.repeatMs >= 200 && t.repeatMs <= 30000) {
     settings = t;
   }
   f.close();
@@ -1551,12 +1826,24 @@ void pollExitButtons() {
 // ---------------------------------------------------------------------------
 // Settings menu (hold K4, enter the code; K1 up, K2 down, K3 change, K4 back)
 // ---------------------------------------------------------------------------
+// Choices for the two reader-timing settings, in milliseconds.
+static const uint16_t TIMING_CHOICES[] = { 500, 1000, 2000, 3000 };
+#define TIMING_CHOICE_N 4
+
+// 500 -> "0.5s", 1000 -> "1s", 2000 -> "2s".
+void fmtSecs(char *out, size_t outSize, unsigned ms) {
+  if (ms % 1000 == 0) snprintf(out, outSize, "%us", ms / 1000);
+  else snprintf(out, outSize, "%u.%us", ms / 1000, (ms % 1000) / 100);
+}
+
 void menuValue(uint8_t item, char *out, size_t outSize) {
   switch (item) {
     case MI_OFFLINE_TEST: snprintf(out, outSize, "%s", testOffline ? "ON" : "OFF"); break;
     case MI_RELAY:        snprintf(out, outSize, "%s", settings.relayOn ? "ON" : "OFF"); break;
     case MI_OPEN_TIME:    snprintf(out, outSize, "%us", (unsigned)(settings.openMs / 1000)); break;
     case MI_EXIT_TIME:    snprintf(out, outSize, "%us", (unsigned)(settings.exitMs / 1000)); break;
+    case MI_RESULT_TIME:  fmtSecs(out, outSize, settings.resultMs); break;
+    case MI_REPEAT_TIME:  fmtSecs(out, outSize, settings.repeatMs); break;
     case MI_SOUND:        snprintf(out, outSize, "%s", settings.soundOn ? "ON" : "OFF"); break;
     case MI_RELAY_TEST:
     case MI_SOUND_TEST:
@@ -1567,7 +1854,7 @@ void menuValue(uint8_t item, char *out, size_t outSize) {
 
 void drawMenu() {
   static const char *const LABELS[MI_COUNT] = {
-    "Offline test", "Relay", "Open time", "Exit time", "Relay test", "Sound", "Sound test", "Sync now", "Back"
+    "Offline test", "Relay", "Open time", "Exit time", "Result time", "Repeat wait", "Relay test", "Sound", "Sound test", "Sync now", "Back"
   };
   if (!oledOk) return;
   display.clearDisplay();
@@ -1652,6 +1939,20 @@ void menuAction(uint8_t item) {
       uint8_t next = 0;
       for (uint8_t i = 0; i < 3; i++) if (settings.exitMs == EXIT_CHOICES[i]) next = (i + 1) % 3;
       settings.exitMs = EXIT_CHOICES[next];
+      saveSettings();
+      break;
+    }
+    case MI_RESULT_TIME: {
+      uint8_t next = 0;
+      for (uint8_t i = 0; i < TIMING_CHOICE_N; i++) if (settings.resultMs == TIMING_CHOICES[i]) next = (i + 1) % TIMING_CHOICE_N;
+      settings.resultMs = TIMING_CHOICES[next];
+      saveSettings();
+      break;
+    }
+    case MI_REPEAT_TIME: {
+      uint8_t next = 0;
+      for (uint8_t i = 0; i < TIMING_CHOICE_N; i++) if (settings.repeatMs == TIMING_CHOICES[i]) next = (i + 1) % TIMING_CHOICE_N;
+      settings.repeatMs = TIMING_CHOICES[next];
       saveSettings();
       break;
     }
@@ -1751,7 +2052,7 @@ void logTap(const char *uid, const CheckResult &r) {
   t.tail[sizeof(t.tail) - 1] = '\0';
   switch (r.kind) {
     case RES_ALLOW:         snprintf(t.what, sizeof(t.what), "%s", r.alreadyIn ? "ALREADY IN" : "ALLOW"); break;
-    case RES_OFFLINE_ALLOW: snprintf(t.what, sizeof(t.what), "OFFLINE ALLOW"); break;
+    case RES_OFFLINE_ALLOW: snprintf(t.what, sizeof(t.what), "%s", r.fast ? (r.staff ? "CACHE STAFF" : "CACHE ALLOW") : "OFFLINE ALLOW"); break;
     case RES_DENY:          snprintf(t.what, sizeof(t.what), "DENY %.9s", r.reason); break;
     case RES_KEY_BAD:       snprintf(t.what, sizeof(t.what), "KEY UNKNOWN"); break;
     case RES_DISABLED:      snprintf(t.what, sizeof(t.what), "READER DISABLED"); break;
@@ -1921,6 +2222,29 @@ void webRoot() {
     h += "s</button> ";
   }
   h += "</form></div>";
+  struct TimingRow { const char *title; const char *note; const char *arg; uint16_t cur; };
+  const TimingRow timingRows[2] = {
+    { "Result screen", "how long the result stays; cards are not read meanwhile", "result_ms", settings.resultMs },
+    { "Same card again", "a card just read is ignored if tapped again within this", "repeat_ms", settings.repeatMs },
+  };
+  for (uint8_t r = 0; r < 2; r++) {
+    char cur[12];
+    fmtSecs(cur, sizeof(cur), timingRows[r].cur);
+    h += "<div class=row><div>"; h += timingRows[r].title; h += " <b>"; h += cur;
+    h += "</b><br><small>"; h += timingRows[r].note;
+    h += "</small></div><form method=post action=/set><input type=hidden name=t value=";
+    h += webToken;
+    h += ">";
+    for (uint8_t i = 0; i < TIMING_CHOICE_N; i++) {
+      char lbl[12];
+      fmtSecs(lbl, sizeof(lbl), TIMING_CHOICES[i]);
+      h += "<button name="; h += timingRows[r].arg; h += " value=";
+      h += String((unsigned)TIMING_CHOICES[i]);
+      if (timingRows[r].cur == TIMING_CHOICES[i]) h += " class=on";
+      h += ">"; h += lbl; h += "</button> ";
+    }
+    h += "</form></div>";
+  }
   h += "<div class=row><div>Card list<br><small>fetch it from the server now</small></div>"
        "<form method=post action=/set><input type=hidden name=t value=";
   h += webToken;
@@ -1976,6 +2300,19 @@ void webSet() {
       Serial.printf("[web] exit time %ld ms\n", ms);
     }
   }
+  for (uint8_t r = 0; r < 2; r++) {
+    const char *arg = r == 0 ? "result_ms" : "repeat_ms";
+    if ((v = web.arg(arg)) != "") {
+      long ms = v.toInt();
+      bool ok = false;
+      for (uint8_t i = 0; i < TIMING_CHOICE_N; i++) if (ms == TIMING_CHOICES[i]) ok = true;
+      if (ok) {
+        if (r == 0) settings.resultMs = (uint16_t)ms; else settings.repeatMs = (uint16_t)ms;
+        saveSettings();
+        Serial.printf("[web] %s %ld ms\n", arg, ms);
+      }
+    }
+  }
   if (web.arg("sync") == "1") {
     syncDue = true;
     syncBackoffOn = false;
@@ -1999,6 +2336,8 @@ void webStatus() {
   j += "\"relay_on\":"; j += settings.relayOn ? "true" : "false"; j += ",";
   j += "\"relay_open_ms\":"; j += String((unsigned)settings.openMs); j += ",";
   j += "\"exit_ms\":"; j += String((unsigned)settings.exitMs); j += ",";
+  j += "\"result_ms\":"; j += String((unsigned)settings.resultMs); j += ",";
+  j += "\"repeat_ms\":"; j += String((unsigned)settings.repeatMs); j += ",";
   j += "\"sound_on\":"; j += settings.soundOn ? "true" : "false"; j += ",";
   j += "\"cards_cached\":"; j += String((unsigned long)cardsCached); j += ",";
   j += "\"last_sync_day\":"; j += String((unsigned long)cacheSyncDay); j += ",";
@@ -2182,7 +2521,7 @@ void loop() {
       break;
 
     case ST_RESULT:
-      if (now - stateSinceMs >= RESULT_HOLD_MS) enterState(ST_IDLE);
+      if (now - stateSinceMs >= settings.resultMs) enterState(ST_IDLE);
       break;
   }
 }

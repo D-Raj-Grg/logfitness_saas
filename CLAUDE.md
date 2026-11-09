@@ -37,8 +37,18 @@ is cards only -- biometrics and turnstile relays are still out.
 **Staff cards came in on 2026-11-04**, a second explicit scope decision: a staff member can
 hold a card too, and a tap at the door clocks them in or out in their own `staff_attendance`
 table (never the members' `attendance`). One card UID is live for one holder across members
-and staff. Offline readers do not know staff cards yet (firmware 1.3.0, still to do): they
-answer staff taps as unknown until then. Payroll/HR stays out -- this records presence, not pay.
+and staff. Offline readers learn staff cards with firmware 1.3.0 (a reader on older firmware
+still answers a staff tap as unknown while offline). Payroll/HR stays out -- this records presence, not pay.
+
+**Printed card numbers, a public balance page and renewal requests came in on 2026-11-08**, a
+third explicit scope decision. A card carries a printed number (`NO. 0004`) that is stock, not
+identity: `card_stock` is one row per physical card, reused across members; `members.member_code`
+is untouched. The QR on a card opens `…/balance?card_no=0004` -- the gym's own site or the console's
+`app/(public)/balance` -- which shows a masked name, plan and days left to anyone holding the card,
+and takes a renewal *request* the desk fulfils at the counter. It is not member self-service: no
+login, no payment, no phone or dues on the page. The card designer (`/cards/designer`) is the one
+place a PDF library runs (`pdf-lib` + `qrcode`, browser only); invoices and receipts still print
+from the browser.
 
 
 1. Always read the PLANNING.md at the start of every new conversation 

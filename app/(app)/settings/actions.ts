@@ -129,6 +129,7 @@ export async function updateOrgPreferences(
     notificationLocale: formData.get('notificationLocale'),
     // An unticked checkbox is simply absent from the form.
     trackCheckOut: formData.get('trackCheckOut') === 'on',
+    balanceUrl: formData.get('balanceUrl') ?? undefined,
   })
 
   if (!parsed.success) {
@@ -142,6 +143,8 @@ export async function updateOrgPreferences(
     )
     await setOrgSetting('notification_locale', parsed.data.notificationLocale)
     await setOrgSetting('track_check_out', parsed.data.trackCheckOut)
+    // null clears it; the console's own balance page then serves the QR.
+    await setOrgSetting('balance_url', parsed.data.balanceUrl)
   } catch (error) {
     const { message } = (error ?? {}) as DbError
     return { error: message ?? 'Something went wrong. Please try again.' }
@@ -152,6 +155,8 @@ export async function updateOrgPreferences(
   revalidatePath('/check-in')
   revalidatePath('/members', 'layout')
   revalidatePath('/staff', 'layout')
+  // The card designer and the print sheet render the QR from balance_url.
+  revalidatePath('/cards', 'layout')
 
   return { success: 'Preferences saved.' }
 }

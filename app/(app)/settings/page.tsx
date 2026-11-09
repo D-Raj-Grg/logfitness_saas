@@ -4,8 +4,10 @@ import { notFound } from 'next/navigation'
 import { OrgPreferencesForm } from '@/components/settings/org-preferences-form'
 import { OrgLetterheadForm } from '@/components/settings/org-letterhead-form'
 import { requireRole } from '@/lib/auth'
+import { defaultBalanceBase } from '@/lib/cards/balance-link'
 import { getOrgProfile } from '@/lib/db/orgs'
 import { orgLogoUrl } from '@/lib/org-logo'
+import { siteOrigin } from '@/lib/site-origin'
 
 export default async function SettingsPage() {
   // Owner-only for clarity; "owners update their own org" is the enforcement.
@@ -53,7 +55,10 @@ export default async function SettingsPage() {
         </p>
       </Link>
 
-      <OrgPreferencesForm settings={org.settings} />
+      <OrgPreferencesForm
+        settings={org.settings}
+        defaultBalanceLink={defaultBalanceBase(siteOrigin(), org.slug)}
+      />
 
       <OrgLetterheadForm org={org} logoUrl={orgLogoUrl(org.logo_path)} />
     </div>

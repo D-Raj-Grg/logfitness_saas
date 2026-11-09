@@ -36,10 +36,18 @@ function readSettings(settings: Json) {
     locale: locale === 'ne' ? 'ne' : 'en',
     // Off unless the owner turned it on.
     trackCheckOut: bag.track_check_out === true,
+    balanceUrl: typeof bag.balance_url === 'string' ? bag.balance_url : '',
   }
 }
 
-export function OrgPreferencesForm({ settings }: { settings: Json }) {
+export function OrgPreferencesForm({
+  settings,
+  defaultBalanceLink,
+}: {
+  settings: Json
+  /** The console's own public balance page for this gym, used when balance_url is empty. */
+  defaultBalanceLink: string
+}) {
   const [state, formAction, pending] = useActionState<SettingsFormState, FormData>(
     updateOrgPreferences,
     {}
@@ -54,8 +62,8 @@ export function OrgPreferencesForm({ settings }: { settings: Json }) {
         <CardHeader>
           <CardTitle>Preferences</CardTitle>
           <CardDescription>
-            How class cancellations are handled, which language automatic messages use, and
-            whether check-out is recorded.
+            How class cancellations are handled, which language automatic messages use,
+            whether check-out is recorded, and where the QR on a printed card points.
           </CardDescription>
         </CardHeader>
 
@@ -115,6 +123,27 @@ export function OrgPreferencesForm({ settings }: { settings: Json }) {
                 </p>
               </div>
             </div>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:col-span-2">
+            <Label htmlFor="balanceUrl">Card balance link</Label>
+            <Input
+              id="balanceUrl"
+              name="balanceUrl"
+              type="url"
+              inputMode="url"
+              autoComplete="off"
+              maxLength={200}
+              placeholder="https://lordofgyms.com/balance"
+              defaultValue={current.balanceUrl}
+            />
+            <p className="text-xs text-muted-foreground">
+              Where the QR on a printed card points, e.g. https://lordofgyms.com/balance. The
+              card number is added to it as <code>?card_no=0004</code>. Leave empty to use this
+              console&apos;s own balance page:{' '}
+              <code className="break-all">{defaultBalanceLink}</code>
+            </p>
+            <FieldError messages={state.fieldErrors?.balanceUrl} />
           </div>
         </CardContent>
       </Card>

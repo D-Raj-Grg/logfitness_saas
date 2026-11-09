@@ -68,6 +68,28 @@ export const orgPreferencesSchema = z.object({
     ),
   notificationLocale: z.enum(['en', 'ne'], 'Choose a language'),
   trackCheckOut: z.boolean(),
+  /**
+   * Where the QR on a printed card points (the gym's own site). Empty means
+   * the console's own /balance page. https only, no card_no of its own -- the
+   * QR appends ?card_no=0004. localhost is allowed so it can be tried in dev.
+   */
+  balanceUrl: z
+    .string()
+    .trim()
+    .max(200, 'Keep the link under 200 characters')
+    .optional()
+    .transform((value) => (value ? value : null))
+    .refine(
+      (value) =>
+        value === null ||
+        /^https:\/\/\S+$/.test(value) ||
+        /^http:\/\/localhost(:[0-9]+)?(\/\S*)?$/.test(value),
+      'Enter an https:// link'
+    )
+    .refine(
+      (value) => value === null || !/[?&]card_no=/.test(value),
+      'Leave card_no out — it is added to the link for each card'
+    ),
 })
 
 export type OrgPreferencesInput = z.infer<typeof orgPreferencesSchema>

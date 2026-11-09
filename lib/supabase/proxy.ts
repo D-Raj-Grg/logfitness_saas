@@ -3,8 +3,12 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 import type { Database } from '@/lib/types/database'
 
-/** Routes reachable without a session. Everything else requires one. */
-const PUBLIC_PREFIXES = ['/login', '/signup', '/auth', '/forgot-password']
+/**
+ * Routes reachable without a session. Everything else requires one.
+ * `/balance` is the public card-balance page a member reaches from the QR on
+ * their card; it reads nothing RLS protects (see lib/db/public-balance.ts).
+ */
+const PUBLIC_PREFIXES = ['/login', '/signup', '/auth', '/forgot-password', '/balance']
 
 /**
  * The printed-document design harness. It renders fixtures, touches no
