@@ -17,6 +17,29 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-11-09 — Member app PIN login (backend)
+
+### Added
+
+- **PIN login for the members' app.** Desk, managers and owners can set a
+  member's 4-6 digit PIN (or have a random 6-digit one generated and shown
+  once), reset it (also clears a lock) and clear it. Members sign in with the
+  printed card number or phone plus the PIN; five wrong PINs lock the member for
+  15 minutes. Nothing about the PIN reaches the audit log.
+- **Member self-calls:** `my_card()` (printed number of the member's live card)
+  and `request_renewal()` (the same one-pending-request rules as the public
+  balance page, from inside the app).
+
+### Database
+
+- `member_pins`, `verify_member_pin`, `member_login_lookup` (service role
+  only), `set_member_pin`, `clear_member_pin`, `member_pin_status`, `my_card`,
+  `request_renewal`, internal `file_renewal_request`. Migration
+  `20261109120000_member_pin.sql`; gate `supabase/tests/member_pin_login.sql`.
+- Edge Function `member-login` (`verify_jwt` off).
+
+---
+
 ## 2026-11-09 — Printed card numbers, a public balance page, renewal requests, a card designer
 
 ### Added

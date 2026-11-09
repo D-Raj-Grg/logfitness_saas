@@ -498,3 +498,7 @@ Do not build these without an explicit decision to change scope.
   `checked_in_by` null and `device_id` set; the console shows them as
   "Device · <name>". Gate: `supabase/tests/rfid_check_in.sql`.
 - Next task: the rest of Phase 3's reports and Phase 4's class UI. See `TASKS.md`.
+
+## 10. Member PIN login (2026-11-09)
+
+The members' Flutter app signs in with a printed card number (1-4 digits) or phone (7-15 digits) plus a 4-6 digit PIN the desk sets. `member-login` (Edge Function, `verify_jwt` off) looks the member up (`member_login_lookup`), checks the PIN (`verify_member_pin`: bcrypt, 5 failures lock 15 minutes), ensures a synthetic auth user (`m-<member_id>@members.invalid`, linked through `members.auth_user_id`) and mints a normal Supabase session via admin `generateLink(magiclink)` + `verifyOtp`. Everything after sign-in is the existing member principal: the access-token hook stamps `org_id` / `member_id`, RLS and `current_member()` work unchanged. PINs live in `member_pins` (RLS on, no policies, no client grants, not audited by trigger; `set_member_pin` / `clear_member_pin` write an audit entry holding only `has_pin`). Member self-calls: `my_card()`, `request_renewal(p_phone, p_note)`; `attendance_snapshot(member_id)` already returns only the caller's own row.
