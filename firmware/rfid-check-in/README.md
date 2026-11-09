@@ -313,6 +313,90 @@ is `WEB_USER` (default `admin`).
   password crosses the LAN unencrypted. Use a long password used nowhere else and
   keep the reader's WiFi trusted.
 
+## QR protocol (door-display QR check-in, server side live; firmware 1.4.0)
+
+The OLED shows a rotating QR; a member scans it with the app, the server checks
+the code, records the visit (`method = 'qr'`) and queues an unlock; the reader
+polls for it and opens the relay. The backend is deployed and proven; firmware
+1.3.0 ignores all of it and keeps working unchanged.
+
+**Code.** Everything is decimal ASCII, no padding in the message.
+
+```
+window  = floor(unix_epoch_seconds / 30)          // RTC/NTP time, UTC
+message = "<qr_id>:<window>"                       // e.g. "7:56789012"
+mac     = HMAC-SHA256(key = qr_secret (32 raw bytes), message)
+code    = lpad( (uint32_big_endian(mac[0..3]) % 100000000), 8, "0" )
+payload = "LG1." + qr_id + "." + code              // QR text, e.g. "LG1.7.06036629"
+```
+
+`uint32_big_endian(mac[0..3]) = mac[0]<<24 | mac[1]<<16 | mac[2]<<8 | mac[3]`
+(use `uint32_t`; the `% 100000000` is on the unsigned value). The payload is at
+most 4 + 6 + 1 + 8 = 19 characters (`qr_id` is 1..999999), so a version 1-2
+QR (ECC L or M, alphanumeric/byte mode) is enough. The server accepts the
+current window and the one either side (so +-30 s of clock drift is fine;
+anything further is `invalid_code`). Redraw only when the window changes.
+
+**Test vector** (both the SQL test `supabase/tests/door_qr.sql` and
+`scripts/door-qr-sim.mjs` assert it; the firmware should too, once, at boot in
+a debug build):
+
+| | |
+|---|---|
+| secret (hex, 32 bytes) | `000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f` |
+| qr_id 7, window 56789012 (message `7:56789012`) | `06036629`  (payload `LG1.7.06036629`) |
+| qr_id 7, window 56789013 | `61789799` |
+| qr_id 1, window 0 (message `1:0`) | `75481906` |
+
+**Fetch the secret** -- `GET /functions/v1/rfid-sync?qr=1`, header `x-device-key`
+(opt-in; a plain `GET rfid-sync` still returns the text card list, byte for
+byte as before):
+
+```
+200 application/json
+{ "qr": { "qr_id": 7, "secret_b64": "mgmsgcWJqvfoj8oBaHvV8fz6dM5uXhvd+7zhtOfKRx8=" },
+  "server_time": 1794206366 }
+401 { "decision":"deny", "reason":"device_unknown" }    unknown / missing key
+403 { "decision":"deny", "reason":"device_disabled" }   disabled reader (no secret is returned)
+```
+
+`secret_b64` is standard base64 of the 32 raw key bytes (44 chars, with `=`
+padding); decode it (mbedtls `mbedtls_base64_decode`) and keep the bytes in
+flash. `server_time` is unix seconds; use it to set the clock if the RTC looks
+wrong. Refetch at every boot while online, and again after a 401. The secret is
+rotated when the device key is rotated (`rotate_device_key`), so a reader that
+is reflashed with a new key gets the matching new secret on its first fetch.
+
+**Poll for an unlock** -- `GET /functions/v1/rfid-poll`, header `x-device-key`,
+about once a second while idle and online (it is cheap):
+
+```
+200 { "unlock": null, "server_time": 1794206371 }                      nothing waiting
+200 { "unlock": { "member_name": "Zed Proof", "member_code": "M00001",
+                  "days_to_expiry": 25, "status": "active" },
+      "server_time": 1794206412 }                                       open the door now
+401 / 403   as above;  405 for any method other than GET
+```
+
+An unlock is handed out exactly once; the next poll returns `null`. Requests
+older than 20 s are never returned (a late scan cannot open the door). On
+`unlock` the reader runs the same path as an allowed card tap: relay for
+`RELAY_OPEN_MS`, the ALLOWED screen with `member_name` and `days_to_expiry`
+(`days_to_expiry` may be `null` for an open-ended membership; `member_name` is
+free text, fold it to printable ASCII and trim it like the sync list does).
+Attendance is already recorded by the server; the reader must not also POST a
+check-in for a QR unlock.
+
+**What the member's app calls** (for reference; the reader never calls it):
+`member_door_check_in(p_payload)` returns `{ result: ok | denied |
+invalid_code | closed | rate_limited, reason?, member_name, days_to_expiry,
+due_paisa, already_checked_in_today, status, branch_name }`. `closed` carries
+`reason: outside_hours` (the branch's `opens_at`..`closes_at`, org timezone) or
+`device_disabled`; `denied` carries the card reasons (`expired`, `dues`,
+`frozen`, `upcoming`, `none`, `left`); 10 bad codes in 10 minutes make a member
+`rate_limited`. Simulate the whole thing without hardware with
+`scripts/door-qr-sim.mjs`.
+
 ## Security
 
 - **`setInsecure()`**: the reader uses HTTPS but does **not** verify the

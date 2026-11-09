@@ -45,6 +45,17 @@ Two conventions worth knowing while reading:
 
 - `20261109130000_gym_schedule_and_calendar.sql`, `20261109130100_set_org_setting_null_guard.sql`,
   `20261109130200_org_holidays_revoke_anon.sql`; gate `supabase/tests/attendance_calendar.sql`.
+## 2026-11-09 — Door-display QR check-in (backend)
+
+### Added
+
+- **Rotating door QR, server side.** A member can scan the code shown on a door reader's screen (every 30 s a new 8-digit code) in the app; the server checks it, applies the same membership/dues rules as a card tap, records the visit as a QR check-in and tells the reader to open the door. Opening hours of the branch are respected, repeat scans the same day open the door without a second visit, and a member who types or scans 10 bad codes in 10 minutes is paused. Firmware 1.4.0 and the app's scan screen are still to come; firmware 1.3.0 readers are unaffected.
+- `rfid-poll` Edge Function (reader asks for a pending unlock; each unlock is handed out once and expires after 20 s) and `rfid-sync?qr=1` (reader fetches its QR number and secret). Plain `rfid-sync` and `rfid-check` answers are unchanged.
+- `scripts/door-qr-sim.mjs`: plays the phone and the reader against the live backend for an end-to-end check without hardware.
+
+### Database
+
+- `20261109131000_door_qr.sql`: `devices.qr_id`, `device_qr_secrets`, `device_unlock_requests`, `door_qr_failures`, `door_qr_code`, `door_member_tap` (extracted from `rfid_check_in`, card behaviour unchanged), `member_door_check_in`, `rfid_poll_unlock`, `rfid_qr_config`; `rotate_device_key` also rotates the QR secret. Gate `supabase/tests/door_qr.sql`.
 
 ---
 

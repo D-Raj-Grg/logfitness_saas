@@ -285,6 +285,18 @@ Context: `PLANNING.md` (architecture) · `docs/PRD.md` (product).
 - [x] **Fixed:** `set_org_setting` null-unsafe owner guard let a member principal change org settings (`20261109130100`).
 - [ ] Console: Settings "Gym schedule" section (workstream C). Calendar UI in the Flutter app (E2).
 - [ ] Past freeze periods are not stored, so a past frozen span can show red (only the *current* freeze is neutral). Needs a freeze-period table.
+### Door-display QR check-in, backend (built 2026-11-09; firmware 1.4.0 + member app pending)
+
+The reader's OLED shows a QR that rotates every 30 s; the member scans it in the app, `member_door_check_in` runs the same allow/deny rules as a card tap, records a `qr` visit and queues an unlock that the reader fetches with `rfid-poll`. Protocol (code formula, test vector, JSON shapes): `firmware/rfid-check-in/README.md` "QR protocol". Migration `20261109131000_door_qr.sql`.
+
+- [x] `devices.qr_id` (per-org unique, auto-assigned) and the per-device HMAC secret. **Deviation:** the secret is in `device_qr_secrets` (RLS on, no policy, no client grants), not a `devices.qr_secret` column -- `update_device()` returns `to_jsonb(devices row)`, the audit trigger copies inserted rows and `devices` is granted wholesale to `authenticated`, any of which would leak it to a front-desk user. `rotate_device_key` rotates the secret too.
+- [x] `door_qr_code(secret, qr_id, window)`, `door_member_tap` (member half of `rfid_check_in`, extracted unchanged), `member_door_check_in`, `device_unlock_requests`, `door_qr_failures`, `rfid_poll_unlock`, `rfid_qr_config`.
+- [x] Edge: new `rfid-poll`; `rfid-sync` gains opt-in `GET ?qr=1` (the plain GET is still the text card list, byte-identical).
+- [x] Gate `supabase/tests/door_qr.sql` (in `db:test`); `staff_cards.sql`, `rfid_check_in.sql`, `rfid_offline_sync.sql`, `staff_cards_offline.sql`, `card_stock.sql` re-run green. `scripts/door-qr-sim.mjs` + a throwaway prod fixture proved scan -> poll once -> poll null, stale code, expired member.
+- [ ] Firmware 1.4.0: draw the QR, derive the code, fetch the secret, poll `rfid-poll` (agent D).
+- [ ] Member app scan screen (agent E3).
+- [ ] Console: show a device's `qr_id` in Settings -> Devices (the column is staff-readable, not secret); a "Rotate QR secret" action separate from the key if wanted.
+- [ ] A photo of the screen replayed within ~60 s still opens the door (rotating code is not proof of presence); mitigations are opening hours, one visit per day, the 20 s unlock window and the per-member throttle.
 
 ### Member app backend: PIN login and member self-calls (decided 2026-11-09)
 
