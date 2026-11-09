@@ -5,6 +5,7 @@ import { Pagination } from '@/components/app/pagination'
 import { TableSkeleton } from '@/components/app/skeletons'
 import { MemberSearch } from '@/components/members/member-search'
 import { MembersTable } from '@/components/members/members-table'
+import { RenewalRequestsBadge } from '@/components/members/renewal-requests-badge'
 import { Button } from '@/components/ui/button'
 import { requireRole, type CurrentStaff } from '@/lib/auth'
 import { listBranches } from '@/lib/db/branches'
@@ -135,7 +136,14 @@ export default async function MembersPage({
             Everyone registered at {staff.orgName}, across every branch.
           </p>
         </div>
-        <Button render={<Link href="/members/new" />}>Register member</Button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {/* Only renders when someone is waiting; its own Suspense so the
+              count never holds up the heading. */}
+          <Suspense fallback={null}>
+            <RenewalRequestsBadge />
+          </Suspense>
+          <Button render={<Link href="/members/new" />}>Register member</Button>
+        </div>
       </div>
 
       <MemberSearch q={query.q} status={query.status} />

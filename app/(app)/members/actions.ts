@@ -49,6 +49,8 @@ import {
 import { revokeMemberCardSchema } from '@/lib/validation/member-cards'
 import { assignByCardNoSchema } from '@/lib/validation/cards'
 import { assignCardStockToMember } from '@/lib/db/card-stock'
+import { handleRenewalRequest as handleRenewalRequestRpc } from '@/lib/db/renewal-requests'
+import { handleRenewalRequestSchema } from '@/lib/validation/renewal-requests'
 
 export type MemberFormState = {
   error?: string
@@ -756,4 +758,39 @@ export async function revokeMemberCard(
 
   revalidatePath(`/members/${parsed.data.memberId}`)
   return { success: 'Card revoked. The reader refuses it from now on.' }
+}
+
+/**
+ * Close a renewal request from the balance page without renewing. Renewing
+ * the member closes it by itself (the memberships trigger), so this is for the
+ * odd case -- a request already dealt with some other way -- and for a no. The
+ * RPC refuses a request that is already closed or outside the caller's branches.
+ */
+export async function handleRenewalRequest(
+  _prevState: MemberFormState,
+  formData: FormData
+): Promise<MemberFormState> {
+  await requireRole('owner', 'manager', 'front_desk')
+
+  const parsed = handleRenewalRequestSchema.safeParse({
+    id: formData.get('requestId'),
+    status: formData.get('status'),
+    note: formData.get('note') ?? undefined,
+  })
+  if (!parsed.success) {
+    return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
+  }
+
+  try {
+    await handleRenewalRequestRpc(parsed.data.id, parsed.data.status, parsed.data.note)
+  } catch (error) {
+    return { error: rpcErrorMessage(error, 'The request could not be updated.') }
+  }
+
+  revalidatePath('/members/requests')
+  revalidatePath('/members')
+  revalidatePath('/members/[id]', 'page')
+  return {
+    success: parsed.data.status === 'done' ? 'Marked done.' : 'Request rejected.',
+  }
 }

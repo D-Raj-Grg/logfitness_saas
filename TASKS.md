@@ -310,7 +310,7 @@ deployed (`verify_jwt` off; see `supabase/functions/README.md`). Types regenerat
 - [x] Card designer `/cards/designer`: template upload (private `card-templates`
       bucket), drag number + QR, CR80 / CR80+bleed, range → `card_stock` rows +
       batch, one PDF page per card (`pdf-lib`, vector QR), download again per batch.
-- [ ] Staff UI for renewal requests: `/members/requests` list, badge on `/members`,
+- [x] Staff UI for renewal requests: `/members/requests` list, badge on `/members`,
       panel on the member profile with Done / Reject.
 - [ ] LOG cutover: set `balance_url` = `https://lordofgyms.com/balance` on
       `/settings`; number the printed run on `/cards`; add the two env vars to the
