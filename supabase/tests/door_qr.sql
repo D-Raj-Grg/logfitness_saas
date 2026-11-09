@@ -523,6 +523,23 @@ begin
   result := public.member_door_check_in('LG1.1.' || c_cur);
   assert result ->> 'result' = 'ok', format('after the window passed: %s', result);
 
+  -- the throttle is serialised per member: the function takes the advisory lock
+  -- before it counts failures (parallel guesses cannot all pass the count)
+  execute 'reset role';
+  assert position('pg_advisory_xact_lock(hashtextextended(''door_qr:'''
+                  in pg_get_functiondef('public.member_door_check_in(text)'::regprocedure)) > 0,
+    'member_door_check_in does not take the per-member advisory lock';
+  assert position('pg_advisory_xact_lock'
+                  in pg_get_functiondef('public.member_door_check_in(text)'::regprocedure))
+       < position('from public.door_qr_failures f'
+                  in pg_get_functiondef('public.member_door_check_in(text)'::regprocedure)),
+    'the advisory lock is taken after the failure count, not before';
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', gen_random_uuid()::text, 'role', 'authenticated',
+    'org_id', org_a::text, 'member_id', m_thr::text, 'branch_ids', json_build_array(br_a1)
+  )::text, true);
+  execute 'set local role authenticated';
+
   -- 11. staff / anon callers ------------------------------------------------------------
   execute 'reset role';
   perform set_config('request.jwt.claims', json_build_object(
@@ -580,3 +597,4 @@ begin
 
   raise notice 'door qr: all assertions passed';
 end $$;
+select 'door_qr: all assertions passed' as result;
