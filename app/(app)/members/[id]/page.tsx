@@ -361,7 +361,12 @@ export default async function MemberProfilePage({
           ) : null}
 
           {canManage ? (
-            <MemberCardAccess memberId={id} cards={cards} scans={cardScans} />
+            <MemberCardAccess
+              memberId={id}
+              cards={cards}
+              scans={cardScans}
+              cardNo={overview.card_no ?? null}
+            />
           ) : null}
 
           <MemberHistoryTabs

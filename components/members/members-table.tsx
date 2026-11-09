@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { cardLabel } from '@/lib/cards/card-no'
 import type { MemberOverviewRow } from '@/lib/db/members'
 import type { LastPayment } from '@/lib/db/payments'
 import { formatDate, formatMoney, todayInTimezone } from '@/lib/format'
@@ -174,7 +175,13 @@ export function MembersTable({
                 {startIndex + index + 1}
               </TableCell>
               <TableCell className="font-mono text-xs text-muted-foreground">
-                {row.member_code}
+                <span className="block">{row.member_code}</span>
+                {/* The number printed on their door card, when they hold one. */}
+                {row.card_no ? (
+                  <span className="block text-[11px] text-muted-foreground/80">
+                    {cardLabel(row.card_no)}
+                  </span>
+                ) : null}
               </TableCell>
               <TableCell>
                 <div className="flex items-center gap-2">

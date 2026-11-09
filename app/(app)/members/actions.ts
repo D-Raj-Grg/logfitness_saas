@@ -46,10 +46,9 @@ import {
   updateMemberSchema,
   type MemberInput,
 } from '@/lib/validation/members'
-import {
-  assignMemberCardSchema,
-  revokeMemberCardSchema,
-} from '@/lib/validation/member-cards'
+import { revokeMemberCardSchema } from '@/lib/validation/member-cards'
+import { assignByCardNoSchema } from '@/lib/validation/cards'
+import { assignCardStockToMember } from '@/lib/db/card-stock'
 
 export type MemberFormState = {
   error?: string
@@ -692,10 +691,13 @@ export async function deleteMember(
 }
 
 /**
- * Hand a member an RFID card. The UID comes from a recent tap on a reader (the
- * picker) or is typed in; either way it is normalised and checked here and
- * again in assign_member_card(), which also refuses a card that is live for
- * someone else, by member code.
+ * Hand a member an RFID card. The desk names it by the number printed on it,
+ * by a recent tap on a reader (the picker), by a typed UID, or by number and
+ * UID together when the printed card's chip is not linked yet. A printed
+ * number goes through assign_card_stock_to_member(), which links the chip if
+ * needed and then delegates to assign_member_card(); a bare UID goes to
+ * assign_member_card() directly. Both refuse a card that is live for someone
+ * else, by member code.
  */
 export async function assignMemberCard(
   _prevState: MemberFormState,
@@ -703,8 +705,9 @@ export async function assignMemberCard(
 ): Promise<MemberFormState> {
   await requireRole('owner', 'manager', 'front_desk')
 
-  const parsed = assignMemberCardSchema.safeParse({
+  const parsed = assignByCardNoSchema.safeParse({
     memberId: formData.get('memberId'),
+    cardNo: formData.get('cardNo') ?? '',
     cardUid: formData.get('cardUid') ?? '',
     replace: formData.get('replace') ?? undefined,
   })
@@ -712,13 +715,21 @@ export async function assignMemberCard(
     return { fieldErrors: z.flattenError(parsed.error).fieldErrors }
   }
 
+  const { memberId, cardNo, cardUid, replace } = parsed.data
+
   try {
-    await assignMemberCardRpc(parsed.data)
+    if (cardNo !== undefined) {
+      await assignCardStockToMember({ memberId, cardNo, cardUid, replace })
+    } else {
+      await assignMemberCardRpc({ memberId, cardUid: cardUid as string, replace })
+    }
   } catch (error) {
     return { error: rpcErrorMessage(error, 'The card could not be assigned.') }
   }
 
-  revalidatePath(`/members/${parsed.data.memberId}`)
+  revalidatePath(`/members/${memberId}`)
+  revalidatePath('/members')
+  revalidatePath('/cards')
   return { success: 'Card assigned. Door access follows membership status and dues.' }
 }
 
