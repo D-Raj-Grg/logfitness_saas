@@ -30,6 +30,8 @@ declare
   req_id uuid;
   result jsonb;
   made jsonb;
+  paid_latest timestamptz;
+  tz_a text;
   tok1 text; tok2 text; tok3 text; tok4 text; tok6 text;
   req public.renewal_requests%rowtype;
   today_a date;
@@ -75,6 +77,14 @@ begin
     (org_a, br_a1, m_expired, plan_month, 'Monthly', 'time', today_a - 33, today_a - 3,  250000, 'expired'),
     (org_a, br_a1, m_gone,    plan_month, 'Monthly', 'time', today_a - 18, today_a + 12, 250000, 'active');
 
+  -- what the member paid, oldest first; the latest is what the page shows
+  paid_latest := now() - interval '5 days';
+  insert into public.payments (org_id, branch_id, member_id, kind, amount_paisa, method, collected_by, paid_at)
+  values
+    (org_a, br_a1, m_active, 'payment', 100000, 'cash', st_owner, now() - interval '30 days'),
+    (org_a, br_a1, m_active, 'payment', 250000, 'cash', st_owner, paid_latest);
+  select o.timezone into tz_a from public.orgs o where o.id = org_a;
+
   -- masking is a pure function
   assert public.mask_name('Ramesh Thapa') = 'R•••• T••••', format('mask: %s', public.mask_name('Ramesh Thapa'));
   assert public.mask_name('Sita') = 'S•••', format('mask: %s', public.mask_name('Sita'));
@@ -82,6 +92,23 @@ begin
   assert public.mask_name('  Hari  Bahadur   Khadka ') = 'H••• B•••• K••••',
     format('mask: %s', public.mask_name('  Hari  Bahadur   Khadka '));
   assert public.mask_name('') = '', 'mask: empty';
+
+  -- first name and phone hint are pure functions too
+  assert public.first_name_of('Ramesh Thapa') = 'Ramesh', 'first name';
+  assert public.first_name_of('  Hari  Bahadur   Khadka ') = 'Hari', 'first name, odd spacing';
+  assert public.first_name_of('Sita') = 'Sita', 'first name, one word';
+  assert public.first_name_of('   ') is null and public.first_name_of(null) is null, 'first name, nothing';
+  assert public.name_hidden_surname('Ramesh Thapa') = 'Ramesh xxxx', format('name display: %s', public.name_hidden_surname('Ramesh Thapa'));
+  assert public.name_hidden_surname('  Hari  Bahadur   Khadka ') = 'Hari xxxx xxxx', 'name display, three words';
+  assert public.name_hidden_surname('Sita') = 'Sita', 'name display, one word';
+  assert public.name_hidden_surname('   ') is null and public.name_hidden_surname(null) is null, 'name display, nothing';
+  assert public.phone_hint('9825254929') = '98252xxxxx', format('phone hint: %s', public.phone_hint('9825254929'));
+  assert public.phone_hint('+977 9825254929') = '98252xxxxx', 'phone hint drops +977';
+  assert public.phone_hint('98-252 54929') = '98252xxxxx', 'phone hint ignores punctuation';
+  assert public.phone_hint('9779825254929') = '98252xxxxx', 'phone hint drops 977 without a plus';
+  assert public.phone_hint('9825254') = '98252xx', 'a short number keeps its length';
+  assert public.phone_hint('12345') is null and public.phone_hint('') is null and public.phone_hint(null) is null,
+    'a number of five digits or fewer shows nothing';
 
   -- the desk numbers cards and hands them out -----------------------------------
   perform set_config('request.jwt.claims', json_build_object(
@@ -150,14 +177,77 @@ begin
   assert (result ->> 'days_left')::integer = 12, format('days_left should be 12: %s', result ->> 'days_left');
   assert (result ->> 'ends_on')::date = today_a + 12, 'ends_on';
   assert (result ->> 'renewal_pending')::boolean = false, 'no request yet';
+  assert result ->> 'first_name' = 'Ramesh', format('first name: %s', result ->> 'first_name');
+  assert result ->> 'name_display' = 'Ramesh xxxx', format('name display: %s', result ->> 'name_display');
+  assert result ->> 'phone_hint' = '98300xxxxx', format('phone hint: %s', result ->> 'phone_hint');
+  assert (result ->> 'last_payment_paisa')::bigint = 250000, format('last payment amount: %s', result);
+  assert (result ->> 'last_payment_on')::date = (paid_latest at time zone tz_a)::date,
+    format('last payment date: %s', result);
+  assert result ->> 'currency' is not null, 'the org currency should come with the amount';
+  -- still no raw phone, full name, dues, member code or id
   assert not (result ? 'phone') and not (result ? 'due_paisa') and not (result ? 'member_code')
      and not (result ? 'full_name') and not (result ? 'member_id'),
     format('the public answer leaks a private field: %s', result);
+  assert result::text !~ '9830000001' and result::text !~ 'Thapa',
+    format('the answer carries the full phone or surname: %s', result);
 
   result := public.public_card_balance('omega-fit-test', tok2);
   assert result ->> 'result' = 'ok' and result ->> 'status' = 'expired'
      and (result ->> 'days_left')::integer = -3,
     format('expired card: %s', result);
+  assert result ->> 'first_name' = 'Sita' and result ->> 'name_display' = 'Sita xxxx' and result ->> 'phone_hint' = '98300xxxxx',
+    format('second member: %s', result);
+  assert result -> 'last_payment_on' = 'null'::jsonb and result -> 'last_payment_paisa' = 'null'::jsonb,
+    format('a member with no payment should show none: %s', result);
+
+  -- a payment taken back in full stops being "the last payment"; the one before it shows.
+  -- A refund row is never shown either.
+  execute 'reset role';
+  insert into public.payments (org_id, branch_id, member_id, kind, amount_paisa, method, collected_by, reason, paid_at)
+  values
+    (org_a, br_a1, m_active, 'reversal', -250000, 'cash', st_owner, 'entered twice', now() - interval '1 day'),
+    (org_a, br_a1, m_active, 'refund', -40000, 'cash', st_owner, 'goodwill', now());
+  execute 'set local role service_role';
+  result := public.public_card_balance('omega-fit-test', tok1);
+  assert (result ->> 'last_payment_paisa')::bigint = 100000,
+    format('a reversed payment still showed as the last payment: %s', result);
+
+  -- a newer payment arrives; the earlier reversal belongs to the 250000 one and
+  -- must not cancel it (or the 100000 one)
+  execute 'reset role';
+  insert into public.payments (org_id, branch_id, member_id, kind, amount_paisa, method, collected_by, paid_at)
+  values (org_a, br_a1, m_active, 'payment', 300000, 'cash', st_owner, now() - interval '3 days');
+  execute 'set local role service_role';
+  result := public.public_card_balance('omega-fit-test', tok1);
+  assert (result ->> 'last_payment_paisa')::bigint = 300000,
+    format('the newest payment should show: %s', result);
+
+  -- reversing the newest falls back to the 100000 one, not to nothing
+  execute 'reset role';
+  insert into public.payments (org_id, branch_id, member_id, kind, amount_paisa, method, collected_by, reason, paid_at)
+  values (org_a, br_a1, m_active, 'reversal', -300000, 'cash', st_owner, 'wrong member', now() - interval '12 hours');
+  execute 'set local role service_role';
+  result := public.public_card_balance('omega-fit-test', tok1);
+  assert (result ->> 'last_payment_paisa')::bigint = 100000,
+    format('after reversing the newest, the earlier one should show: %s', result);
+
+  -- a partial reversal leaves what is still standing
+  execute 'reset role';
+  insert into public.payments (org_id, branch_id, member_id, kind, amount_paisa, method, collected_by, reason, paid_at)
+  values (org_a, br_a1, m_active, 'reversal', -30000, 'cash', st_owner, 'part refund', now() - interval '6 hours');
+  execute 'set local role service_role';
+  result := public.public_card_balance('omega-fit-test', tok1);
+  assert (result ->> 'last_payment_paisa')::bigint = 70000,
+    format('a partial reversal should leave 70000: %s', result);
+
+  -- everything taken back: no last payment at all
+  execute 'reset role';
+  insert into public.payments (org_id, branch_id, member_id, kind, amount_paisa, method, collected_by, reason, paid_at)
+  values (org_a, br_a1, m_active, 'reversal', -70000, 'cash', st_owner, 'rest', now() - interval '3 hours');
+  execute 'set local role service_role';
+  result := public.public_card_balance('omega-fit-test', tok1);
+  assert result -> 'last_payment_on' = 'null'::jsonb and result -> 'last_payment_paisa' = 'null'::jsonb,
+    format('with every payment taken back the page should show none: %s', result);
 
   -- asking to renew ---------------------------------------------------------------
   result := public.public_renewal_request('no-such-gym', tok1, null, null);

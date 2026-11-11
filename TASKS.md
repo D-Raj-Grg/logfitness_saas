@@ -341,6 +341,8 @@ token only. Hard cut (nothing printed). Branch `feat/card-qr-token-links`
 - [x] `logfitness_web` `/balance?c=`: token only, no number box, old `?card_no=` links
       show "Scan the QR on your card" and make no request.
 - [x] Gates updated: `card_stock.sql`, `public_balance.sql`, `card_designs.sql`.
+- [x] Balance page shows first name, phone hint (`98252xxxxx`) and last payment
+      (migrations `20261111120000` + `120100`, web `balance-lookup.tsx`).
 - [ ] Print a card from the designer (re-download 0001-0070) and scan it before printing a run.
 - [ ] Open: single-card QR view/download (only the batch PDF makes QRs); rotating a leaked
       card's token (tokens are immutable; retire the card and print a new one); any staff can
