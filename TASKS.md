@@ -321,6 +321,32 @@ The members' app (`../logfitness_membership_flutter`, LOG-branded, separate from
 - [ ] Verify the FCM send path of `push-fanout` end to end (Firebase project for the member bundle id, `FCM_SERVICE_ACCOUNT_JSON`).
 - [ ] After the member app ships: decide the fate of `invite_member` / `link_member_account` and the console "Invite to app" action.
 
+### Random-token balance links for card QRs (2026-11-11)
+
+The QR used to carry the printed number (`?card_no=0004`), so anyone could walk
+0001..9999 and read every member's masked name/plan/days left. It now carries a
+per-card random token (`?c=0004_k3x9q2mf`) and the public path finds a card by
+token only. Hard cut (nothing printed). Branch `feat/card-qr-token-links`
+(saas + web).
+
+- [x] Migration `20261111100000_card_qr_token_links.sql`: `new_card_token`, insert
+      trigger + format/prefix check on `card_stock.qr_token`, 70 existing cards re-keyed,
+      `create_card_stock_range` returns `cards[]`, `card_batch_qr_tokens` (owner/manager),
+      `public_card_lookup_by_token`, token-keyed `public_card_balance` /
+      `public_renewal_request` (integer overloads dropped), `set_org_setting` rejects `c=`.
+- [x] Edge Function `public-balance` v4: `GET ?org=&c=`, `POST /renew-request {org, c}`;
+      shape-checks the token; a bare `card_no` is a 400.
+- [x] Designer: PDF QR carries each card's token; "Download again" refetches tokens;
+      console `/balance?org=&c=` has no number box; `balance_url` setting refuses `c=`.
+- [x] `logfitness_web` `/balance?c=`: token only, no number box, old `?card_no=` links
+      show "Scan the QR on your card" and make no request.
+- [x] Gates updated: `card_stock.sql`, `public_balance.sql`, `card_designs.sql`.
+- [ ] Print a card from the designer (re-download 0001-0070) and scan it before printing a run.
+- [ ] Open: single-card QR view/download (only the batch PDF makes QRs); rotating a leaked
+      card's token (tokens are immutable; retire the card and print a new one); any staff can
+      still read `qr_token` via RLS on `card_stock` (they hold the cards; revoke column select
+      if that is ever not acceptable); desk lookup of a member from a scanned QR.
+
 ### Printed card numbers, public balance page, renewal requests, card designer (2026-11-08)
 
 **Status 2026-11-09.** Built on `feat/card-stock-balance`. Live migrations:
@@ -346,7 +372,8 @@ deployed (`verify_jwt` off; see `supabase/functions/README.md`). Types regenerat
 - [x] Public API: `public_card_balance` / `public_renewal_request` (service role
       only) → `public-balance` Edge Function (`GET ?org=&card_no=`,
       `POST /renew-request`). Masked name, plan, status, days left, ends on. No
-      phone, dues or member code. Enumeration of card numbers accepted by decision.
+      phone, dues or member code. Enumeration of card numbers accepted by decision
+      (**reversed 2026-11-11**: token links, see the block above).
 - [x] Console public page `app/(public)/balance?org=<slug>&card_no=` (outside the
       staff session; `/balance` in `PUBLIC_PREFIXES`); `/settings` → "Card balance
       link" (`orgs.settings.balance_url`).

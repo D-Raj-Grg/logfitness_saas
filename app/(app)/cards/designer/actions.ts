@@ -7,13 +7,16 @@ import { requireRole } from '@/lib/auth'
 import {
   createCardStockRange,
   deleteCardDesign as deleteCardDesignDb,
+  getBatchQrTokens,
   listCardDesigns,
   removeCardTemplate,
   saveCardDesign as saveCardDesignDb,
 } from '@/lib/db/card-designs'
+import type { PrintCard } from '@/lib/cards/card-token'
 import { rpcErrorMessage } from '@/lib/rpc-error'
 import type { Json } from '@/lib/types/database'
 import {
+  batchPrintSchema,
   cardRangeSchema,
   deleteCardDesignSchema,
   saveCardDesignSchema,
@@ -91,13 +94,14 @@ export async function deleteCardDesign(input: unknown): Promise<DesignActionResu
   return { ok: true, id: parsed.data.id }
 }
 
-export type CreatedRange = { batchId: string; cardNos: number[] }
+export type CreatedRange = { batchId: string; cards: PrintCard[] }
 export type RangeActionResult = { error: string } | ({ ok: true } & CreatedRange)
 
 /**
  * Number a run of cards for printing. The stock rows are written first, so a
  * PDF is only ever built for numbers the database already knows about; the
- * browser then renders and downloads it.
+ * database makes each card's random link token and hands it back here, and
+ * the browser then renders and downloads the PDF with it in the QR.
  */
 export async function createCardStockRangeForPrint(input: unknown): Promise<RangeActionResult> {
   await requireRole(...DESIGNER_ROLES)
@@ -115,10 +119,33 @@ export async function createCardStockRangeForPrint(input: unknown): Promise<Rang
     return { error: rpcErrorMessage(error, 'The cards could not be numbered.') }
   }
 
-  const cardNos: number[] = []
-  for (let n = created.from_no; n <= created.to_no; n++) cardNos.push(n)
+  const cards: PrintCard[] = (created.cards ?? []).map((c) => ({
+    cardNo: c.card_no,
+    token: c.token,
+  }))
 
   revalidatePath('/cards')
   revalidatePath('/cards/designer')
-  return { ok: true, batchId: created.batch_id, cardNos }
+  return { ok: true, batchId: created.batch_id, cards }
+}
+
+export type BatchCardsResult = { error: string } | { ok: true; cards: PrintCard[] }
+
+/**
+ * "Download again": the cards of a past run with their tokens. Tokens are
+ * immutable, so the PDF this rebuilds carries the same QR codes as the first.
+ */
+export async function getBatchPrintCards(input: unknown): Promise<BatchCardsResult> {
+  await requireRole(...DESIGNER_ROLES)
+
+  const parsed = batchPrintSchema.safeParse(input)
+  if (!parsed.success) return { error: 'That print run does not exist.' }
+
+  try {
+    const cards = await getBatchQrTokens(parsed.data.batchId)
+    if (cards.length === 0) return { error: 'That print run has no cards.' }
+    return { ok: true, cards }
+  } catch (error) {
+    return { error: rpcErrorMessage(error, 'The cards could not be loaded.') }
+  }
 }

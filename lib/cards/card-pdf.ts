@@ -3,6 +3,7 @@ import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import { balanceLink } from '@/lib/cards/balance-link'
 import { CARD_PAGES, parseHex, type CardPageKey, type CardPlacement } from '@/lib/cards/card-design'
 import { cardLabel } from '@/lib/cards/card-no'
+import type { PrintCard } from '@/lib/cards/card-token'
 import { qrMatrix, qrRuns } from '@/lib/cards/card-qr'
 
 export type CardTemplate = {
@@ -18,7 +19,8 @@ const PAGES_PER_TICK = 8
 
 /**
  * One page per card, at the chosen card size: the template stretched to the
- * page, the number in its box and the QR in its square. The template is
+ * page, the number in its box and the QR in its square. The QR carries the
+ * card's own token (never the bare number). The template is
  * embedded **once** and every page references it, and the QR is vector
  * rectangles -- so 500 cards stay a few MB and print sharp at any size.
  *
@@ -27,14 +29,14 @@ const PAGES_PER_TICK = 8
 export async function buildCardPdf(opts: {
   template: CardTemplate
   placement: CardPlacement
-  cardNos: number[]
+  cards: PrintCard[]
   labelPrefix: string
-  /** Where the QR sends a phone; the card number is appended per card. */
+  /** Where the QR sends a phone; each card's token is appended. */
   linkBase: string
   page: CardPageKey
   onProgress?: (done: number, total: number) => void
 }): Promise<Uint8Array> {
-  const { template, placement, cardNos, labelPrefix, linkBase, page, onProgress } = opts
+  const { template, placement, cards, labelPrefix, linkBase, page, onProgress } = opts
   const size = CARD_PAGES[page]
   const W = size.widthPt
   const H = size.heightPt
@@ -60,8 +62,8 @@ export async function buildCardPdf(opts: {
   const qrX = placement.qr.x * W
   const qrY = H - placement.qr.y * H - side
 
-  for (let i = 0; i < cardNos.length; i++) {
-    const n = cardNos[i]
+  for (let i = 0; i < cards.length; i++) {
+    const { cardNo: n, token } = cards[i]
     const text = cardLabel(n, labelPrefix)
     const pdfPage = doc.addPage([W, H])
     pdfPage.drawImage(image, { x: 0, y: 0, width: W, height: H })
@@ -79,7 +81,7 @@ export async function buildCardPdf(opts: {
     })
 
     // QR: modules fill the square less the inset.
-    const m = qrMatrix(balanceLink(linkBase, n))
+    const m = qrMatrix(balanceLink(linkBase, token))
     const inner = side * (1 - 2 * placement.qrInset)
     const cell = inner / m.size
     const ox = qrX + side * placement.qrInset
@@ -95,8 +97,8 @@ export async function buildCardPdf(opts: {
       })
     }
 
-    if ((i + 1) % PAGES_PER_TICK === 0 || i === cardNos.length - 1) {
-      onProgress?.(i + 1, cardNos.length)
+    if ((i + 1) % PAGES_PER_TICK === 0 || i === cards.length - 1) {
+      onProgress?.(i + 1, cards.length)
       await new Promise((r) => setTimeout(r, 0))
     }
   }

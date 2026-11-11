@@ -70,8 +70,9 @@ export const orgPreferencesSchema = z.object({
   trackCheckOut: z.boolean(),
   /**
    * Where the QR on a printed card points (the gym's own site). Empty means
-   * the console's own /balance page. https only, no card_no of its own -- the
-   * QR appends ?card_no=0004. localhost is allowed so it can be tried in dev.
+   * the console's own /balance page. https only, no c= or card_no= of its own
+   * -- each card's random token is appended as ?c=0004_k3x9q2mf. localhost is
+   * allowed so it can be tried in dev.
    */
   balanceUrl: z
     .string()
@@ -87,8 +88,8 @@ export const orgPreferencesSchema = z.object({
       'Enter an https:// link'
     )
     .refine(
-      (value) => value === null || !/[?&]card_no=/.test(value),
-      'Leave card_no out — it is added to the link for each card'
+      (value) => value === null || !/[?&](card_no|c)=/.test(value),
+      'Leave c= and card_no= out — each card’s code is added to the link'
     ),
 })
 

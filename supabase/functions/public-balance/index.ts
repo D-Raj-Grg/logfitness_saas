@@ -1,12 +1,17 @@
 // public-balance -- the public balance API behind the QR printed on a member's
-// card. A gym's own site (or the console's /balance page) asks "who holds card
-// 0004 at omega-fit, and how many days are left?" and may file a "please renew
-// me" request on the member's behalf. Nobody signs in.
+// card. A gym's own site (or the console's /balance page) asks "who holds the
+// card with this link at omega-fit, and how many days are left?" and may file a
+// "please renew me" request on the member's behalf. Nobody signs in.
 //
-//   GET  /public-balance?org=<slug>&card_no=<n>          -> public_card_balance
+//   GET  /public-balance?org=<slug>&c=<token>             -> public_card_balance
 //   POST /public-balance/renew-request                    -> public_renewal_request
-//        { org, card_no, phone?, note? }
+//        { org, c, phone?, note? }
 //   OPTIONS                                               -> 204 CORS preflight
+//
+// <token> is the random per-card link key printed in the QR, "0004_k3x9q2mf"
+// (card number, underscore, 8 chars). The printed number alone is no key: a
+// request that names a card by number is refused, so nobody can walk
+// 0001..9999. The token is looked up in Postgres, scoped to the org.
 //
 // Auth model:
 //   - `verify_jwt: false` is deliberate, and there is no caller secret either:
@@ -14,7 +19,7 @@
 //     gym's own site. Anything we handed that page would be public anyway.
 //   - The service-role key is used solely to call the two RPCs above, which
 //     are security definer and executable by service_role only. They answer
-//     only what a stranger holding the card could already guess (masked name,
+//     only what someone holding the card could already see (masked name,
 //     plan, status, days left) -- the limit is in Postgres, not here.
 //   - The org is resolved by slug inside Postgres. Nothing in the request is
 //     trusted for identity; the input is only validated for shape before it
@@ -35,8 +40,10 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 const ORG_SLUG_RE = /^[a-z0-9-]{1,60}$/
-const CARD_NO_MIN = 1
-const CARD_NO_MAX = 9999
+// "0004_k3x9q2mf": 4-digit card number, "_", 8 chars. Mirrors the check on
+// card_stock.qr_token; anything else cannot be a card's token, so it is turned
+// away before it reaches the database.
+const CARD_TOKEN_RE = /^[0-9]{4}_[a-z2-9]{8}$/
 const PHONE_MAX = 20
 const NOTE_MAX = 500
 
@@ -123,16 +130,13 @@ function parseOrgSlug(value: unknown): string | null {
   return ORG_SLUG_RE.test(slug) ? slug : null
 }
 
-// "4", "04", "0004", "NO. 0004" -> 4. Mirrors public.parse_card_no.
-function parseCardNo(value: unknown): number | null {
-  if (typeof value !== 'string' && typeof value !== 'number') return null
-  if (typeof value === 'number' && !Number.isInteger(value)) return null
-  const digits = String(value).replace(/[^0-9]/g, '')
-  if (digits === '' || digits.length > 4) return null
-  const n = Number.parseInt(digits, 10)
-  if (!Number.isInteger(n) || n < CARD_NO_MIN || n > CARD_NO_MAX) return null
-  return n
+function parseToken(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const token = value.trim()
+  return CARD_TOKEN_RE.test(token) ? token : null
 }
+
+const TOKEN_HELP = 'c must be the link token printed in the card QR'
 
 function parsePhone(value: unknown): string | null | undefined {
   if (value === undefined || value === null || value === '') return null
@@ -195,14 +199,12 @@ Deno.serve(async (req: Request) => {
     const url = new URL(req.url)
     const org = parseOrgSlug(url.searchParams.get('org'))
     if (!org) return jsonResponse(req, { error: 'org must be a gym code' }, 400)
-    const cardNo = parseCardNo(url.searchParams.get('card_no'))
-    if (cardNo === null) {
-      return jsonResponse(req, { error: 'card_no must be 1–9999' }, 400)
-    }
+    const token = parseToken(url.searchParams.get('c'))
+    if (token === null) return jsonResponse(req, { error: TOKEN_HELP }, 400)
 
     const { data, error } = await adminClient().rpc('public_card_balance', {
       p_org_slug: org,
-      p_card_no: cardNo,
+      p_token: token,
     })
     if (error) {
       console.error('public_card_balance failed', error.code, error.message)
@@ -225,10 +227,8 @@ Deno.serve(async (req: Request) => {
 
   const org = parseOrgSlug(b.org)
   if (!org) return jsonResponse(req, { error: 'org must be a gym code' }, 400)
-  const cardNo = parseCardNo(b.card_no)
-  if (cardNo === null) {
-    return jsonResponse(req, { error: 'card_no must be 1–9999' }, 400)
-  }
+  const token = parseToken(b.c)
+  if (token === null) return jsonResponse(req, { error: TOKEN_HELP }, 400)
   const phone = parsePhone(b.phone)
   if (phone === undefined) {
     return jsonResponse(req, { error: `phone must be at most ${PHONE_MAX} digits` }, 400)
@@ -240,7 +240,7 @@ Deno.serve(async (req: Request) => {
 
   const { data, error } = await adminClient().rpc('public_renewal_request', {
     p_org_slug: org,
-    p_card_no: cardNo,
+    p_token: token,
     p_phone: phone ?? undefined,
     p_note: note ?? undefined,
   })

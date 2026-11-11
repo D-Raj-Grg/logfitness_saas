@@ -413,9 +413,17 @@ Do not build these without an explicit decision to change scope.
   role only, masked name + plan + days left, never phone/dues/member code);
   "Request renewal" writes `renewal_requests` (one pending row per member,
   branch-scoped for staff, closed by the next `memberships` insert). The QR
-  carries the plain number -- enumeration is accepted because the page shows
-  nothing a stranger holding the card could not guess; `qr_token` is stored
-  now so a signed link later needs no reprint. Gates:
+  carried the plain number at first, with enumeration accepted. **Superseded
+  2026-11-11:** the QR now carries the card's random token
+  (`…/balance?c=0004_k3x9q2mf`, `card_stock.qr_token` = number + `_` + 8 random
+  chars, immutable, set by an insert trigger). `public_card_balance` and
+  `public_renewal_request` find a card by token only (the number-keyed overloads
+  are dropped), the Edge Function takes `c=` and refuses a bare number, and no
+  public page has a "type your card number" box -- so nobody can walk 0001..9999
+  to read other members' balances. The designer reads each card's token back
+  from `create_card_stock_range` (and `card_batch_qr_tokens` for "Download
+  again"). `public_card_lookup(slug, card_no)` stays for the PIN-gated member
+  login. Hard cut: nothing had been printed. Gates:
   `supabase/tests/card_stock.sql`, `public_balance.sql`, `card_designs.sql`.
 - **A waived joining fee is printed, not inferred (2026-09-10).** A member who
   pays no registration fee should see on paper that one applied and was not

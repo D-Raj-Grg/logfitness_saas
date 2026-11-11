@@ -3,12 +3,12 @@ import { balanceLookupSchema, renewalRequestSchema } from '@/lib/validation/bala
 
 /**
  * The public balance page's data boundary. There is no session: a member
- * scanned the QR on their card and landed on /balance?org=…&card_no=0004.
+ * scanned the QR on their card and landed on /balance?org=…&c=0004_k3x9q2mf.
  *
  * Both RPCs are executable by service_role only and are the anonymous
- * contract -- they resolve the org by slug and answer only what a stranger
- * holding the card could already guess (masked name, plan, status, days
- * left). The service-role client here does nothing but call them; the limit
+ * contract -- they resolve the org by slug, find the card by its random token
+ * (a printed number alone finds nothing) and answer only what someone holding
+ * the card could already see (masked name, plan, status, days left). The service-role client here does nothing but call them; the limit
  * on what leaks is in Postgres, not in this file. The same two RPCs back the
  * public-balance Edge Function for gyms that host the page on their own site.
  */
@@ -24,7 +24,7 @@ export type BalanceStatus =
 
 export type PublicBalance =
   | { result: 'org_not_found' }
-  | { result: 'card_not_found'; card_no: string }
+  | { result: 'card_not_found' }
   | { result: 'card_unassigned'; card_no: string }
   | {
       result: 'ok'
@@ -39,7 +39,7 @@ export type PublicBalance =
 
 export type RenewalRequestResult =
   | { result: 'org_not_found' }
-  | { result: 'card_not_found'; card_no: string }
+  | { result: 'card_not_found' }
   | { result: 'card_unassigned'; card_no: string }
   | { result: 'too_soon'; card_no: string }
   | { result: 'ok'; card_no: string }
@@ -66,26 +66,26 @@ function str(value: unknown): string {
 
 export async function getPublicBalance(
   orgSlug: string,
-  cardNo: string
+  token: string
 ): Promise<PublicBalance> {
-  const parsed = balanceLookupSchema.safeParse({ org: orgSlug, cardNo })
-  // A malformed slug cannot name any gym; a malformed number names no card.
+  const parsed = balanceLookupSchema.safeParse({ org: orgSlug, token })
+  // A malformed slug cannot name any gym; a malformed token names no card.
   if (!parsed.success) {
     return parsed.error.issues.some((i) => i.path[0] === 'org')
       ? { result: 'org_not_found' }
-      : { result: 'card_not_found', card_no: cardNo.replace(/[^0-9]/g, '').slice(0, 4) || '—' }
+      : { result: 'card_not_found' }
   }
 
   const { data, error } = await createAdminClient().rpc('public_card_balance', {
     p_org_slug: parsed.data.org,
-    p_card_no: parsed.data.cardNo,
+    p_token: parsed.data.token,
   })
   if (error) throw error
 
   const row = asRecord(data)
   const result = str(row.result)
-  if (result === 'org_not_found') return { result }
-  if (result === 'card_not_found' || result === 'card_unassigned') {
+  if (result === 'org_not_found' || result === 'card_not_found') return { result }
+  if (result === 'card_unassigned') {
     return { result, card_no: str(row.card_no) }
   }
   if (result !== 'ok') {
@@ -110,25 +110,25 @@ export async function getPublicBalance(
 
 export async function submitRenewalRequest(
   orgSlug: string,
-  cardNo: string,
+  token: string,
   phone?: string | null,
   note?: string | null
 ): Promise<RenewalRequestResult> {
   const parsed = renewalRequestSchema.safeParse({
     org: orgSlug,
-    cardNo,
+    token,
     phone: phone ?? undefined,
     note: note ?? undefined,
   })
   if (!parsed.success) {
     return parsed.error.issues.some((i) => i.path[0] === 'org')
       ? { result: 'org_not_found' }
-      : { result: 'card_not_found', card_no: cardNo.replace(/[^0-9]/g, '').slice(0, 4) || '—' }
+      : { result: 'card_not_found' }
   }
 
   const { data, error } = await createAdminClient().rpc('public_renewal_request', {
     p_org_slug: parsed.data.org,
-    p_card_no: parsed.data.cardNo,
+    p_token: parsed.data.token,
     p_phone: parsed.data.phone ?? undefined,
     p_note: parsed.data.note ?? undefined,
   })
@@ -136,13 +136,8 @@ export async function submitRenewalRequest(
 
   const row = asRecord(data)
   const result = str(row.result)
-  if (result === 'org_not_found') return { result }
-  if (
-    result === 'card_not_found' ||
-    result === 'card_unassigned' ||
-    result === 'too_soon' ||
-    result === 'ok'
-  ) {
+  if (result === 'org_not_found' || result === 'card_not_found') return { result }
+  if (result === 'card_unassigned' || result === 'too_soon' || result === 'ok') {
     return { result, card_no: str(row.card_no) }
   }
   throw new Error(`public_renewal_request returned an unknown result: ${result}`)

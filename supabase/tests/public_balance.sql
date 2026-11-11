@@ -1,8 +1,10 @@
 -- The public balance page and renewal requests. A member scans the QR on
--- their card (…/balance?card_no=0004); the public-balance Edge Function asks
--- public_card_balance() with the service role and shows masked name, plan and
--- days left; "Request renewal" calls public_renewal_request(). Staff then see
--- the request and renew at the desk, which closes it by itself.
+-- their card (…/balance?c=0004_k3x9q2mf, a random per-card token); the
+-- public-balance Edge Function asks public_card_balance() with the service role
+-- and shows masked name, plan and days left; "Request renewal" calls
+-- public_renewal_request(). Both find the card by token only -- a printed
+-- number is no key. Staff then see the request and renew at the desk, which
+-- closes it by itself.
 --
 -- Seeds two orgs, drives the real RPCs as real personas, asserts, then removes
 -- its fixtures. A failed assertion aborts. The public RPCs are called as
@@ -27,6 +29,8 @@ declare
   m_active uuid; m_expired uuid; m_gone uuid; m_nocard uuid;
   req_id uuid;
   result jsonb;
+  made jsonb;
+  tok1 text; tok2 text; tok3 text; tok4 text; tok6 text;
   req public.renewal_requests%rowtype;
   today_a date;
   n integer;
@@ -86,7 +90,7 @@ begin
     'staff_role', 'owner', 'branch_ids', json_build_array()
   )::text, true);
   execute 'set local role authenticated';
-  perform public.create_card_stock_range(1, 10);
+  made := public.create_card_stock_range(1, 10);
   perform public.assign_card_stock_to_member(m_active,  1, 'AABB00000001');
   perform public.assign_card_stock_to_member(m_expired, 2, 'AABB00000002');
   perform public.link_card_stock_uid(4, 'AABB00000004');          -- linked, nobody holds it
@@ -96,24 +100,48 @@ begin
   perform set_config('request.jwt.claims', null, true);
   update public.members set archived_at = now() where id = m_gone;
 
+  -- the range hands back every card's token, and it is what is stored
+  assert jsonb_array_length(made -> 'cards') = 10, format('range should return 10 cards: %s', made);
+  select c ->> 'token' into tok1 from jsonb_array_elements(made -> 'cards') c where (c ->> 'card_no')::integer = 1;
+  select c ->> 'token' into tok2 from jsonb_array_elements(made -> 'cards') c where (c ->> 'card_no')::integer = 2;
+  select c ->> 'token' into tok3 from jsonb_array_elements(made -> 'cards') c where (c ->> 'card_no')::integer = 3;
+  select c ->> 'token' into tok4 from jsonb_array_elements(made -> 'cards') c where (c ->> 'card_no')::integer = 4;
+  select c ->> 'token' into tok6 from jsonb_array_elements(made -> 'cards') c where (c ->> 'card_no')::integer = 6;
+  assert tok1 ~ '^0001_[a-z2-9]{8}$', format('token shape: %s', tok1);
+  select count(*) into n from public.card_stock where org_id = org_a and qr_token = tok1 and card_no = 1;
+  assert n = 1, 'the returned token is not the stored one';
+
   -- the public page, as the Edge Function ---------------------------------------
   execute 'set local role service_role';
 
-  result := public.public_card_balance('no-such-gym', 1);
+  result := public.public_card_balance('no-such-gym', tok1);
   assert result ->> 'result' = 'org_not_found', format('unknown org: %s', result);
 
-  result := public.public_card_balance('omega-fit-test', 99);
-  assert result ->> 'result' = 'card_not_found' and result ->> 'card_no' = '0099',
-    format('unprinted number: %s', result);
+  -- a number is no key: not as the old card_no, not padded, not with a guessed tail
+  result := public.public_card_balance('omega-fit-test', '0099_aaaaaaaa');
+  assert result ->> 'result' = 'card_not_found' and not (result ? 'card_no'),
+    format('unknown token: %s', result);
+  result := public.public_card_balance('omega-fit-test', '0001');
+  assert result ->> 'result' = 'card_not_found', format('a bare card number worked as a token: %s', result);
+  result := public.public_card_balance('omega-fit-test', '0001_');
+  assert result ->> 'result' = 'card_not_found', format('an empty tail worked: %s', result);
+  result := public.public_card_balance('omega-fit-test', left(tok1, 5) || 'zzzzzzzz');
+  assert result ->> 'result' = 'card_not_found', format('right number, guessed tail: %s', result);
+  result := public.public_card_balance('omega-fit-test', null);
+  assert result ->> 'result' = 'card_not_found', format('null token: %s', result);
+  -- and another gym's slug does not open this gym's card
+  result := public.public_card_balance('rho-gyms-test', tok1);
+  assert result ->> 'result' = 'card_not_found', format('org A token under org B slug: %s', result);
 
-  result := public.public_card_balance('omega-fit-test', 3);
-  assert result ->> 'result' = 'card_unassigned', format('chipless card: %s', result);
-  result := public.public_card_balance('omega-fit-test', 4);
+  result := public.public_card_balance('omega-fit-test', tok3);
+  assert result ->> 'result' = 'card_unassigned' and result ->> 'card_no' = '0003',
+    format('chipless card: %s', result);
+  result := public.public_card_balance('omega-fit-test', tok4);
   assert result ->> 'result' = 'card_unassigned', format('card on the shelf: %s', result);
-  result := public.public_card_balance('omega-fit-test', 6);
+  result := public.public_card_balance('omega-fit-test', tok6);
   assert result ->> 'result' = 'card_unassigned', format('archived member''s card: %s', result);
 
-  result := public.public_card_balance('omega-fit-test', 1);
+  result := public.public_card_balance('omega-fit-test', tok1);
   assert result ->> 'result' = 'ok', format('active card: %s', result);
   assert result ->> 'card_no' = '0001', 'card_no should be zero-padded text';
   assert result ->> 'name_masked' = 'R•••• T••••', format('name should be masked: %s', result ->> 'name_masked');
@@ -126,27 +154,31 @@ begin
      and not (result ? 'full_name') and not (result ? 'member_id'),
     format('the public answer leaks a private field: %s', result);
 
-  result := public.public_card_balance('omega-fit-test', 2);
+  result := public.public_card_balance('omega-fit-test', tok2);
   assert result ->> 'result' = 'ok' and result ->> 'status' = 'expired'
      and (result ->> 'days_left')::integer = -3,
     format('expired card: %s', result);
 
   -- asking to renew ---------------------------------------------------------------
-  result := public.public_renewal_request('no-such-gym', 1, null, null);
+  result := public.public_renewal_request('no-such-gym', tok1, null, null);
   assert result ->> 'result' = 'org_not_found', format('renew, unknown org: %s', result);
-  result := public.public_renewal_request('omega-fit-test', 99, null, null);
-  assert result ->> 'result' = 'card_not_found', format('renew, unprinted: %s', result);
-  result := public.public_renewal_request('omega-fit-test', 4, null, null);
+  result := public.public_renewal_request('omega-fit-test', '0099_aaaaaaaa', null, null);
+  assert result ->> 'result' = 'card_not_found', format('renew, unknown token: %s', result);
+  result := public.public_renewal_request('omega-fit-test', '0001', null, null);
+  assert result ->> 'result' = 'card_not_found', format('renew, bare number: %s', result);
+  result := public.public_renewal_request('rho-gyms-test', tok1, null, null);
+  assert result ->> 'result' = 'card_not_found', format('renew, org A token under org B slug: %s', result);
+  result := public.public_renewal_request('omega-fit-test', tok4, null, null);
   assert result ->> 'result' = 'card_unassigned', format('renew, shelf card: %s', result);
 
-  result := public.public_renewal_request('omega-fit-test', 1, ' +977 98-3000 0001 ', '  Please call after 5  ');
+  result := public.public_renewal_request('omega-fit-test', tok1, ' +977 98-3000 0001 ', '  Please call after 5  ');
   assert result ->> 'result' = 'ok', format('renew: %s', result);
 
   -- again, right away: refused, and still one row
-  result := public.public_renewal_request('omega-fit-test', 1, null, null);
+  result := public.public_renewal_request('omega-fit-test', tok1, null, null);
   assert result ->> 'result' = 'too_soon', format('second ask: %s', result);
 
-  result := public.public_card_balance('omega-fit-test', 1);
+  result := public.public_card_balance('omega-fit-test', tok1);
   assert (result ->> 'renewal_pending')::boolean, 'the page should know a request is pending';
 
   -- the staff side ---------------------------------------------------------------------
@@ -174,12 +206,12 @@ begin
   perform set_config('request.jwt.claims', null, true);
   update public.renewal_requests set last_requested_at = now() - interval '11 minutes' where id = req_id;
   execute 'set local role service_role';
-  result := public.public_renewal_request('omega-fit-test', 1, null, 'still waiting');
+  result := public.public_renewal_request('omega-fit-test', tok1, null, 'still waiting');
   assert result ->> 'result' = 'ok', format('third ask after 10 min: %s', result);
   execute 'reset role';
   select * into req from public.renewal_requests where id = req_id;
   assert req.request_count = 2 and req.status = 'pending', format('repeat ask should bump the count: %s', req.request_count);
-  -- a stranger with the card number must not be able to rewrite what the
+  -- a stranger with the card link must not be able to rewrite what the
   -- member first said; the first phone and note stay
   assert req.note = 'Please call after 5', format('a repeat ask rewrote the note: %s', req.note);
   assert req.phone = '+9779830000001', format('a repeat ask rewrote the phone: %s', req.phone);
@@ -240,11 +272,11 @@ begin
   execute 'reset role';
   perform set_config('request.jwt.claims', null, true);
   execute 'set local role service_role';
-  result := public.public_card_balance('omega-fit-test', 1);
+  result := public.public_card_balance('omega-fit-test', tok1);
   assert (result ->> 'renewal_pending')::boolean = false, 'a rejected request still shows pending';
 
   -- renewing at the desk closes a pending request by itself
-  result := public.public_renewal_request('omega-fit-test', 2, null, null);
+  result := public.public_renewal_request('omega-fit-test', tok2, null, null);
   assert result ->> 'result' = 'ok', format('expired member asks: %s', result);
 
   execute 'reset role';
@@ -277,13 +309,13 @@ begin
   -- the public RPCs are for the Edge Function only
   failed := false;
   begin
-    perform public.public_card_balance('omega-fit-test', 1);
+    perform public.public_card_balance('omega-fit-test', tok1);
   exception when insufficient_privilege then failed := true;
   end;
   assert failed, 'a signed-in user called public_card_balance';
   failed := false;
   begin
-    perform public.public_renewal_request('omega-fit-test', 1, null, null);
+    perform public.public_renewal_request('omega-fit-test', tok1, null, null);
   exception when insufficient_privilege then failed := true;
   end;
   assert failed, 'a signed-in user called public_renewal_request';
@@ -293,7 +325,7 @@ begin
   execute 'set local role anon';
   failed := false;
   begin
-    perform public.public_card_balance('omega-fit-test', 1);
+    perform public.public_card_balance('omega-fit-test', tok1);
   exception when insufficient_privilege then failed := true;
   end;
   assert failed, 'anon called public_card_balance';
@@ -303,6 +335,17 @@ begin
   exception when insufficient_privilege then failed := true;
   end;
   assert failed, 'anon called mask_name';
+  failed := false;
+  begin
+    perform * from public.public_card_lookup_by_token('omega-fit-test', tok1);
+  exception when insufficient_privilege then failed := true;
+  end;
+  assert failed, 'anon called public_card_lookup_by_token';
+  execute 'reset role';
+  assert to_regprocedure('public.public_card_balance(text, integer)') is null,
+    'the number-keyed public_card_balance is still there';
+  assert to_regprocedure('public.public_renewal_request(text, integer, text, text)') is null,
+    'the number-keyed public_renewal_request is still there';
 
   -- another org sees none of it ----------------------------------------------------
   execute 'reset role';
@@ -327,7 +370,7 @@ begin
   insert into public.renewal_requests (org_id, member_id, status, handled_at, handled_note)
   select org_a, m_nocard, 'done', now(), 'flood fixture' from generate_series(1, 30);
   execute 'set local role service_role';
-  result := public.public_renewal_request('omega-fit-test', 1, null, null);
+  result := public.public_renewal_request('omega-fit-test', tok1, null, null);
   assert result ->> 'result' = 'too_soon', format('the org-wide hourly cap did not hold: %s', result);
   select count(*) into n from public.renewal_requests where member_id = m_active and status = 'pending';
   assert n = 0, 'a request was written past the hourly cap';
@@ -357,6 +400,14 @@ begin
   exception when invalid_parameter_value then failed := true;
   end;
   assert failed, 'a balance_url that already carries card_no was accepted';
+  failed := false;
+  begin
+    perform public.set_org_setting('balance_url', to_jsonb('https://lordofgyms.com/balance?org=x&c=0001_abcdefgh'::text));
+  exception when invalid_parameter_value then failed := true;
+  end;
+  assert failed, 'a balance_url that already carries c was accepted';
+  result := public.set_org_setting('balance_url', to_jsonb('https://lordofgyms.com/balance?org=x&cc=1'::text));
+  assert result ->> 'balance_url' like '%cc=1', 'a different parameter that merely starts with c was refused';
   result := public.set_org_setting('balance_url', 'null'::jsonb);
   assert result -> 'balance_url' = 'null'::jsonb, 'balance_url could not be cleared';
 

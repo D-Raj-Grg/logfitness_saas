@@ -446,7 +446,7 @@ export type Database = {
           design_id?: string | null
           id?: string
           org_id: string
-          qr_token?: string
+          qr_token: string
           status?: Database["public"]["Enums"]["card_stock_status"]
           status_reason?: string | null
           updated_at?: string
@@ -3513,6 +3513,13 @@ export type Database = {
         Returns: Json
       }
       card_placement_is_valid: { Args: { p_placement: Json }; Returns: boolean }
+      card_batch_qr_tokens: {
+        Args: { p_batch_id: string }
+        Returns: {
+          card_no: number
+          qr_token: string
+        }[]
+      }
       card_uid_holder_kind: {
         Args: { p_card_uid: string; p_org_id: string }
         Returns: string
@@ -4055,7 +4062,7 @@ export type Database = {
         Returns: boolean
       }
       public_card_balance: {
-        Args: { p_card_no: number; p_org_slug: string }
+        Args: { p_org_slug: string; p_token: string }
         Returns: Json
       }
       public_card_lookup: {
@@ -4068,12 +4075,23 @@ export type Database = {
           stock_id: string
         }[]
       }
+      public_card_lookup_by_token: {
+        Args: { p_org_slug: string; p_token: string }
+        Returns: {
+          card_no: number
+          full_name: string
+          member_id: string
+          org_id: string
+          outcome: string
+          stock_id: string
+        }[]
+      }
       public_renewal_request: {
         Args: {
-          p_card_no: number
           p_note?: string
           p_org_slug: string
           p_phone?: string
+          p_token: string
         }
         Returns: Json
       }

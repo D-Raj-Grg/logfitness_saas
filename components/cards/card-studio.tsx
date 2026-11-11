@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import {
   createCardStockRangeForPrint,
   deleteCardDesign,
+  getBatchPrintCards,
   saveCardDesign,
 } from '@/app/(app)/cards/designer/actions'
 import { CardEditor } from '@/components/cards/card-editor'
@@ -38,6 +39,7 @@ import {
 } from '@/lib/cards/card-design'
 import { CARD_NO_MAX, CARD_NO_MIN, cardLabel, formatCardNo } from '@/lib/cards/card-no'
 import { buildCardPdf, type CardTemplate } from '@/lib/cards/card-pdf'
+import { sampleCardToken, type PrintCard } from '@/lib/cards/card-token'
 import { ALLOWED_TEMPLATE_TYPES, MAX_TEMPLATE_BYTES, removeUploadedTemplate, uploadCardTemplate } from '@/lib/cards/template-upload'
 import { formatDate } from '@/lib/format'
 import { MAX_CARDS_PER_RUN } from '@/lib/validation/card-designs'
@@ -152,7 +154,12 @@ export function CardStudio({
   const count = rangeProblem ? 0 : toNo - fromNo + 1
 
   const sample = cardLabel(4, labelPrefix)
-  const sampleLink = balanceLink(linkBase, fromNo >= CARD_NO_MIN && fromNo <= CARD_NO_MAX ? fromNo : 4)
+  // Each real card gets its own random token from the database; the preview
+  // shows a token-shaped placeholder so the sample QR has the printed density.
+  const sampleLink = balanceLink(
+    linkBase,
+    sampleCardToken(fromNo >= CARD_NO_MIN && fromNo <= CARD_NO_MAX ? fromNo : 1)
+  )
   const aspectWarning = template ? templateAspectWarning(template.width, template.height, page) : null
   const exporting = progress !== null
   const busy = saving || numbering || exporting || loadingDesign
@@ -273,32 +280,33 @@ export function CardStudio({
   }
 
   /**
-   * Build the PDF for `cardNos` in the browser and save it. `reserved` is set
-   * right after numbering: the database already holds those cards, so a build
-   * failure must say so rather than invite a second run of the same numbers.
+   * Build the PDF for `cards` (number + the random token each QR carries) in
+   * the browser and save it. `reserved` is set right after numbering: the
+   * database already holds those cards, so a build failure must say so rather
+   * than invite a second run of the same numbers.
    */
-  async function exportPdf(cardNos: number[], reserved = false) {
-    if (!template || cardNos.length === 0) return
-    setProgress({ done: 0, total: cardNos.length })
+  async function exportPdf(cards: PrintCard[], reserved = false) {
+    if (!template || cards.length === 0) return
+    setProgress({ done: 0, total: cards.length })
     try {
       const bytes = await buildCardPdf({
         template,
         placement,
-        cardNos,
+        cards,
         labelPrefix,
         linkBase,
         page,
         onProgress: (done, total) => setProgress({ done, total }),
       })
-      const first = cardNos[0]
-      const last = cardNos[cardNos.length - 1]
+      const first = cards[0].cardNo
+      const last = cards[cards.length - 1].cardNo
       download(new Blob([bytes as BlobPart], { type: 'application/pdf' }), `cards-${formatCardNo(first)}-${formatCardNo(last)}.pdf`)
-      toast.success(`${cardNos.length} card${cardNos.length === 1 ? '' : 's'} ready.`)
+      toast.success(`${cards.length} card${cards.length === 1 ? '' : 's'} ready.`)
     } catch (e) {
       const why = e instanceof Error ? e.message : "The PDF couldn't be built."
       if (reserved) {
-        const a = cardNos[0]
-        const b = cardNos[cardNos.length - 1]
+        const a = cards[0].cardNo
+        const b = cards[cards.length - 1].cardNo
         toast.error(
           `${why} Cards ${cardLabel(a, labelPrefix)}–${cardLabel(b, labelPrefix)} are now reserved; use Download again below to get the PDF.`
         )
@@ -320,11 +328,23 @@ export function CardStudio({
         return
       }
       router.refresh()
-      const next = res.cardNos[res.cardNos.length - 1] + 1
+      const next = res.cards[res.cards.length - 1].cardNo + 1
       setFrom(String(next))
       setTo(String(Math.min(next + 99, CARD_NO_MAX)))
-      await exportPdf(res.cardNos, true)
+      await exportPdf(res.cards, true)
     })
+  }
+
+  /** "Download again": fetch the run's tokens (immutable), then rebuild the same PDF. */
+  async function downloadBatch(batchId: string, count: number) {
+    setProgress({ done: 0, total: count })
+    const res = await getBatchPrintCards({ batchId })
+    if ('error' in res) {
+      setProgress(null)
+      toast.error(res.error)
+      return
+    }
+    await exportPdf(res.cards)
   }
 
   return (
@@ -479,6 +499,9 @@ export function CardStudio({
                   <div className="rounded-md bg-muted p-3 text-xs text-muted-foreground">
                     Cards link to: <span className="font-mono break-all">{sampleLink}</span>
                     <br />
+                    Each card gets its own random code after the <code>c=</code>, so a card number
+                    on its own opens nothing.
+                    <br />
                     <Link href="/settings" className="underline underline-offset-4">
                       Change in Settings
                     </Link>
@@ -624,11 +647,7 @@ export function CardStudio({
                         size="sm"
                         disabled={!loaded || busy}
                         title={why}
-                        onClick={() => {
-                          const nos: number[] = []
-                          for (let n = b.fromNo; n <= b.toNo; n++) nos.push(n)
-                          void exportPdf(nos)
-                        }}
+                        onClick={() => void downloadBatch(b.id, b.toNo - b.fromNo + 1)}
                       >
                         <Download />
                         PDF

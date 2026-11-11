@@ -40,6 +40,9 @@ export type SaveCardDesignInput = z.infer<typeof saveCardDesignSchema>
 
 export const deleteCardDesignSchema = z.object({ id: z.uuid() })
 
+/** "Download again" for one past run. */
+export const batchPrintSchema = z.object({ batchId: z.uuid() })
+
 export const MAX_CARDS_PER_RUN = 500
 
 /** A print run: 1..9999, low to high, at most 500 cards. */
