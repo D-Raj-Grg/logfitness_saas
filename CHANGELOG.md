@@ -17,6 +17,33 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-11-11 — Balance page shows first name, phone hint and last payment
+
+### Changed
+
+- **`lordofgyms.com/balance` now shows more of the card's owner**: their first
+  name with the rest hidden (`Subhadra xxxx`, instead of initials), the first five digits of their mobile number with
+  the rest as `x` (`98252xxxxx`), and the **last payment** — amount and date
+  (`Rs 2,500 on 24 Oct 2026`), or "No payment on record yet". It is still only
+  reachable with the card's random link, so it is what whoever holds the card
+  can see. The console's own `/balance` fallback page still shows the masked
+  name only.
+- "Last payment" is the newest payment that still has money standing: a payment
+  taken back by a reversal is skipped (the one before it shows), and a partial
+  reversal shows what is left. Refunds are not counted.
+
+### Database
+
+- `20261111120000_balance_member_details.sql` (`first_name_of`, `phone_hint`,
+  extra fields on `public_card_balance`: `first_name`, `phone_hint`,
+  `last_payment_on`, `last_payment_paisa`, `currency`),
+  `20261111120200_balance_name_display.sql` (`name_hidden_surname`, field
+  `name_display`) and `20261111120100_member_last_payment.sql` (`member_last_payment` pairs each
+  reversal with the payment it undoes; fixes the first version, which let one
+  reversal cancel every earlier payment). Gate `public_balance.sql` extended.
+
+---
+
 ## 2026-11-11 — Card QR links carry a random token, not the card number
 
 ### Changed
