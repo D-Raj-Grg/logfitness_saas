@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
  * "Ask the desk to renew me." Phone and note are optional; the `website`
  * field is a honeypot that real visitors never see.
  */
-export function RenewRequestForm({ org, cardNo }: { org: string; cardNo: string }) {
+export function RenewRequestForm({ org, token }: { org: string; token: string }) {
   const [state, formAction, pending] = useActionState<RenewalFormState, FormData>(
     requestRenewal,
     {}
@@ -26,7 +26,7 @@ export function RenewRequestForm({ org, cardNo }: { org: string; cardNo: string 
   return (
     <form action={formAction} className="flex flex-col gap-3 border-t pt-4">
       <input type="hidden" name="org" value={org} />
-      <input type="hidden" name="card_no" value={cardNo} />
+      <input type="hidden" name="c" value={token} />
       {/* Honeypot: hidden from people, filled by bots. */}
       <div aria-hidden="true" className="absolute -left-[9999px] h-0 w-0 overflow-hidden">
         <label htmlFor="website">Website</label>

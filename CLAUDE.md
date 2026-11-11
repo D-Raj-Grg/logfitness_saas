@@ -43,8 +43,10 @@ still answers a staff tap as unknown while offline). Payroll/HR stays out -- thi
 **Printed card numbers, a public balance page and renewal requests came in on 2026-11-08**, a
 third explicit scope decision. A card carries a printed number (`NO. 0004`) that is stock, not
 identity: `card_stock` is one row per physical card, reused across members; `members.member_code`
-is untouched. The QR on a card opens `…/balance?card_no=0004` -- the gym's own site or the console's
-`app/(public)/balance` -- which shows a masked name, plan and days left to anyone holding the card,
+is untouched. The QR on a card opens `…/balance?c=0004_k3x9q2mf` -- the gym's own site or the console's
+`app/(public)/balance` -- where `c` is the card's random token (`card_stock.qr_token`: the number,
+`_`, 8 random chars; **not** the printed number, which is guessable, so no page takes a typed number).
+It shows a masked name, plan and days left to whoever holds the card,
 and takes a renewal *request* the desk fulfils at the counter. It is not member self-service: no
 login, no payment, no phone or dues on the page. The card designer (`/cards/designer`) is the one
 place a PDF library runs (`pdf-lib` + `qrcode`, browser only); invoices and receipts still print

@@ -29,6 +29,7 @@ declare
   path_b text := 'd7d7d7d7-2222-2222-2222-222222222222/two.png';
 
   design_a uuid;
+  batch_a uuid;
   other uuid;
   result jsonb;
   t text;
@@ -138,6 +139,15 @@ begin
   select count(*) into n from public.card_batches where org_id = org_a and design_id = design_a;
   assert n = 1, 'the batch does not carry the design';
 
+  -- "Download again" reads a batch's numbers and tokens back; they match what the run returned
+  assert jsonb_array_length(result -> 'cards') = 2, format('the run should return both cards: %s', result);
+  select count(*) into n
+  from public.card_batch_qr_tokens((result ->> 'batch_id')::uuid) b
+  join jsonb_array_elements(result -> 'cards') c
+    on (c ->> 'card_no')::integer = b.card_no and c ->> 'token' = b.qr_token;
+  assert n = 2, 'card_batch_qr_tokens does not match the tokens the run returned';
+  batch_a := (result ->> 'batch_id')::uuid;
+
   -- a design id that exists nowhere is refused by the key
   failed := false;
   begin
@@ -170,6 +180,14 @@ begin
   exception when insufficient_privilege then failed := true;
   end;
   assert failed, 'the front desk deleted a design';
+
+  -- tokens are print material: owner/manager only, not the desk
+  failed := false;
+  begin
+    perform * from public.card_batch_qr_tokens(batch_a);
+  exception when insufficient_privilege then failed := true;
+  end;
+  assert failed, 'the front desk read a batch''s card tokens';
 
   -- no direct writes for anyone signed in
   failed := false;
@@ -220,6 +238,10 @@ begin
   exception when no_data_found then failed := true;
   end;
   assert failed, 'org B deleted org A''s design';
+
+  -- org B's owner asking for org A's batch gets nothing, not org A's tokens
+  select count(*) into n from public.card_batch_qr_tokens(batch_a);
+  assert n = 0, format('org B read %s of org A''s card tokens', n);
 
   -- the owner deletes; the stock and batch stay, pointing nowhere ------------------
   execute 'reset role';

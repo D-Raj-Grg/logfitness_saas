@@ -13,9 +13,9 @@ export type RenewalFormState = {
 }
 
 /**
- * "Please renew me", from the public balance page. No session: the card
- * number is the only identity, and public_renewal_request() decides whether
- * it names a member. One pending request per member; a repeat within ten
+ * "Please renew me", from the public balance page. No session: the card's
+ * random link token is the only identity, and public_renewal_request()
+ * decides whether it names a member. One pending request per member; a repeat within ten
  * minutes comes back too_soon.
  */
 export async function requestRenewal(
@@ -24,7 +24,7 @@ export async function requestRenewal(
 ): Promise<RenewalFormState> {
   const parsed = renewalRequestSchema.safeParse({
     org: formData.get('org'),
-    cardNo: formData.get('card_no'),
+    token: formData.get('c'),
     phone: formData.get('phone') ?? undefined,
     note: formData.get('note') ?? undefined,
     website: formData.get('website') ?? undefined,
@@ -41,7 +41,7 @@ export async function requestRenewal(
   try {
     result = await submitRenewalRequest(
       parsed.data.org,
-      String(parsed.data.cardNo),
+      parsed.data.token,
       parsed.data.phone,
       parsed.data.note
     )
@@ -59,7 +59,7 @@ export async function requestRenewal(
     case 'org_not_found':
       return { error: 'This link is missing a valid gym code.' }
     case 'card_not_found':
-      return { error: 'No card with this number.' }
+      return { error: "This card link isn't valid. Scan the QR on your card again." }
     case 'card_unassigned':
       return { error: "This card isn't assigned to a member yet — ask at the front desk." }
   }

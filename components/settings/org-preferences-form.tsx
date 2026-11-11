@@ -138,8 +138,9 @@ export function OrgPreferencesForm({
               defaultValue={current.balanceUrl}
             />
             <p className="text-xs text-muted-foreground">
-              Where the QR on a printed card points, e.g. https://lordofgyms.com/balance. The
-              card number is added to it as <code>?card_no=0004</code>. Leave empty to use this
+              Where the QR on a printed card points, e.g. https://lordofgyms.com/balance. Each
+              card&apos;s own random code is added to it as <code>?c=0004_k3x9q2mf</code>, so
+              a card number on its own opens nothing. Leave empty to use this
               console&apos;s own balance page:{' '}
               <code className="break-all">{defaultBalanceLink}</code>
             </p>

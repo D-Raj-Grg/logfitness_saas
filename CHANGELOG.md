@@ -17,6 +17,41 @@ Two conventions worth knowing while reading:
 
 ---
 
+## 2026-11-11 — Card QR links carry a random token, not the card number
+
+### Changed
+
+- **The QR on a printed card now opens `…/balance?c=0004_k3x9q2mf`** — the card
+  number, an underscore and eight random characters — instead of
+  `?card_no=0004`. Before, anyone could type 0001–9999 into the balance page and
+  read every member's masked name, plan and days left, or file renewal requests
+  against them. Now only someone holding the card knows its link. Nothing had
+  been printed, so there is no legacy link: a `?card_no=` URL asks the visitor
+  to scan their card again and looks nothing up.
+- **No public page takes a typed card number any more** — the "enter your card
+  number" box is gone from `lordofgyms.com/balance` and the console's own
+  `/balance`. A visitor without the QR is sent to the front desk.
+- **Card designer:** the PDF's QR carries each card's own token; "Download
+  again" fetches the run's tokens and rebuilds the same QR codes. The designer
+  preview shows a token-shaped sample. Settings → "Card balance link" now also
+  refuses a base link that already carries `c=`.
+
+### Database
+
+- `20261111100000_card_qr_token_links.sql`: `card_stock.qr_token` is now
+  `<number>_<8 random chars>` (format + number-prefix check, set by an insert
+  trigger, still immutable); the 70 existing cards were re-keyed. New
+  `new_card_token`, `public_card_lookup_by_token`, `card_batch_qr_tokens`
+  (owner/manager). `create_card_stock_range` also returns each card's token.
+  `public_card_balance` / `public_renewal_request` take the token; the
+  number-keyed versions are dropped. `public_card_lookup(slug, card_no)` is kept
+  for the PIN-gated member login. Gates `card_stock.sql`, `public_balance.sql`,
+  `card_designs.sql` updated.
+- Edge Function `public-balance` v4 (`GET ?org=&c=`, `POST /renew-request
+  {org, c}`; a bare `card_no` is a 400).
+
+---
+
 ## 2026-11-09 — Member PIN is exactly six digits
 
 ### Changed

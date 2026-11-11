@@ -96,6 +96,16 @@ begin
   assert n = 10, 'new stock should be free with no chip';
   select count(distinct qr_token) into n from public.card_stock where org_id = org_a;
   assert n = 10, 'every card needs its own qr_token';
+  -- the token is the printed card's link key: <number>_<8 random chars>
+  select count(*) into n from public.card_stock
+  where org_id = org_a and qr_token ~ '^[0-9]{4}_[a-z2-9]{8}$' and left(qr_token, 4) = lpad(card_no::text, 4, '0');
+  assert n = 10, 'every token must be <card no>_<8 chars>';
+  assert jsonb_array_length(result -> 'cards') = 10, format('the range should return every card: %s', result);
+  select count(*) into n
+  from jsonb_array_elements(result -> 'cards') c
+  join public.card_stock cs on cs.org_id = org_a and cs.card_no = (c ->> 'card_no')::integer
+  where cs.qr_token = c ->> 'token';
+  assert n = 10, 'the tokens the range returned are not the stored ones';
   assert public.next_free_card_no() = 11, 'next free after 1-10 is 11';
 
   -- a number already printed cannot be printed again
@@ -359,6 +369,23 @@ begin
   exception when restrict_violation then failed := true;
   end;
   assert failed, 'a qr token was changed';
+
+  -- any insert path gets a token; one that disagrees with its number is refused
+  insert into public.card_stock (org_id, card_no) values (org_a, 600) returning qr_token into t;
+  assert t ~ '^0600_[a-z2-9]{8}$', format('a direct insert should get a token: %s', t);
+  failed := false;
+  begin
+    insert into public.card_stock (org_id, card_no, qr_token) values (org_a, 601, '0602_abcdefgh');
+  exception when check_violation then failed := true;
+  end;
+  assert failed, 'a token for another card number was accepted';
+  failed := false;
+  begin
+    insert into public.card_stock (org_id, card_no, qr_token) values (org_a, 601, '0601');
+  exception when check_violation then failed := true;
+  end;
+  assert failed, 'a bare number was accepted as a token';
+  delete from public.card_stock where org_id = org_a and card_no = 600;
 
   -- card 0007 is in m1's hand: its chip cannot be swapped underneath
   failed := false;

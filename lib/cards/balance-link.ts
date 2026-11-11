@@ -1,21 +1,22 @@
-import { formatCardNo } from '@/lib/cards/card-no'
-
 /**
  * The link printed in a card's QR. A gym with its own site points cards at it
  * (orgs.settings.balance_url, e.g. "https://lordofgyms.com/balance"); otherwise
  * the console's own public page serves, keyed by the org slug.
  *
- * The URL is on plastic for years, so it carries only the printed number --
- * never an id, never a token the gym could later want to rotate.
+ * The link carries the card's random token (card_stock.qr_token, e.g.
+ * "0004_k3x9q2mf"), never the bare card number: the number is printed on the
+ * card for the desk and is easy to guess, so on its own it opens nothing. The
+ * token is made by the database and is immutable, so a QR printed today keeps
+ * working and "Download again" rebuilds the very same link.
  */
 
-export const BALANCE_CARD_PARAM = 'card_no'
+export const BALANCE_CARD_PARAM = 'c'
 
-/** "https://lordofgyms.com/balance" + 4 -> "https://lordofgyms.com/balance?card_no=0004". */
-export function balanceLink(base: string, cardNo: number): string {
+/** "https://lordofgyms.com/balance" + "0004_k3x9q2mf" -> "https://lordofgyms.com/balance?c=0004_k3x9q2mf". */
+export function balanceLink(base: string, token: string): string {
   const trimmed = base.trim().replace(/[?&]$/, '')
   const sep = trimmed.includes('?') ? '&' : '?'
-  return `${trimmed}${sep}${BALANCE_CARD_PARAM}=${formatCardNo(cardNo)}`
+  return `${trimmed}${sep}${BALANCE_CARD_PARAM}=${encodeURIComponent(token)}`
 }
 
 /** The console's own public balance page for an org, used when no balance_url is set. */

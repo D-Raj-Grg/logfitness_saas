@@ -39,7 +39,16 @@ function canRequest(status: BalanceStatus): boolean {
   return status !== 'left' && status !== 'upcoming'
 }
 
-export function BalanceCard({ org, balance }: { org: string; balance: PublicBalance }) {
+export function BalanceCard({
+  org,
+  token,
+  balance,
+}: {
+  org: string
+  /** The card's link token, carried into the renewal form so it can name the card. */
+  token: string
+  balance: PublicBalance
+}) {
   if (balance.result === 'org_not_found') {
     return (
       <Card>
@@ -55,17 +64,7 @@ export function BalanceCard({ org, balance }: { org: string; balance: PublicBala
   }
 
   if (balance.result === 'card_not_found') {
-    return (
-      <Card>
-        <CardHeader>
-          <p className="font-mono text-xs tracking-widest text-muted-foreground">
-            NO. {balance.card_no}
-          </p>
-          <CardTitle>No card with this number</CardTitle>
-          <CardDescription>Check the number printed on your card and try again.</CardDescription>
-        </CardHeader>
-      </Card>
-    )
+    return <CardLinkProblem />
   }
 
   if (balance.result === 'card_unassigned') {
@@ -125,9 +124,24 @@ export function BalanceCard({ org, balance }: { org: string; balance: PublicBala
             Renewal already requested — the front desk has it.
           </p>
         ) : canRequest(balance.status) ? (
-          <RenewRequestForm org={org} cardNo={balance.card_no} />
+          <RenewRequestForm org={org} token={token} />
         ) : null}
       </CardContent>
+    </Card>
+  )
+}
+
+/** Shown when the link does not open a card: no token, a mistyped one, or one that was never issued. */
+export function CardLinkProblem() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Scan the QR on your card</CardTitle>
+        <CardDescription>
+          Your balance opens from the QR code printed on your card. If scanning doesn&apos;t work,
+          show your card at the front desk.
+        </CardDescription>
+      </CardHeader>
     </Card>
   )
 }

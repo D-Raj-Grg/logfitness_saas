@@ -101,6 +101,8 @@ export type CreatedCardRange = {
   from_no: number
   to_no: number
   created: number
+  /** Every new card with the random token its QR will carry. */
+  cards: { card_no: number; token: string }[]
 }
 
 /** Numbers a run of cards against a design (or none). Owner or manager; the RPC checks. */
@@ -117,6 +119,20 @@ export async function createCardStockRange(args: {
       p_design_id: args.designId ?? undefined,
     })
   )
+}
+
+/**
+ * A past run's cards with their tokens, for "Download again". Owner or
+ * manager, own org only -- the RPC checks both.
+ */
+export async function getBatchQrTokens(
+  batchId: string
+): Promise<{ cardNo: number; token: string }[]> {
+  const supabase = await createClient()
+  const rows = unwrap<{ card_no: number; qr_token: string }[]>(
+    await supabase.rpc('card_batch_qr_tokens', { p_batch_id: batchId })
+  )
+  return (rows ?? []).map((r) => ({ cardNo: r.card_no, token: r.qr_token }))
 }
 
 /** The number the next run would start at. */
