@@ -142,8 +142,8 @@ export function CardStockTable({
                     {!linked && row.status === 'free' ? (
                       <LinkUidDialog cardNo={row.card_no} scans={scans} />
                     ) : null}
-                    {row.effective_status === 'free' && linked ? (
-                      <AssignCardDialog cardNo={row.card_no} />
+                    {row.effective_status === 'free' ? (
+                      <AssignCardDialog cardNo={row.card_no} needsChip={!linked} scans={scans} />
                     ) : null}
                     {row.effective_status === 'free' ? (
                       <>

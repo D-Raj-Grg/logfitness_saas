@@ -11,6 +11,7 @@ import {
 } from '@/app/(app)/cards/actions'
 import { AuthFormMessage } from '@/components/auth/auth-form-message'
 import { Spinner } from '@/components/app/spinner'
+import { CardUidPicker, useCardUidPicker } from '@/components/cards/card-uid-picker'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -25,6 +26,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cardLabel } from '@/lib/cards/card-no'
+import type { UnassignedCardScan } from '@/lib/db/member-cards'
 import { cn } from '@/lib/utils'
 import { useDismissibleActionState } from '@/hooks/use-dismissible-action-state'
 
@@ -33,8 +35,18 @@ import { useDismissibleActionState } from '@/hooks/use-dismissible-action-state'
  * the way the check-in box does (phone, name, or code), pick, confirm. A
  * member who already holds a card needs "Replace" ticked, or the RPC refuses.
  */
-export function AssignCardDialog({ cardNo }: { cardNo: number }) {
+export function AssignCardDialog({
+  cardNo,
+  needsChip = false,
+  scans = [],
+}: {
+  cardNo: number
+  /** The card has no chip linked yet: the dialog also asks for the chip and links it. */
+  needsChip?: boolean
+  scans?: UnassignedCardScan[]
+}) {
   const [open, setOpen] = useState(false)
+  const picker = useCardUidPicker(scans)
   const [term, setTerm] = useState('')
   const [hits, setHits] = useState<CardMemberHit[]>([])
   const [searching, setSearching] = useState(false)
@@ -66,6 +78,7 @@ export function AssignCardDialog({ cardNo }: { cardNo: number }) {
 
   function onOpenChange(next: boolean) {
     dismiss()
+    picker.reset()
     onTermChange('')
     setReplace(false)
     setOpen(next)
@@ -101,12 +114,14 @@ export function AssignCardDialog({ cardNo }: { cardNo: number }) {
           <input type="hidden" name="cardNo" value={cardNo} />
           <input type="hidden" name="memberId" value={picked?.id ?? ''} />
           <input type="hidden" name="replace" value={replace ? 'true' : 'false'} />
+          {needsChip ? <input type="hidden" name="cardUid" value={picker.cardUid} /> : null}
 
           <DialogHeader>
             <DialogTitle>Assign {label}</DialogTitle>
             <DialogDescription>
-              Find the member who is taking this card. Door access then follows their
-              membership status and dues.
+              Find the member who is taking this card.
+              {needsChip ? ' Tap it on a reader and pick the tap to link its chip. ' : ' '}
+              Door access then follows their membership status and dues.
             </DialogDescription>
           </DialogHeader>
 
@@ -179,6 +194,10 @@ export function AssignCardDialog({ cardNo }: { cardNo: number }) {
             ) : null}
           </div>
 
+          {needsChip ? (
+            <CardUidPicker scans={scans} picker={picker} idPrefix={`assign-${cardNo}`} />
+          ) : null}
+
           <label className="flex cursor-pointer items-center gap-2 text-sm">
             <Checkbox
               checked={replace}
@@ -191,7 +210,12 @@ export function AssignCardDialog({ cardNo }: { cardNo: number }) {
           </label>
 
           <DialogFooter>
-            <Button type="submit" disabled={pending || !picked || (holdsCard && !replace)}>
+            <Button
+              type="submit"
+              disabled={
+                pending || !picked || (needsChip && !picker.cardUid) || (holdsCard && !replace)
+              }
+            >
               {pending ? 'Assigning...' : `Assign ${label}`}
             </Button>
           </DialogFooter>
