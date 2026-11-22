@@ -1649,6 +1649,11 @@ service_role-only grants):
 - [ ] Staff attendance in reports (hours per person per month, late/absent). Not
       requested; this phase only records presence. Payroll/HR stays out of scope.
 
+- [x] Cards page: "Assign to member" only showed on chip-linked cards, so a fresh
+      batch (168 of 170 unlinked) had no assign button anywhere. It now shows on every
+      free card; an unlinked one also asks for the chip (tap picker) and the existing
+      `assign_card_stock_to_member` RPC links and assigns in one step.
+
 ## Open questions (from the PRD)
 
 - [x] Which SMS/Viber gateway for Nepal, and cost per message at chain volume?
